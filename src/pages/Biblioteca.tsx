@@ -1,4 +1,7 @@
 import { EventDecor } from '../components/EventDecor';
+import { burst, multiTap } from '../logic/fx';
+import { today } from '../logic/dates';
+import { eggDay, dayHash, phraseOfDay } from '../logic/eggs';
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useMotionValue } from 'framer-motion';
 import { useStore } from '../data/store';
@@ -51,6 +54,9 @@ export function Biblioteca() {
     [data.topics, data.sessions],
   );
 
+  // livro especial do dia: em alguns dias, um livro guarda uma frase
+  const specialBook = eggDay('livro-especial', 3) && books.length ? books[dayHash('livro-qual') % books.length].t.id : null;
+
   const toggle = () => {
     play(open ? 'doorClose' : 'door');
     setOpen(!open);
@@ -60,6 +66,10 @@ export function Biblioteca() {
   const pick = (id: string) => {
     play('pop');
     setJumping(id);
+    if (id === specialBook && !(data.settings.eggsFound ?? {})[`livro-${today()}`]) {
+      ui.toast(`Um livro especial! ${phraseOfDay('livro-especial')}`, 'diva');
+      saveSettings({ eggsFound: { ...(data.settings.eggsFound ?? {}), [`livro-${today()}`]: new Date().toISOString() } });
+    }
     setTimeout(() => {
       setSelected(id);
       setJumping(null);
@@ -87,11 +97,23 @@ export function Biblioteca() {
       <div className="wardrobe-stage">
         <EventDecor scene="biblioteca" />
         <div className="wardrobe" ref={wardrobeRef}>
-          <div className="w-crown" aria-hidden="true" />
+          <button
+            className="w-crown"
+            aria-label="Topo do armário"
+            tabIndex={-1}
+            onClick={(e) => {
+              if (multiTap('coroa', 3)) {
+                play('key');
+                burst(e, 'brilho', 12);
+                ui.toast(phraseOfDay('coroa-armario'), 'diva');
+                saveSettings({ eggsFound: { ...(data.settings.eggsFound ?? {}), 'coroa-armario': new Date().toISOString() } });
+              }
+            }}
+          />
           <div className="w-body">
             <div className="w-interior">
               <span className="w-interior-bg" aria-hidden="true"><Asset slot="library.interior" /></span>
-              <Shelves books={books} order={order} open={open} selected={selected} jumping={jumping} onPick={pick} />
+              <Shelves books={books} order={order} open={open} selected={selected} jumping={jumping} onPick={pick} special={specialBook} />
             </div>
             <Door side="left" open={open} onClick={toggle} />
             <Door side="right" open={open} onClick={toggle} />
@@ -139,8 +161,8 @@ function Door({ side, open, onClick }: { side: 'left' | 'right'; open: boolean; 
 
 // ── Prateleiras e livros ──────────────────────────────────────
 
-function Shelves({ books, order, open, selected, jumping, onPick }: {
-  books: Book[]; order: 'estudo' | 'area'; open: boolean; selected: string | null; jumping: string | null; onPick: (id: string) => void;
+function Shelves({ books, order, open, selected, jumping, onPick, special }: {
+  books: Book[]; order: 'estudo' | 'area'; open: boolean; selected: string | null; jumping: string | null; onPick: (id: string) => void; special: string | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [perShelf, setPerShelf] = useState(8);
@@ -187,6 +209,7 @@ function Shelves({ books, order, open, selected, jumping, onPick }: {
                   visible={open}
                   selected={selected === b.t.id}
                   jumping={jumping === b.t.id}
+                  special={special === b.t.id}
                   onPick={() => onPick(b.t.id)}
                 />
               );
@@ -205,8 +228,8 @@ function Shelves({ books, order, open, selected, jumping, onPick }: {
   );
 }
 
-function BookItem({ b, delay, visible, selected, jumping, onPick }: {
-  b: Book; delay: number; visible: boolean; selected: boolean; jumping: boolean; onPick: () => void;
+function BookItem({ b, delay, visible, selected, jumping, onPick, special }: {
+  b: Book; delay: number; visible: boolean; selected: boolean; jumping: boolean; onPick: () => void; special?: boolean;
 }) {
   const a = areaOf(b.t.area);
   const acc = b.st.accuracy;
@@ -214,7 +237,7 @@ function BookItem({ b, delay, visible, selected, jumping, onPick }: {
   return (
     <motion.button
       layout
-      className={`book ${selected ? 'is-selected' : ''}`}
+      className={`book ${selected ? 'is-selected' : ''} ${special ? 'is-special' : ''}`}
       style={{ ['--cover' as string]: a.color, ['--ink' as string]: a.ink, filter: `saturate(${sat})` }}
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: visible ? 1 : 0, y: jumping ? -26 : selected ? -10 : 0, rotate: jumping ? -4 : 0 }}
@@ -398,7 +421,8 @@ function PlacedSticker({ id, pos, wardrobeRef }: { id: string; pos: { x: number;
       drag
       dragMomentum={false}
       whileHover={{ scale: 1.08 }}
-      whileDrag={{ scale: 1.18, rotate: 0, zIndex: 40 }}
+      whileDrag={{ scale: 1.2, rotate: -6, zIndex: 40, filter: 'drop-shadow(0 14px 12px rgba(46,74,127,.35))' }}
+      whileTap={{ scale: 0.95 }}
       onDragEnd={(_, info) => {
         const at = stickerDrop(info, wardrobeRef.current);
         mx.set(0);

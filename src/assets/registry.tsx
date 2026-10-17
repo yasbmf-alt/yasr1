@@ -84,6 +84,10 @@ export const GROUPS: { id: string; label: string; idea: string }[] = [
 
 export const SLOTS: Slot[] = [
   { key: 'mascot.greeting', group: 'Geral', label: 'Personagem da saudação', size: '400×400', render: () => <Mascot /> },
+  { key: 'mascot.comemorando', group: 'Geral', label: 'Personagem · comemorando', size: '400×400', render: () => <Mascot mood="comemorando" /> },
+  { key: 'mascot.chocada', group: 'Geral', label: 'Personagem · chocada', size: '400×400', render: () => <Mascot mood="chocada" /> },
+  { key: 'mascot.sono', group: 'Geral', label: 'Personagem · com sono (madrugada)', size: '400×400', render: () => <Mascot mood="sono" /> },
+  { key: 'mascot.festa', group: 'Geral', label: 'Personagem · festa (aniversários e Réveillon)', size: '400×400', render: () => <Mascot mood="festa" /> },
   { key: 'celebration.mission', group: 'Geral', label: 'Celebração de missão', size: '600×480, PNG transparente', render: () => <CelebrationArt /> },
   { key: 'celebration.chapter', group: 'Geral', label: 'Celebração de capítulo', size: '800×640, PNG transparente', render: () => <CelebrationArt big /> },
   ...AREAS.map((a) => ({

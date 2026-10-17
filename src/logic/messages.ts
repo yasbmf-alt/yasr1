@@ -69,3 +69,38 @@ export function motivational(seed?: number, d = new Date()) {
 }
 
 export const randomLine = (pool: string[]) => pick(pool);
+
+// Frases raras do mascote: aparecem de vez em quando, sem repetir em seguida.
+export const RARE_LINES = [
+  'eu sou só um estetoscópio, mas sinto que você vai longe',
+  'plot twist: a questão difícil era fácil e você sabia',
+  'se a Medway tivesse um prêmio de constância, era seu',
+  'auscultei aqui: coração de R1, ritmo regular, sem sopros',
+  'nenhum gato foi ferido na produção desse estudo 🐾',
+  'fun fact: esse balão de fala não paga aluguel',
+  'pausa dramática… pronto, pode voltar a estudar',
+  'eu ia fazer uma piada de fisiopatologia, mas ela era muito complexa',
+];
+
+export const CONTEXT_LINES = {
+  madrugada: 'estudando a essa hora? dorme um pouquinho também, tá? 💤',
+  voltou: 'olha quem voltou! senti sua falta por aqui',
+  comemorando: 'já tem missão cumprida hoje. que orgulho!',
+};
+
+export function pickRare(): string {
+  let last = '';
+  try {
+    last = localStorage.getItem('yasr1-rare-last') ?? '';
+  } catch {
+    /* sem armazenamento */
+  }
+  const pool = RARE_LINES.filter((x) => x !== last);
+  const line = pool[Math.floor(Math.random() * pool.length)];
+  try {
+    localStorage.setItem('yasr1-rare-last', line);
+  } catch {
+    /* sem armazenamento */
+  }
+  return line;
+}

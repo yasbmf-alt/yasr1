@@ -1,4 +1,6 @@
 import { EventDecor } from '../components/EventDecor';
+import { burst, multiTap } from '../logic/fx';
+import { eggDay, phraseOfDay } from '../logic/eggs';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useMotionValue } from 'framer-motion';
 import { useStore } from '../data/store';
@@ -144,10 +146,11 @@ export function Garden() {
           </span>
         )}
         <GardenButterfly />
+        <Ladybug />
 
         {items.slice(0, SLOTS.length).map((it, i) => {
           const sl = SLOTS[i];
-          const style = { left: `${sl.x}%`, bottom: `${sl.bottom}%`, zIndex: sl.z, ['--s' as string]: sl.scale, animationDelay: `${(i % 9) * -0.7}s` };
+          const style = { left: `${sl.x}%`, bottom: `${sl.bottom}%`, zIndex: sl.z, ['--s' as string]: sl.scale, animationDelay: `${(i % 9) * -0.7}s`, transformOrigin: '50% 100%' };
           if (it.kind === 'special')
             return (
               <div key={it.key} className={`g-plant g-special ${ambient ? 'is-swaying' : ''}`} style={style} data-name={`Flor do ${it.c.title}`} tabIndex={0}>
@@ -166,6 +169,8 @@ export function Garden() {
               onClick={(e) => {
                 e.stopPropagation();
                 play('pop');
+                burst(e, st.stage === 4 ? 'coracoes' : 'folhas', 8);
+                poke(e.currentTarget);
                 setPop(pop === t.id ? null : t.id);
               }}
               aria-label={`${t.name}: ${STAGE_LABEL[st.stage]}`}
@@ -186,6 +191,7 @@ export function Garden() {
             label={d.label}
             pos={data.settings.gardenDecor[d.id] ?? { x: [8, 78, 30, 88][i], y: [70, 74, 58, 62][i], placed: true }}
             sceneRef={sceneRef}
+            night={skyClass(new Date().getHours()) === 'sky-night'}
             onPlace={(x, y) => saveSettings({ gardenDecor: { ...data.settings.gardenDecor, [d.id]: { x, y, placed: true } } })}
           />
         ))}
@@ -253,25 +259,73 @@ function PlantPop({ topicId, slot, onClose, onOpen }: { topicId: string; slot?: 
   );
 }
 
-function DecorItem({ id, label, pos, sceneRef, onPlace }: {
+/** balanço de "cutucada" numa planta (só visual) */
+function poke(el: Element) {
+  el.classList.remove('is-poked');
+  void (el as HTMLElement).offsetWidth;
+  el.classList.add('is-poked');
+  setTimeout(() => el.classList.remove('is-poked'), 700);
+}
+
+/** regar: solta o regador sobre uma planta (não muda nenhum dado) */
+function waterAt(x: number, y: number) {
+  const hit = document.elementsFromPoint(x, y + 30).find((el) => el.classList.contains('g-plant'));
+  burst({ x, y: y + 10 }, 'gotas', 14);
+  play('drop');
+  if (hit) {
+    const r = hit.getBoundingClientRect();
+    setTimeout(() => {
+      burst({ x: r.left + r.width / 2, y: r.top + r.height * 0.3 }, 'gotas', 10);
+      hit.classList.add('is-watered');
+      setTimeout(() => hit.classList.remove('is-watered'), 1400);
+      setTimeout(() => burst({ x: r.left + r.width / 2, y: r.top + r.height * 0.2 }, 'brilho', 6), 500);
+    }, 160);
+  }
+}
+
+function DecorItem({ id, label, pos, sceneRef, onPlace, night }: {
   id: string; label: string; pos: { x: number; y: number; placed: boolean };
-  sceneRef: React.RefObject<HTMLDivElement>; onPlace: (x: number, y: number) => void;
+  sceneRef: React.RefObject<HTMLDivElement>; onPlace: (x: number, y: number) => void; night: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const mx = useMotionValue(0);
   const my = useMotionValue(0);
+  const [on, setOn] = useState(false);
+  const [bird, setBird] = useState(false);
+  const ui = useUI();
   if (!pos.placed) return null;
+  const tap = (e: MouseEvent | TouchEvent | PointerEvent) => {
+    const pt = 'clientX' in e ? { x: e.clientX, y: e.clientY } : { x: 0, y: 0 };
+    if (id === 'regador') {
+      setOn(true);
+      waterAt(pt.x, pt.y);
+      setTimeout(() => setOn(false), 700);
+    } else if (id === 'lanterna') {
+      setOn((v) => !v);
+      play('pop');
+    } else if (id === 'banco') {
+      if (bird) return;
+      setBird(true);
+      play('pop');
+      if (multiTap('banco', 3)) ui.toast(phraseOfDay('banco'), 'diva');
+      setTimeout(() => setBird(false), 3600);
+    } else if (id === 'fonte') {
+      burst(pt, 'gotas', 12);
+      play('drop');
+    }
+  };
   return (
     <motion.div
       ref={ref}
-      className="g-decor"
+      className={`g-decor g-decor-${id} ${on ? 'is-on' : ''} ${night ? 'is-night' : ''}`}
       style={{ left: `${pos.x}%`, top: `${pos.y}%`, x: mx, y: my }}
       drag
       dragMomentum={false}
       dragConstraints={sceneRef}
       dragElastic={0.05}
-      whileDrag={{ scale: 1.1, zIndex: 40 }}
+      whileDrag={{ scale: 1.1, zIndex: 40, rotate: id === 'regador' ? -18 : 0 }}
       onClick={(e) => e.stopPropagation()}
+      onTap={(e) => tap(e)}
       onDragEnd={() => {
         const box = sceneRef.current?.getBoundingClientRect();
         const r = ref.current?.getBoundingClientRect();
@@ -280,12 +334,71 @@ function DecorItem({ id, label, pos, sceneRef, onPlace }: {
         const y = Math.min(90, Math.max(30, ((r.top - box.top) / box.height) * 100));
         mx.set(0);
         my.set(0);
-        play('drop');
+        if (id === 'regador') waterAt(r.left + r.width * 0.85, r.top + r.height * 0.3);
+        else play('drop');
         onPlace(Math.round(x * 10) / 10, Math.round(y * 10) / 10);
       }}
-      title={`${label} · arraste para mudar de lugar`}
+      title={`${label} · ${id === 'regador' ? 'arraste até uma planta para regar' : 'arraste para mudar de lugar'}`}
     >
       <Asset slot={`garden.decor.${id}`} />
+      {id === 'fonte' && (
+        <span className="fountain-water" aria-hidden="true">
+          <i /><i /><i /><i /><i />
+        </span>
+      )}
+      {id === 'lanterna' && <span className="lantern-glow" aria-hidden="true" />}
+      <AnimatePresence>
+        {bird && (
+          <motion.span className="g-bird" initial={{ x: 80, y: -80, opacity: 0, rotate: 20 }} animate={{ x: 0, y: 0, opacity: 1, rotate: 0 }} exit={{ x: -90, y: -90, opacity: 0 }} transition={{ type: 'spring', stiffness: 140, damping: 14 }} aria-hidden="true">
+            <svg viewBox="0 0 40 30" width="100%" height="100%">
+              <ellipse cx="18" cy="18" rx="11" ry="9" fill="#CFE4FF" />
+              <circle cx="27" cy="11" r="6.5" fill="#CFE4FF" />
+              <path d="M33 11 l6 2 -6 2z" fill="#F2C14E" />
+              <circle cx="29" cy="10" r="1.4" fill="#2E4A7F" />
+              <path d="M10 16 q6 -6 12 0 q-6 4 -12 0z" fill="#9CC3F2" />
+              <path d="M7 18 l-6 -3 2 5z" fill="#9CC3F2" />
+              <path d="M16 27 v3 M21 27 v3" stroke="#F2C14E" strokeWidth="1.6" />
+            </svg>
+          </motion.span>
+        )}
+      </AnimatePresence>
     </motion.div>
+  );
+}
+
+/** joaninha rara: aparece em alguns dias, passeia pela grama e voa ao toque */
+function Ladybug() {
+  const { data, saveSettings } = useStore();
+  const ui = useUI();
+  const [gone, setGone] = useState(false);
+  if (!eggDay('joaninha', 4) || gone) return null;
+  return (
+    <motion.button
+      className="ladybug"
+      style={{ left: '12%', bottom: '6%' }}
+      animate={{ x: [0, 120, 260, 180, 40, 0], y: [0, -10, 0, 8, -4, 0], rotate: [80, 95, 75, 260, 280, 440] }}
+      transition={{ duration: 46, repeat: Infinity, ease: 'linear' }}
+      onClick={(e) => {
+        e.stopPropagation();
+        burst(e, 'coracoes', 8);
+        play('pop');
+        ui.toast(phraseOfDay('joaninha'), 'diva');
+        saveSettings({ eggsFound: { ...(data.settings.eggsFound ?? {}), joaninha: new Date().toISOString() } });
+        setGone(true);
+      }}
+      aria-label="Uma joaninha"
+    >
+      <svg viewBox="0 0 30 30" width="100%" height="100%" aria-hidden="true">
+        <circle cx="15" cy="7" r="5" fill="#2E4A7F" />
+        <ellipse cx="15" cy="17" rx="10" ry="11" fill="#E8505B" />
+        <path d="M15 6 V28" stroke="#2E4A7F" strokeWidth="1.5" />
+        <circle cx="10" cy="14" r="2.2" fill="#2E4A7F" />
+        <circle cx="20" cy="14" r="2.2" fill="#2E4A7F" />
+        <circle cx="10" cy="22" r="2" fill="#2E4A7F" />
+        <circle cx="20" cy="22" r="2" fill="#2E4A7F" />
+        <circle cx="13" cy="5" r="1" fill="#fff" />
+        <circle cx="17" cy="5" r="1" fill="#fff" />
+      </svg>
+    </motion.button>
   );
 }

@@ -410,8 +410,11 @@ export function GardenDecor({ kind, ...p }: P & { kind: string }) {
 
 // ── Mascote provisório e celebração ───────────────────────────
 
-export function Mascot(p: P) {
+export type MascotMood = 'acenando' | 'comemorando' | 'chocada' | 'sono' | 'festa';
+
+export function Mascot({ mood = 'acenando', ...p }: P & { mood?: MascotMood }) {
   // Placeholder: estetoscópio que forma um coração, num círculo rosa.
+  // As expressões só acrescentam detalhes; o desenho base é o mesmo.
   return (
     <svg {...svgProps('0 0 120 120', p)}>
       <circle cx="60" cy="60" r="56" fill={C.rosa} />
@@ -422,6 +425,37 @@ export function Mascot(p: P) {
       <circle cx="80" cy="92" r="9" fill={C.rosaMedio} />
       <circle cx="80" cy="92" r="4" fill={C.branco} />
       <path d="M60 62 c-8-6-14-10-14-16 a6 6 0 0 1 14-3 a6 6 0 0 1 14 3 c0 6-6 10-14 16z" fill={C.rosaMedio} />
+      {mood === 'comemorando' && (
+        <>
+          <path d="M53 46 q2 -3 4 0 M63 46 q2 -3 4 0" stroke={C.azul} strokeWidth="1.8" fill="none" strokeLinecap="round" />
+          <path d="M56 51 q4 4 8 0" stroke={C.azul} strokeWidth="1.8" fill={C.branco} strokeLinecap="round" />
+          {[[18, 30], [100, 24], [104, 70], [14, 76]].map(([x, y], i) => (
+            <path key={i} d={`M${x} ${y - 6} l1.8 4.2 4.2 1.8 -4.2 1.8 -1.8 4.2 -1.8 -4.2 -4.2 -1.8 4.2 -1.8z`} fill={i % 2 ? C.manteiga : C.branco} />
+          ))}
+        </>
+      )}
+      {mood === 'chocada' && (
+        <>
+          <circle cx="55" cy="46" r="2.4" fill={C.azul} />
+          <circle cx="65" cy="46" r="2.4" fill={C.azul} />
+          <ellipse cx="60" cy="53" rx="2.4" ry="3" fill={C.azul} />
+          <path d="M94 34 q4 6 0 9 q-4 -3 0 -9z" fill={C.azulClaro} />
+        </>
+      )}
+      {mood === 'sono' && (
+        <>
+          <path d="M52 47 q3 2 6 0 M62 47 q3 2 6 0" stroke={C.azul} strokeWidth="1.8" fill="none" strokeLinecap="round" />
+          <path d="M90 22 h8 l-8 9 h8 M100 10 h6 l-6 7 h6" stroke={C.azul} strokeWidth="2.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        </>
+      )}
+      {mood === 'festa' && (
+        <>
+          <path d="M52 47 q2 -3 4 0 M64 47 q2 -3 4 0" stroke={C.azul} strokeWidth="1.8" fill="none" strokeLinecap="round" />
+          <path d="M60 6 L72 28 H48z" fill={C.lima} stroke={C.azul} strokeWidth="1.5" strokeLinejoin="round" />
+          <path d="M53 20 l12 -4 M51 25 l18 -5" stroke={C.rosaMedio} strokeWidth="2" />
+          <circle cx="60" cy="6" r="4" fill={C.manteiga} />
+        </>
+      )}
     </svg>
   );
 }

@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useMotionValue, AnimatePresence } from 'framer-motion';
+import { useAnimation } from 'framer-motion';
+import { burst, multiTap } from '../logic/fx';
 import { useStore } from '../data/store';
 import { useUI, ProgressRing, ConfirmButton } from '../components/ui';
 import { Icon } from '../components/Icon';
@@ -8,8 +10,10 @@ import { MissionPanel } from './MissionPanel';
 import { ChapterEditor, NewMission } from './TrilhaForms';
 import { areaOf, type Chapter, type Mission, type Note, type NoteColor } from '../types';
 import { chapterMissions, chapterProgress, currentChapter, missionProgress } from '../logic/progress';
-import { fmtRange, today, uid } from '../logic/dates';
-import { greeting, motivational } from '../logic/messages';
+import { diffDays, fmtRange, today, uid } from '../logic/dates';
+import { CONTEXT_LINES, greeting, motivational, pickRare } from '../logic/messages';
+import type { MascotMood } from '../assets/art';
+import { useActiveEvents } from '../components/EventDecor';
 import { EventChip, EventDecor } from '../components/EventDecor';
 import { play } from '../logic/sound';
 import { useAmbient } from '../components/useAmbient';
@@ -36,6 +40,13 @@ export function Trilha() {
   const [editCh, setEditCh] = useState<Chapter | 'new' | null>(null);
   const [newMission, setNewMission] = useState(false);
   const chapter = chapters.find((c) => c.id === chId) ?? currentChapter(chapters) ?? null;
+  // direção da transição entre capítulos (avança → entra pela direita)
+  const dir = useRef(1);
+  const lastNum = useRef(chapter?.number ?? 0);
+  if (chapter && chapter.number !== lastNum.current) {
+    dir.current = chapter.number > lastNum.current ? 1 : -1;
+    lastNum.current = chapter.number;
+  }
 
   useEffect(() => {
     if (!chId && chapter) setChId(chapter.id);
@@ -64,15 +75,30 @@ export function Trilha() {
       ) : (
         <>
           <ChapterTabs chapters={chapters} active={chapter?.id ?? null} onPick={setChId} onNew={() => setEditCh('new')} />
-          {chapter && (
-            <Board
-              key={chapter.id}
-              chapter={chapter}
-              onOpen={(id) => { play('pop'); setOpenMission(id); }}
-              onEdit={() => setEditCh(chapter)}
-              onNewMission={() => setNewMission(true)}
-            />
-          )}
+          <AnimatePresence mode="wait" initial={false} custom={dir.current}>
+            {chapter && (
+              <motion.div
+                key={chapter.id}
+                custom={dir.current}
+                variants={{
+                  enter: (d: number) => ({ opacity: 0, x: d * 40 }),
+                  center: { opacity: 1, x: 0 },
+                  leave: (d: number) => ({ opacity: 0, x: d * -40 }),
+                }}
+                initial="enter"
+                animate="center"
+                exit="leave"
+                transition={{ duration: 0.24, ease: [0.3, 0.7, 0.2, 1] }}
+              >
+                <Board
+                  chapter={chapter}
+                  onOpen={(id) => { play('pop'); setOpenMission(id); }}
+                  onEdit={() => setEditCh(chapter)}
+                  onNewMission={() => setNewMission(true)}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </>
       )}
       <MissionPanel missionId={openMission} onClose={() => setOpenMission(null)} />
@@ -85,31 +111,89 @@ export function Trilha() {
 // ── Saudação ──────────────────────────────────────────────────
 
 function Greeting() {
+  const { data } = useStore();
+  const ev = useActiveEvents();
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1000));
+  const [react, setReact] = useState<MascotMood | null>(null);
+  const [special, setSpecial] = useState<string | null>(() => (Math.random() < 1 / 14 ? pickRare() : null));
+  const [usedContext, setUsedContext] = useState(false);
+  const t = today();
+  const h = new Date().getHours();
+  const lastStudy = useMemo(() => data.sessions.reduce((a, s) => (s.date > a ? s.date : a), ''), [data.sessions]);
+  const doneToday = data.sessions.some((s) => s.date === t && s.missionId);
+  const festive = ev.day && ['aniversario', 'aniversario-yas', 'reveillon', 'formatura'].includes(ev.day.theme);
+  const ctx: { mood: MascotMood; line?: string } =
+    h < 5 || h >= 23 ? { mood: 'sono', line: CONTEXT_LINES.madrugada }
+      : festive ? { mood: 'festa' }
+        : lastStudy && diffDays(t, lastStudy) >= 4 ? { mood: 'chocada', line: CONTEXT_LINES.voltou }
+          : doneToday ? { mood: 'comemorando', line: CONTEXT_LINES.comemorando }
+            : { mood: 'acenando' };
+  const mood = react ?? ctx.mood;
+  const line: string = special ?? ((!usedContext && ctx.line) || motivational(seed));
+
+  const poke = (e: React.MouseEvent) => {
+    setUsedContext(true);
+    if (multiTap('mascote', 3)) {
+      setSpecial(pickRare());
+      setReact('chocada');
+      play('meow');
+      burst(e, 'coracoes', 12);
+      setTimeout(() => setReact(null), 2600);
+      return;
+    }
+    setSpecial(null);
+    setSeed((s) => s + 1);
+    setReact('comemorando');
+    play('pop');
+    burst(e, 'brilho', 6);
+    setTimeout(() => setReact(null), 1200);
+  };
+
   return (
     <header className="greet">
-      <div className="greet-mascot">
-        <Asset slot="mascot.greeting" />
-      </div>
+      <motion.button
+        className="greet-mascot"
+        onClick={poke}
+        key={mood}
+        initial={{ scale: 0.85, rotate: -6 }}
+        animate={{ scale: 1, rotate: 0, y: [0, -8, 0] }}
+        transition={{ type: 'spring', stiffness: 420, damping: 12 }}
+        whileHover={{ rotate: [0, -6, 6, 0], transition: { duration: 0.5 } }}
+        aria-label="Mascote. Clique para outra frase."
+      >
+        <MascotArt mood={mood} />
+      </motion.button>
       <div className="greet-text">
         <div className="greet-row">
           <h1>{greeting()}, Yasmim!</h1>
           <EventChip />
         </div>
-        <motion.button
-          key={seed}
-          className="diva-bubble"
-          onClick={() => setSeed((s) => s + 1)}
-          initial={{ scale: 0.9, opacity: 0, rotate: -2 }}
-          animate={{ scale: 1, opacity: 1, rotate: 0 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 18 }}
-          title="Outra frase"
-        >
-          {motivational(seed)}
-        </motion.button>
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.button
+            key={line}
+            className={`diva-bubble ${special ? 'is-rare' : ''}`}
+            onClick={poke}
+            initial={{ scale: 0.6, opacity: 0, rotate: -4, y: 6 }}
+            animate={{ scale: 1, opacity: 1, rotate: 0, y: 0 }}
+            exit={{ scale: 0.9, opacity: 0, y: -6, transition: { duration: 0.12 } }}
+            transition={{ type: 'spring', stiffness: 420, damping: 18 }}
+            title="Outra frase"
+          >
+            {line}
+          </motion.button>
+        </AnimatePresence>
       </div>
     </header>
   );
+}
+
+/** usa a arte da expressão, se você enviou; senão a sua arte principal; senão o provisório */
+function MascotArt({ mood }: { mood: MascotMood }) {
+  const { data } = useStore();
+  const map = data.settings.assetMap;
+  const slot = mood === 'acenando' ? 'mascot.greeting' : `mascot.${mood}`;
+  if (map[slot] || !map['mascot.greeting']) return <Asset slot={slot} />;
+  return <span className={`mascot-mood mood-${mood}`}><Asset slot="mascot.greeting" /></span>;
 }
 
 // ── Abas de capítulo ──────────────────────────────────────────
@@ -178,6 +262,27 @@ function Board({ chapter, onOpen, onEdit, onNewMission }: { chapter: Chapter; on
   const currentIdx = ms.findIndex((m) => !missionProgress(m).complete);
   const samples = useMemo(() => samplePath(pts), [n]); // eslint-disable-line react-hooks/exhaustive-deps
   const scene = useMemo(() => buildScene(theme, n, H, chapter.number, samples), [theme, n, H, chapter.number, samples]);
+  const chestCtl = useAnimation();
+  // trecho recém-concluído do caminho: desenha só a parte nova, com brilho
+  const prevEnd = useRef(progressEnd);
+  const [fresh, setFresh] = useState<{ a: number; b: number } | null>(null);
+  useEffect(() => {
+    if (progressEnd > prevEnd.current && prevEnd.current >= 0) {
+      setFresh({ a: Math.max(0, prevEnd.current), b: progressEnd });
+      const id = setTimeout(() => setFresh(null), 1800);
+      prevEnd.current = progressEnd;
+      return () => clearTimeout(id);
+    }
+    prevEnd.current = progressEnd;
+    return undefined;
+  }, [progressEnd]);
+  const segPath = (a: number, b: number) =>
+    pts.slice(a, b + 1).reduce((d, p, i, arr) => {
+      if (i === 0) return `M ${p.x} ${p.y}`;
+      const prev = arr[i - 1];
+      const dy = (p.y - prev.y) / 2;
+      return `${d} C ${prev.x} ${prev.y + dy} ${p.x} ${p.y - dy} ${p.x} ${p.y}`;
+    }, '');
   const chapterIndex = [...data.chapters].sort((a, b) => a.number - b.number).findIndex((c) => c.id === chapter.id);
   const notes = data.notes.filter((x) => (x.chapterId === chapter.id || x.chapterId === null) && x.onTrail !== false);
 
@@ -257,6 +362,12 @@ function Board({ chapter, onOpen, onEdit, onNewMission }: { chapter: Chapter; on
               transition={{ duration: 0.6 }}
             />
           )}
+          {fresh && (
+            <>
+              <motion.path d={segPath(fresh.a, fresh.b)} fill="none" stroke="#FFF3B0" strokeWidth="58" strokeLinecap="round" vectorEffect="non-scaling-stroke" initial={{ pathLength: 0, opacity: 0.9 }} animate={{ pathLength: 1, opacity: [0.9, 0.9, 0] }} transition={{ duration: 1.6, ease: 'easeOut' }} />
+              <motion.path d={segPath(fresh.a, fresh.b)} fill="none" stroke="var(--rosa-medio)" strokeWidth="42" strokeLinecap="round" vectorEffect="non-scaling-stroke" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1.1, ease: 'easeInOut' }} strokeOpacity=".55" />
+            </>
+          )}
           {theme !== 'pedras' && <path d={full} fill="none" stroke="var(--dash)" strokeOpacity=".9" strokeWidth="3" strokeDasharray="10 12" strokeLinecap="round" vectorEffect="non-scaling-stroke" />}
         </svg>
 
@@ -321,12 +432,20 @@ function Board({ chapter, onOpen, onEdit, onNewMission }: { chapter: Chapter; on
         <motion.button
           className={`chest ${prog.complete ? 'is-open' : ''}`}
           style={{ left: `${(pts[n].x / W) * 100}%`, top: pts[n].y, x: '-50%', y: '-50%' }}
+          animate={chestCtl}
           whileHover={{ scale: 1.06, rotate: prog.complete ? 0 : -3 }}
           whileTap={{ scale: 0.95 }}
-          onClick={() => {
-            if (prog.complete) ui.celebrate({ kind: 'chapter', title: `${chapter.title} concluído`, extras: ['Uma flor rara nasceu no seu jardim'] });
-            else {
-              play('pop');
+          onClick={(e) => {
+            if (prog.complete) {
+              const el = e.currentTarget;
+              play('key');
+              void chestCtl.start({ scale: [1, 1.25, 0.95, 1.08], y: ['-50%', '-62%', '-50%', '-50%'], transition: { duration: 0.5 } });
+              burst(el, 'brilho', 16);
+              setTimeout(() => burst(el, 'confete', 14), 180);
+              setTimeout(() => ui.celebrate({ kind: 'chapter', title: `${chapter.title} concluído`, extras: ['Uma flor rara nasceu no seu jardim'] }), 520);
+            } else {
+              play('drop');
+              void chestCtl.start({ rotate: [0, -8, 8, -5, 5, 0], transition: { duration: 0.45 } });
               ui.toast('O baú abre quando todas as missões deste capítulo estiverem feitas.');
             }
           }}
@@ -393,8 +512,11 @@ function Station({ m, x, y, current, index, onOpen }: { m: Mission; x: number; y
       )}
       <motion.button
         className="station-btn"
-        onClick={onOpen}
-        whileHover={{ scale: 1.07, y: -3 }}
+        onClick={(e) => {
+          burst(e, p.complete ? 'brilho' : 'confete', 8);
+          onOpen();
+        }}
+        whileHover={{ scale: 1.07, y: -3, rotate: index % 2 ? 2 : -2 }}
         whileTap={{ scale: 0.94, y: 2 }}
         style={{ ['--area' as string]: internato ? 'var(--pessego)' : area.color }}
         aria-label={`${m.label}. ${p.done} de ${p.total} atividades.${internato ? ' Missão especial do internato.' : ''}`}
@@ -462,8 +584,9 @@ function PostIt({ note, boardRef, boardH, open, onOpen, onClose, chapterId }: {
         dragConstraints={boardRef}
         dragElastic={0.04}
         whileHover={{ scale: 1.12 }}
-        whileDrag={{ scale: 1.15, zIndex: 30, rotate: 0 }}
-        onDragStart={() => { dragged.current = true; }}
+        whileDrag={{ scale: 1.18, zIndex: 30, rotate: 3, boxShadow: '0 22px 30px -12px rgba(46,74,127,.45)' }}
+        whileTap={{ scale: 1.05 }}
+        onDragStart={() => { dragged.current = true; play('paper'); }}
         onDragEnd={() => {
           const box = boardRef.current?.getBoundingClientRect();
           const r = ref.current?.getBoundingClientRect();
@@ -473,6 +596,7 @@ function PostIt({ note, boardRef, boardH, open, onOpen, onClose, chapterId }: {
           mx.set(0);
           my.set(0);
           saveNote({ ...note, x: Math.round(nx * 10) / 10, y: Math.round(ny) });
+          play('note');
           setTimeout(() => { dragged.current = false; }, 0);
         }}
         onClick={() => {

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '../data/store';
 import { useUI, ConfirmButton, Drawer, Field, LazyInput, ProgressRing, numOrNull } from '../components/ui';
 import { Icon, ACTIVITY_ICON } from '../components/Icon';
+import { burst } from '../logic/fx';
 import { RegisterForm, SessionEditor, draftFields } from '../components/SessionForm';
 import { Asset } from '../assets/registry';
 import { ACTIVITY_TYPES, AREAS, areaOf, type Activity, type ActivityType, type Area, type Mission, type Priority } from '../types';
@@ -67,6 +68,8 @@ function PanelBody({ m, onClose }: { m: Mission; onClose: () => void }) {
   const rewards = useRewards();
   const onComplete = (a: Activity, d: Parameters<typeof completeActivity>[2]) => {
     const r = completeActivity(m.id, a.id, d);
+    const row = document.querySelector(`[data-act="${a.id}"]`);
+    if (row) burst(row, 'confete', 12);
     setRegistering(null);
     rewards.afterCompletion(r, m, chapter ?? null);
   };
@@ -129,7 +132,7 @@ function PanelBody({ m, onClose }: { m: Mission; onClose: () => void }) {
           <h3 className="h-section">Atividades</h3>
           <ul className="acts">
             {m.activities.map((a) => (
-              <li key={a.id} className={`act ${a.done ? 'is-done' : ''}`}>
+              <li key={a.id} data-act={a.id} className={`act ${a.done ? 'is-done' : ''}`}>
                 <div className="act-row">
                   <motion.button
                     className="act-check"

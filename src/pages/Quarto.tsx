@@ -114,6 +114,7 @@ export function Quarto() {
           <RoomArt active={active} onPick={pick} night={night} catAwake={eggs.catAwake} keyFound={eggs.keyFound} boxOpen={eggs.boxOpen} />
         </motion.div>
         {!zoom && <EventDecor scene="quarto" />}
+        {!zoom && eggs.extra}
         <AnimatePresence>{eggs.overlay}</AnimatePresence>
       </div>
       <nav className="room-chips" aria-label="Atalhos do quarto">

@@ -13,6 +13,7 @@ export interface RoomEggs {
   boxOpen: boolean;
   onEgg: (id: RoomSpot) => boolean;
   overlay: React.ReactNode;
+  extra: React.ReactNode; // bilhetinho escondido atrás do vaso
 }
 
 /** Segredos do quarto: gatinha, chavinha no vaso e caixinha de música. */
@@ -72,5 +73,32 @@ export function useRoomEggs(): RoomEggs {
     </motion.div>
   ) : null;
 
-  return { enabled: true, catAwake, keyFound: keyFound || !keyToday, boxOpen, onEgg, overlay };
+  // bilhetinho dobrado atrás do vaso: aparece em alguns dias, uma vez por dia
+  const noteKey = `bilhete-${new Date().toISOString().slice(0, 10)}`;
+  const showNote = eggDay('bilhete', 3) && !found[noteKey];
+  const extra = showNote ? (
+    <motion.button
+      className="room-note-egg"
+      style={{ left: '91.5%', top: '84%' }}
+      initial={{ rotate: -14 }}
+      animate={{ rotate: [-14, -8, -14] }}
+      transition={{ repeat: Infinity, duration: 3 }}
+      whileHover={{ y: -4, rotate: 0 }}
+      onClick={() => {
+        play('envelope');
+        mark(noteKey);
+        setNote({ text: `💌 ${phraseOfDay('bilhete')}`, x: 70, y: 70 });
+        setTimeout(() => setNote(null), 5200);
+      }}
+      aria-label="Um bilhetinho dobrado atrás do vaso"
+    >
+      <svg viewBox="0 0 30 22" width="100%" height="100%" aria-hidden="true">
+        <path d="M1 4 L15 1 L29 4 L27 21 L3 21z" fill="#FFFDF4" stroke="#E8D9A8" strokeWidth="1.2" />
+        <path d="M2 5 L15 13 L28 5" fill="none" stroke="#E8D9A8" strokeWidth="1.2" />
+        <path d="M15 17 c-3 -2 -4 -3.5 -4 -4.6 c0 -1 .8 -1.8 1.8 -1.8 c.9 0 1.6 .6 2.2 1.3 c.6 -.7 1.3 -1.3 2.2 -1.3 c1 0 1.8 .8 1.8 1.8 c0 1.1 -1 2.6 -4 4.6z" fill="#F38CB8" />
+      </svg>
+    </motion.button>
+  ) : null;
+
+  return { extra, enabled: true, catAwake, keyFound: keyFound || !keyToday, boxOpen, onEgg, overlay };
 }
