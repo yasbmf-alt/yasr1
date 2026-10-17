@@ -181,7 +181,7 @@ export function RegisterForm({ type, initial, onSubmit, onCancel, submitLabel = 
 
 /** Seleção de tema com criação rápida de tema novo. */
 export function TopicPicker({ value, onChange, idBase }: { value: string; onChange: (topicId: string, newTopic?: Topic) => void; idBase: string }) {
-  const { data } = useStore();
+  const { data, saveTopic } = useStore();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [area, setArea] = useState<Area>('clinica');
@@ -219,8 +219,12 @@ export function TopicPicker({ value, onChange, idBase }: { value: string; onChan
                 id: uid(), name: name.trim(), area, specialty: spec.trim(), priority: 'media',
                 nextReviewOverride: null, coverAssetId: null, createdAt: new Date().toISOString(),
               };
+              // Salva já: o select só mostra temas que existem no store.
+              saveTopic(t);
               onChange(t.id, t);
               setCreating(false);
+              setName('');
+              setSpec('');
             }}
           >
             Criar tema
