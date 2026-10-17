@@ -15,6 +15,10 @@ export interface SessionDraft {
   errorTopics: string[];
   errors?: ErrorGroup[];
   notes: string;
+  source?: string;
+  method?: string;
+  mastery?: number | null;
+  watched?: 'completa' | 'parcial' | null;
 }
 
 export interface CompletionResult {
@@ -28,6 +32,7 @@ interface Store {
   ready: boolean;
   mode: RepoMode | 'loading';
   error: string | null;
+  saving: boolean;
   clearError(): void;
   saveChapter(c: Chapter): void;
   deleteChapter(id: string): void;
@@ -75,6 +80,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [mode, setMode] = useState<Store['mode']>('loading');
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const repo = useRef<Repo | null>(null);
   const latest = useRef<DataSnapshot>(EMPTY);
 
@@ -85,6 +91,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (!alive) return;
       repo.current = r;
       r.onError = (m) => setError(m);
+      r.onPending = (n) => setSaving(n > 0);
       setMode(r.mode);
       un = r.subscribe((snap, rd) => {
         latest.current = snap;
@@ -129,6 +136,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       ready,
       mode,
       error,
+      saving,
       clearError: () => setError(null),
       saveChapter: (c) => put('chapters', c),
       deleteChapter: (id) => {
@@ -172,6 +180,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           errorTopics: draft.errorTopics.filter((e) => e.trim()).slice(0, 2),
           errors: draft.errors ?? [],
           notes: draft.notes,
+          ...(draft.source ? { source: draft.source } : {}),
+          ...(draft.method ? { method: draft.method } : {}),
+          ...(draft.mastery ? { mastery: draft.mastery } : {}),
+          ...(draft.watched ? { watched: draft.watched } : {}),
           createdAt: new Date().toISOString(),
         };
         const nextActs: Activity[] = m.activities.map((a) =>
@@ -258,7 +270,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       deleteVoucher: (id) => remove('vouchers', id),
       snapshot: () => latest.current,
     };
-  }, [data, ready, mode, error, put, remove]);
+  }, [data, ready, mode, error, saving, put, remove]);
 
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
 }

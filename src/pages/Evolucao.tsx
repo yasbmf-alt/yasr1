@@ -1,14 +1,14 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useStore } from '../data/store';
-import { useUI, Modal, ConfirmButton } from '../components/ui';
+import { useUI } from '../components/ui';
 import { Icon } from '../components/Icon';
-import { SessionEditor } from '../components/SessionForm';
 import { Asset } from '../assets/registry';
 import { SPECIES_BY_AREA } from '../assets/art';
 import { Garden } from './Garden';
-import { AREAS, activityLabel, areaOf, ACTIVITY_TYPES, type Area, type ActivityType, type Session } from '../types';
-import { dayVolumes, dominantArea, intensity, topicStats, weeklyMinutes } from '../logic/progress';
+import { Registros } from './Registros';
+import { activityLabel, areaOf } from '../types';
+import { dayVolumes, dominantArea, intensity, weeklyMinutes } from '../logic/progress';
 import { DIAS_CURTOS, fmtMinutes, fmtShort, fromKey, MESES_LONGOS, pad, toKey, today } from '../logic/dates';
 
 export function Evolucao() {
@@ -50,7 +50,7 @@ export function Evolucao() {
               </div>
             </div>
           ) : (
-            <SessionsTable />
+            <Registros />
           )}
         </motion.div>
       </AnimatePresence>
@@ -225,117 +225,6 @@ function WeeklyHours() {
           );
         })}
       </svg>
-    </section>
-  );
-}
-
-// ── Registro de estudos (tabela) ──────────────────────────────
-
-function SessionsTable() {
-  const { data, deleteSession } = useStore();
-  const ui = useUI();
-  const [q, setQ] = useState('');
-  const [area, setArea] = useState<Area | ''>('');
-  const [type, setType] = useState<ActivityType | ''>('');
-  const [editing, setEditing] = useState<Session | 'new' | null>(null);
-  const [limit, setLimit] = useState(40);
-  const tmap = new Map(data.topics.map((t) => [t.id, t]));
-  const nextReview = useMemo(() => {
-    const m = new Map<string, string | null>();
-    for (const t of data.topics) m.set(t.id, topicStats(t, data.sessions).nextReview);
-    return m;
-  }, [data.topics, data.sessions]);
-
-  const rows = data.sessions
-    .filter((s) => {
-      const t = tmap.get(s.topicId);
-      if (area && t?.area !== area) return false;
-      if (type && s.type !== type) return false;
-      if (q && !(t?.name ?? '').toLowerCase().includes(q.toLowerCase()) && !(t?.specialty ?? '').toLowerCase().includes(q.toLowerCase())) return false;
-      return true;
-    })
-    .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
-
-  return (
-    <section className="card table-card">
-      <div className="table-head">
-        <div>
-          <h2 className="h2">Registro de estudos</h2>
-          <p className="muted">O que você conclui nas missões entra aqui sozinho. Sessões avulsas também.</p>
-        </div>
-        <button className="btn btn-primary" onClick={() => setEditing('new')}><Icon name="plus" size={18} /> Nova sessão</button>
-      </div>
-      <div className="filters">
-        <input id="f-q" className="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar tema ou especialidade" aria-label="Buscar tema" />
-        <select id="f-area" value={area} onChange={(e) => setArea(e.target.value as Area | '')} aria-label="Filtrar por área">
-          <option value="">Todas as áreas</option>
-          {AREAS.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
-        </select>
-        <select id="f-type" value={type} onChange={(e) => setType(e.target.value as ActivityType | '')} aria-label="Filtrar por tipo">
-          <option value="">Todos os tipos</option>
-          {ACTIVITY_TYPES.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
-        </select>
-      </div>
-      {rows.length === 0 ? (
-        <div className="empty">
-          <p><strong>Nenhum registro {data.sessions.length ? 'com esses filtros' : 'ainda'}.</strong></p>
-          <p className="muted">Conclua uma atividade numa missão da trilha ou registre uma sessão avulsa.</p>
-        </div>
-      ) : (
-        <div className="table-scroll">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Data</th><th>Tema</th><th>Especialidade</th><th>Tipo</th><th className="num">Tempo</th>
-                <th className="num">Questões</th><th className="num">Acertos</th><th className="num">Erros</th><th className="num">%</th>
-                <th>Onde mais errei</th><th>Próx. revisão</th><th aria-label="Ações" />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.slice(0, limit).map((s) => {
-                const t = tmap.get(s.topicId);
-                const a = areaOf(t?.area ?? 'geral');
-                const pct = s.questions ? Math.round(((s.correct ?? 0) / s.questions) * 100) : null;
-                const nr = nextReview.get(s.topicId);
-                return (
-                  <tr key={s.id}>
-                    <td className="mono">{fmtShort(s.date)}</td>
-                    <td>
-                      <button className="link" onClick={() => t && ui.openTopic(t.id)}>{t?.name ?? (s.topicId ? 'Tema removido' : 'Estudo livre')}</button>
-                      {s.missionId && <span className="tiny-tag">missão</span>}
-                    </td>
-                    <td><span className="chip chip-sm" style={{ background: a.color, color: a.ink }}>{a.short}</span> <span className="muted">{t?.specialty}</span></td>
-                    <td>{activityLabel(s.type)}</td>
-                    <td className="num">{fmtMinutes(s.minutes)}</td>
-                    <td className="num">{s.questions ?? '—'}</td>
-                    <td className="num">{s.questions ? s.correct ?? 0 : '—'}</td>
-                    <td className="num">{s.questions ? s.questions - (s.correct ?? 0) : '—'}</td>
-                    <td className="num"><span className={`pct ${pct == null ? '' : pct >= 80 ? 'pct-ok' : pct >= 60 ? 'pct-mid' : 'pct-low'}`}>{pct == null ? '—' : `${pct}%`}</span></td>
-                    <td className="errs">{s.errorTopics.length ? s.errorTopics.join(' · ') : <span className="muted">—</span>}</td>
-                    <td className="mono">{nr ? fmtShort(nr) : '—'}</td>
-                    <td className="row-actions">
-                      <button className="icon-btn icon-btn-sm" onClick={() => setEditing(s)} aria-label="Editar registro"><Icon name="edit" size={16} /></button>
-                      <ConfirmButton
-                        className="icon-btn icon-btn-sm"
-                        label={<Icon name="trash" size={16} />}
-                        question={s.activityId ? 'Apagar e desmarcar a atividade?' : 'Apagar?'}
-                        confirmLabel="Apagar"
-                        onConfirm={() => deleteSession(s.id)}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {rows.length > limit && (
-        <button className="btn btn-quiet" onClick={() => setLimit(limit + 40)}>Mostrar mais {Math.min(40, rows.length - limit)}</button>
-      )}
-      <Modal open={!!editing} onClose={() => setEditing(null)} title={editing === 'new' ? 'Nova sessão de estudo' : 'Editar registro'}>
-        {editing && <SessionEditor session={editing === 'new' ? undefined : editing} onDone={() => setEditing(null)} />}
-      </Modal>
     </section>
   );
 }

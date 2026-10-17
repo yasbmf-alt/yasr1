@@ -327,7 +327,7 @@ function History({ list, onEdit }: { list: Simulado[]; onEdit: (s: Simulado) => 
 
 // ── Formulário ────────────────────────────────────────────────
 
-function emptySim(): Simulado {
+export function emptySim(): Simulado {
   return {
     id: uid(), name: '', date: today(), total: null, correct: null, minutes: null,
     areas: { clinica: { correct: null, total: null }, cirurgia: { correct: null, total: null }, pediatria: { correct: null, total: null }, go: { correct: null, total: null }, preventiva: { correct: null, total: null } },
@@ -335,7 +335,7 @@ function emptySim(): Simulado {
   };
 }
 
-function SimuladoForm({ value, onClose }: { value: Simulado | 'new' | null; onClose: () => void }) {
+export function SimuladoForm({ value, onClose }: { value: Simulado | 'new' | null; onClose: () => void }) {
   const { data, saveSimulado } = useStore();
   const ui = useUI();
   const [s, setS] = useState<Simulado>(emptySim());

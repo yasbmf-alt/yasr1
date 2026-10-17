@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '../data/store';
 import { useUI, ConfirmButton, Drawer, Field, LazyInput, ProgressRing, numOrNull } from '../components/ui';
 import { Icon, ACTIVITY_ICON } from '../components/Icon';
-import { RegisterForm, SessionEditor } from '../components/SessionForm';
+import { RegisterForm, SessionEditor, draftFields } from '../components/SessionForm';
 import { Asset } from '../assets/registry';
 import { ACTIVITY_TYPES, AREAS, areaOf, type Activity, type ActivityType, type Area, type Mission, type Priority } from '../types';
 import { missionProgress, topicStats, chapterMissions } from '../logic/progress';
@@ -196,7 +196,7 @@ function PanelBody({ m, onClose }: { m: Mission; onClose: () => void }) {
                 <AnimatePresence initial={false}>
                   {registering === a.id && !a.done && (
                     <motion.div className="act-expand" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
-                      <RegisterForm type={a.type} plannedQuestions={a.plannedQuestions} onCancel={() => setRegistering(null)} onSubmit={(d) => onComplete(a, d)} />
+                      <RegisterForm type={a.type} plannedQuestions={a.plannedQuestions} showNotes onCancel={() => setRegistering(null)} onSubmit={(d) => onComplete(a, d)} />
                     </motion.div>
                   )}
                   {unchecking === a.id && a.done && (
@@ -364,12 +364,14 @@ function SessionEditorForMission({ missionId, topicId, onDone }: { missionId: st
       <RegisterForm
         key={type}
         type={type}
+        showNotes
         submitLabel="Registrar"
         onCancel={onDone}
         onSubmit={(d) => {
           saveSession({
             id: uid(), topicId, missionId, activityId: null, type, date: d.date, minutes: d.minutes, questions: d.questions,
-            correct: d.correct, errorTopics: d.errorTopics.filter((x) => x.trim()).slice(0, 2), notes: '', createdAt: new Date().toISOString(),
+            correct: d.correct, errorTopics: d.errorTopics.filter((x) => x.trim()).slice(0, 2), notes: d.notes, createdAt: new Date().toISOString(),
+            ...draftFields(d),
           });
           ui.activityDone();
           onDone();

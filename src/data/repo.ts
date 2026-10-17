@@ -16,6 +16,7 @@ export interface Repo {
   remove(col: Collection, id: string): void;
   replaceAll(data: DataSnapshot): Promise<void>;
   onError?: (msg: string) => void;
+  onPending?: (n: number) => void; // quantas gravações ainda estão a caminho do banco
 }
 
 const COLS: Collection[] = ['chapters', 'missions', 'topics', 'sessions', 'meta', 'notes', 'events', 'simulados', 'decks', 'cards', 'errnotes', 'macetes', 'letters', 'vouchers'];
@@ -91,7 +92,10 @@ class DbRepo implements Repo {
     return toSnapshot(merged);
   }
 
+  onPending?: (n: number) => void;
+
   private emit() {
+    this.onPending?.(this.pending.size);
     const snap = this.view();
     const ready = this.loaded.size === COLS.length;
     this.listeners.forEach((l) => l(snap, ready));

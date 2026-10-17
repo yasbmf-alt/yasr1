@@ -106,7 +106,22 @@ export interface Session {
   notes: string;
   createdAt: string; // ISO
   focus?: boolean; // veio do Cantinho de Concentração
+  // campos que dependem do tipo de atividade (todos opcionais)
+  source?: string; // questões: de onde vieram
+  method?: string; // revisão: como revisou
+  mastery?: number | null; // revisão: percepção de domínio, 1 a 5
+  watched?: 'completa' | 'parcial' | null; // videoaula: conclusão
 }
+
+export const QUESTION_SOURCES = ['Medway', 'Prova anterior', 'Banco de questões', 'Apostila', 'Simulado', 'Outra'];
+export const REVIEW_METHODS = ['Flashcards', 'Resumo', 'Mapa mental', 'Releitura', 'Questões', 'Áudio / aula'];
+export const MASTERY: { v: number; label: string }[] = [
+  { v: 1, label: 'Ainda confuso' },
+  { v: 2, label: 'Inseguro' },
+  { v: 3, label: 'Razoável' },
+  { v: 4, label: 'Bem' },
+  { v: 5, label: 'Domino' },
+];
 
 export interface DecorPlacement {
   x: number; // % da cena
