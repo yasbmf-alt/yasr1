@@ -2,4 +2,5 @@
 
 - Não crie branches nem pull requests: faça commit e push direto na `main`.
   A Vercel publica automaticamente cada push na `main`.
-- Antes de subir, rode `npm run build` (inclui o typecheck) e `npm test`.
+- Antes de subir, rode `npm run build` (inclui o typecheck). Obs.: `npm test` está quebrado
+  porque `scripts/test-backup.mjs` não está no repositório.
