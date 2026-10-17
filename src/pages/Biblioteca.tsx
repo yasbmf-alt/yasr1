@@ -7,7 +7,7 @@ import { AnimatePresence, motion, useMotionValue } from 'framer-motion';
 import { useStore } from '../data/store';
 import { useUI } from '../components/ui';
 import { Icon } from '../components/Icon';
-import { Asset, assetUrl } from '../assets/registry';
+import { Asset, AssetImg } from '../assets/registry';
 import { SPECIES_BY_AREA, StationIcon } from '../assets/art';
 import { AREAS, areaOf, type Area, type Topic } from '../types';
 import { STAGE_LABEL, topicStats, type TopicStats } from '../logic/progress';
@@ -257,7 +257,7 @@ function BookCover({ t, big }: { t: Topic; big?: boolean }) {
   return (
     <span className={`cover ${big ? 'cover-big' : ''}`}>
       {t.coverAssetId ? (
-        <img className="cover-img" src={assetUrl(t.coverAssetId)} alt="" draggable={false} />
+        <AssetImg className="cover-img" id={t.coverAssetId} alt="" />
       ) : (
         <>
           <span className="cover-emblem"><StationIcon area={t.area} /></span>

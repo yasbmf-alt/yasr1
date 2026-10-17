@@ -166,6 +166,8 @@ export interface Settings {
   eventsSeen?: Record<string, string>; // "id:ano" → ISO da celebração vista
   graduationDate?: string; // YYYY-MM-DD, data real da formatura
   mascotLinesSeen?: Record<string, string>; // frases raras já ditas
+  lastBackupAt?: string; // ISO do último backup baixado
+  backupReminder?: boolean; // lembrete semanal de backup (padrão: ligado)
 }
 
 export interface RewardImage {

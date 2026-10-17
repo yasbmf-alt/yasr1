@@ -4,10 +4,11 @@
 //  • MemoryRepo – modo demonstração, nada é salvo
 import type { Collection, DataSnapshot, Settings } from '../types';
 import { DEFAULT_SETTINGS } from '../types';
+import { platformKind, supa } from '../platform/platform';
 
-export type RepoMode = 'db' | 'local' | 'demo';
-type Listener = (snap: DataSnapshot, ready: boolean) => void;
-type Doc = { id: string } & Record<string, unknown>;
+export type RepoMode = 'db' | 'local' | 'demo' | 'cloud';
+export type Listener = (snap: DataSnapshot, ready: boolean) => void;
+export type Doc = { id: string } & Record<string, unknown>;
 
 export interface Repo {
   mode: RepoMode;
@@ -19,9 +20,9 @@ export interface Repo {
   onPending?: (n: number) => void; // quantas gravações ainda estão a caminho do banco
 }
 
-const COLS: Collection[] = ['chapters', 'missions', 'topics', 'sessions', 'meta', 'notes', 'events', 'simulados', 'decks', 'cards', 'errnotes', 'macetes', 'letters', 'vouchers'];
+export const COLS: Collection[] = ['chapters', 'missions', 'topics', 'sessions', 'meta', 'notes', 'events', 'simulados', 'decks', 'cards', 'errnotes', 'macetes', 'letters', 'vouchers'];
 
-function emptyCache(): Record<Collection, Map<string, Doc>> {
+export function emptyCache(): Record<Collection, Map<string, Doc>> {
   return {
     chapters: new Map(), missions: new Map(), topics: new Map(), sessions: new Map(), meta: new Map(),
     notes: new Map(), events: new Map(), simulados: new Map(), decks: new Map(), cards: new Map(),
@@ -29,7 +30,7 @@ function emptyCache(): Record<Collection, Map<string, Doc>> {
   };
 }
 
-function toSnapshot(cache: Record<Collection, Map<string, Doc>>): DataSnapshot {
+export function toSnapshot(cache: Record<Collection, Map<string, Doc>>): DataSnapshot {
   const list = <T,>(c: Collection) => [...cache[c].values()] as unknown as T[];
   const s = cache.meta.get('settings') as Partial<Settings> | undefined;
   return {
@@ -278,7 +279,15 @@ export async function useCapability<T = any>(name: string): Promise<T | null> {
 
 export async function createRepo(demo: () => DataSnapshot): Promise<Repo> {
   if (isDemoOn()) return new LocalRepo('demo', demo());
-  const db = await useCapability('db');
-  if (db) return new DbRepo(db);
+  const kind = platformKind();
+  if (kind === 'claude') {
+    const db = await useCapability('db');
+    if (db) return new DbRepo(db);
+  }
+  if (kind === 'supabase') {
+    const m = await supa()!;
+    const r = await m.createCloudRepo();
+    if (r) return r;
+  }
   return new LocalRepo('local');
 }

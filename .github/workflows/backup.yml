@@ -1,0 +1,31 @@
+# Backup automático (opcional), independente do próprio banco:
+# toda segunda de manhã baixa seus dados do Supabase e guarda o arquivo
+# como "artifact" privado desta execução do GitHub Actions (fica 90 dias).
+# Para ligar: Settings → Secrets and variables → Actions → New repository secret
+#   SUPABASE_URL               (Project URL)
+#   SUPABASE_SERVICE_ROLE_KEY  (service_role, NUNCA coloque no site)
+name: Backup semanal
+on:
+  schedule:
+    - cron: '17 9 * * 1'
+  workflow_dispatch:
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    if: ${{ vars.BACKUP_ENABLED == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --omit=dev
+      - run: node scripts/export-supabase.mjs
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yas-r1-backup-${{ github.run_id }}
+          path: backup/
+          retention-days: 90

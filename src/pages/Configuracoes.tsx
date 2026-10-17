@@ -1,12 +1,15 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../data/store';
-import { useUI, Field } from '../components/ui';
+import { useUI, Field, ConfirmButton } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { Asset, FOLDER, GROUPS, SLOTS, STATUS_LABEL, fileNameOf, statusOf, type AssetStatus } from '../assets/registry';
 import { canUploadImages, uploadImage } from '../components/upload';
-import { isDemoOn, setDemo, useCapability } from '../data/repo';
+import { platformKind, saveDownload, supa } from '../platform/platform';
+import { quietRewards } from '../components/useRewards';
+import { LIST_LABEL, buildBackup, checkBackup, clearPreRestore, countsOf, keepPreRestore, mergeSnapshots, readPreRestore, remapAssets, restoreFiles, type Checked } from '../logic/backup';
+import { isDemoOn, setDemo } from '../data/repo';
 import type { DataSnapshot } from '../types';
-import { DEFAULT_PHRASES, DEFAULT_SETTINGS } from '../types';
+import { DEFAULT_PHRASES } from '../types';
 import { today } from '../logic/dates';
 import { play, setSoundVolume } from '../logic/sound';
 import { Recompensas, CartasCfg, SonsProprios } from './ConfigExtras';
@@ -152,90 +155,211 @@ export function Configuracoes() {
 }
 
 function DataSection({ mode, data }: { mode: string; data: DataSnapshot }) {
-  const { replaceAll } = useStore();
+  const { replaceAll, saveSettings, saving, snapshot } = useStore();
   const ui = useUI();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [incoming, setIncoming] = useState<DataSnapshot | null>(null);
+  const [checked, setChecked] = useState<Checked | null>(null);
   const [fallbackText, setFallbackText] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [verify, setVerify] = useState<{ local: Record<string, number>; server: Record<string, number> | null; at: string } | null>(null);
+  const [pre, setPre] = useState(() => readPreRestore());
+  const [email, setEmail] = useState<string | null>(null);
   const demo = isDemoOn();
+  const kind = platformKind();
 
-  const exportBackup = async () => {
-    const json = JSON.stringify({ app: 'yas-r1', version: 1, exportedAt: new Date().toISOString(), data }, null, 2);
-    const dl = await useCapability<any>('downloads');
-    if (!dl) return setFallbackText(json);
-    try {
-      await dl.save({ filename: `yas-r1-backup-${today()}.json`, data: json });
-      ui.toast('Backup salvo.');
-    } catch (e: any) {
-      if (e?.code === 'declined') return;
-      setFallbackText(json);
-    }
+  useEffect(() => {
+    if (kind === 'supabase') void supa()?.then((m) => m.accountEmail()).then(setEmail);
+  }, [kind]);
+
+  const exportBackup = async (withFiles: boolean) => {
+    setBusy(withFiles ? 'Juntando imagens e sons…' : 'Preparando…');
+    const { json, missing } = await buildBackup(snapshot(), withFiles, (d, t) => setBusy(`Juntando arquivos… ${d}/${t}`));
+    const text = JSON.stringify(json, null, 2);
+    setBusy(null);
+    const r = await saveDownload(`yas-r1-backup${withFiles ? '-completo' : ''}-${today()}.json`, text);
+    if (r === 'ok') {
+      saveSettings({ lastBackupAt: new Date().toISOString() });
+      ui.toast(missing.length ? `Backup salvo. ${missing.length} arquivo(s) não puderam ser incluídos.` : 'Backup salvo.');
+    } else if (r === 'failed') setFallbackText(text);
   };
 
   const onFile = async (f: File) => {
     try {
-      const parsed = JSON.parse(await f.text());
-      const d = parsed?.data ?? parsed;
-      if (!Array.isArray(d?.chapters) || !Array.isArray(d?.missions) || !Array.isArray(d?.topics) || !Array.isArray(d?.sessions))
-        throw new Error('formato');
-      setIncoming({
-        ...d,
-        notes: d.notes ?? [], events: d.events ?? [], simulados: d.simulados ?? [], decks: d.decks ?? [], cards: d.cards ?? [],
-        settings: { ...DEFAULT_SETTINGS, ...(d.settings ?? {}), id: 'settings' },
-      });
+      setChecked(checkBackup(JSON.parse(await f.text())));
     } catch {
-      ui.toast('Esse arquivo não parece um backup do Yas R1.', 'erro');
+      setChecked({ ok: false, problems: ['Não consegui ler esse arquivo como JSON.'], warnings: [] });
     }
   };
 
+  const apply = async (how: 'juntar' | 'substituir') => {
+    if (!checked?.data) return;
+    const current = snapshot();
+    quietRewards();
+    keepPreRestore(current);
+    setPre(readPreRestore());
+    let incoming = checked.data;
+    try {
+      if (checked.files && Object.keys(checked.files).length) {
+        setBusy('Restaurando imagens e sons…');
+        const { map, failed } = await restoreFiles(checked.files, (d, t) => setBusy(`Restaurando arquivos… ${d}/${t}`));
+        incoming = remapAssets(incoming, map);
+        if (failed) ui.toast(`${failed} arquivo(s) não puderam ser restaurados; o resto segue normal.`, 'erro');
+      }
+      setBusy('Gravando…');
+      await replaceAll(how === 'juntar' ? mergeSnapshots(current, incoming) : incoming);
+      ui.toast(how === 'juntar' ? 'Backup juntado aos seus dados.' : 'Backup restaurado.');
+      setChecked(null);
+    } catch {
+      ui.toast('A restauração não terminou. Seus dados anteriores estão guardados; use “Desfazer importação”.', 'erro');
+    }
+    setBusy(null);
+  };
+
+  const undo = async () => {
+    const p = readPreRestore();
+    if (!p) return;
+    setBusy('Desfazendo…');
+    quietRewards();
+    try {
+      await replaceAll(p.data);
+      clearPreRestore();
+      setPre(null);
+      ui.toast('Pronto: os dados voltaram a ser como antes da importação.');
+    } catch {
+      ui.toast('Não consegui desfazer agora. Tente de novo.', 'erro');
+    }
+    setBusy(null);
+  };
+
+  const runVerify = async () => {
+    setBusy('Conferindo…');
+    const local = countsOf(snapshot());
+    let server: Record<string, number> | null = null;
+    if (kind === 'supabase') {
+      const m = await supa()!;
+      const raw = await m.serverCounts(['chapters', 'missions', 'topics', 'sessions', 'notes', 'events', 'simulados', 'decks', 'cards', 'errnotes', 'macetes', 'letters', 'vouchers']);
+      server = raw;
+    }
+    setVerify({ local, server, at: new Date().toISOString() });
+    setBusy(null);
+  };
+
+  const cur = countsOf(data);
+  const last = data.settings.lastBackupAt;
+
   return (
     <section className="card">
-      <h2 className="h2">Dados</h2>
+      <h2 className="h2">Dados e backup</h2>
       <p className="muted">
-        {mode === 'db' && 'Salvos no banco do app e sincronizados entre computador e celular.'}
-        {mode === 'local' && 'Salvos só neste navegador nesta janela.'}
+        {mode === 'db' && 'Salvos no banco do app (Claude) e sincronizados entre computador e celular.'}
+        {mode === 'cloud' && 'Salvos no seu banco Supabase, ligados à sua conta, e sincronizados entre aparelhos. Sem internet, o app guarda as mudanças e envia depois.'}
+        {mode === 'local' && 'Salvos só neste navegador. Exporte um backup com frequência.'}
         {mode === 'demo' && 'Você está vendo dados fictícios de demonstração.'}
       </p>
-      <div className="btn-row wrap">
-        <button className="btn btn-secondary" onClick={exportBackup} disabled={mode === 'demo'}>
-          <Icon name="download" size={18} /> Exportar backup
-        </button>
-        <button className="btn btn-secondary" onClick={() => fileRef.current?.click()} disabled={mode === 'demo'}>
-          <Icon name="upload" size={18} /> Importar backup
-        </button>
-        <input ref={fileRef} id="import-file" type="file" accept=".json,application/json" hidden onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
-      </div>
-      {incoming && (
-        <div className="confirm-box">
-          <span>
-            Backup com {incoming.chapters.length} capítulos, {incoming.missions.length} missões, {incoming.topics.length} temas, {incoming.sessions.length} registros, {incoming.events.length} eventos, {incoming.simulados.length} simulados e {incoming.cards.length} flashcards. Importar substitui tudo o que está no app agora.
-          </span>
-          <div className="register-actions">
-            <button className="btn btn-quiet" onClick={() => setIncoming(null)}>Cancelar</button>
-            <button
-              className="btn btn-danger"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                try {
-                  await replaceAll(incoming);
-                  ui.toast('Backup importado.');
-                } catch {
-                  ui.toast('A importação parou no meio. Tente de novo.', 'erro');
-                }
-                setBusy(false);
-                setIncoming(null);
-              }}
-            >
-              {busy ? 'Importando…' : 'Substituir tudo'}
-            </button>
+      {kind === 'supabase' && email && (
+        <div className="cfg-row">
+          <div>
+            <strong>Conta</strong>
+            <p className="muted">{email}</p>
           </div>
+          <button className="btn btn-quiet btn-sm" onClick={() => void supa()?.then((m) => m.signOut())}>Sair</button>
         </div>
       )}
+      <p className="muted small">{last ? `Último backup baixado: ${new Date(last).toLocaleDateString('pt-BR')}.` : 'Você ainda não baixou nenhum backup por aqui.'}</p>
+      <div className="btn-row wrap">
+        <button className="btn btn-secondary" onClick={() => void exportBackup(false)} disabled={mode === 'demo' || !!busy}>
+          <Icon name="download" size={18} /> Backup dos dados
+        </button>
+        <button className="btn btn-secondary" onClick={() => void exportBackup(true)} disabled={mode === 'demo' || !!busy}>
+          <Icon name="download" size={18} /> Backup completo (com imagens e sons)
+        </button>
+        <button className="btn btn-quiet" onClick={() => fileRef.current?.click()} disabled={mode === 'demo' || !!busy}>
+          <Icon name="upload" size={18} /> Restaurar um backup
+        </button>
+        <button className="btn btn-quiet" onClick={() => void runVerify()} disabled={!!busy}>
+          <Icon name="cloudCheck" size={18} /> Conferir meus dados
+        </button>
+        <input ref={fileRef} id="import-file" type="file" accept=".json,application/json" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void onFile(f); }} />
+      </div>
+      {busy && <p className="busy-line" role="status"><span className="save-spin" aria-hidden="true" /> {busy}</p>}
+
+      {checked && (
+        <div className={`confirm-box restore-box ${checked.ok ? '' : 'is-bad'}`}>
+          {!checked.ok ? (
+            <>
+              <strong>Esse arquivo não pode ser restaurado:</strong>
+              <ul>{checked.problems.map((p) => <li key={p}>{p}</li>)}</ul>
+              <div className="register-actions"><button className="btn btn-quiet" onClick={() => setChecked(null)}>Fechar</button></div>
+            </>
+          ) : (
+            <>
+              <strong>Backup conferido{checked.exportedAt ? ` · feito em ${new Date(checked.exportedAt).toLocaleString('pt-BR')}` : ''}</strong>
+              <table className="table restore-table">
+                <thead><tr><th>O quê</th><th className="num">No backup</th><th className="num">No app agora</th></tr></thead>
+                <tbody>
+                  {(Object.keys(LIST_LABEL) as (keyof typeof LIST_LABEL)[]).filter((k) => (checked.counts?.[k] ?? 0) + (cur[k] ?? 0) > 0).map((k) => (
+                    <tr key={k}><td>{LIST_LABEL[k]}</td><td className="num">{checked.counts?.[k] ?? 0}</td><td className="num">{cur[k] ?? 0}</td></tr>
+                  ))}
+                  {checked.files && <tr><td>Imagens e sons</td><td className="num">{Object.keys(checked.files).length}</td><td className="num">—</td></tr>}
+                </tbody>
+              </table>
+              {checked.warnings.length > 0 && <ul className="restore-warn">{checked.warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
+              <p className="muted small">Antes de qualquer opção, o app guarda uma cópia do que você tem agora, para poder desfazer.</p>
+              <div className="register-actions wrap">
+                <button className="btn btn-quiet" onClick={() => setChecked(null)}>Cancelar</button>
+                <button className="btn btn-secondary" disabled={!!busy} onClick={() => void apply('juntar')}>Juntar (não apaga nada)</button>
+                <ConfirmButton className="btn btn-danger" label="Substituir tudo" question="Trocar todos os dados atuais pelos do backup?" confirmLabel="Sim, substituir" onConfirm={() => void apply('substituir')} />
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {pre && !checked && (
+        <div className="cfg-row">
+          <div>
+            <strong>Desfazer importação</strong>
+            <p className="muted">Volta aos dados de {new Date(pre.at).toLocaleString('pt-BR')}, de antes da última restauração.</p>
+          </div>
+          <ConfirmButton className="btn btn-quiet btn-sm" label="Desfazer" question="Voltar aos dados de antes?" confirmLabel="Voltar" onConfirm={() => void undo()} />
+        </div>
+      )}
+
+      {verify && (
+        <div className="verify-box">
+          <strong>Conferência de {new Date(verify.at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</strong>
+          <table className="table restore-table">
+            <thead><tr><th>O quê</th><th className="num">No app</th>{verify.server && <th className="num">No banco</th>}</tr></thead>
+            <tbody>
+              {(Object.keys(LIST_LABEL) as (keyof typeof LIST_LABEL)[]).filter((k) => verify.local[k] || verify.server?.[k]).map((k) => (
+                <tr key={k} className={verify.server && verify.server[k] !== verify.local[k] ? 'is-diff' : ''}>
+                  <td>{LIST_LABEL[k]}</td><td className="num">{verify.local[k]}</td>{verify.server && <td className="num">{verify.server[k]}</td>}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="muted small">
+            {saving ? 'Ainda há alterações a caminho do banco. Confira de novo em alguns segundos.'
+              : verify.server == null && kind === 'supabase' ? 'Não consegui falar com o banco agora (sem internet?). Os números acima são os deste aparelho.'
+                : verify.server ? (Object.keys(verify.local).every((k) => (verify.server![k] ?? 0) === verify.local[k]) ? '✓ Tudo o que está no app está também no banco.' : 'Há diferença entre o app e o banco: provavelmente alterações ainda sendo enviadas. Confira de novo daqui a pouco.')
+                  : mode === 'db' ? '✓ Estes números vêm direto do banco do app.' : 'Estes são os dados guardados neste navegador.'}
+          </p>
+        </div>
+      )}
+
+      <div className="cfg-row">
+        <div>
+          <strong>Lembrete de backup</strong>
+          <p className="muted">Um aviso discreto quando fizer 7 dias do último backup baixado.</p>
+        </div>
+        <button className={`switch ${data.settings.backupReminder !== false ? 'on' : ''}`} role="switch" aria-checked={data.settings.backupReminder !== false} aria-label="Lembrete de backup" onClick={() => saveSettings({ backupReminder: data.settings.backupReminder === false })}>
+          <span />
+        </button>
+      </div>
+
       {fallbackText && (
         <div className="fallback">
-          <p className="muted">Não deu para baixar o arquivo aqui. Copie o texto abaixo e salve como .json:</p>
+          <p className="muted">Não consegui baixar o arquivo daqui. Copie o texto abaixo e salve como <span className="mono">yas-r1-backup.json</span>.</p>
           <textarea id="backup-text" readOnly rows={5} value={fallbackText} onFocus={(e) => e.target.select()} />
           <div className="btn-row">
             <button className="btn btn-sm btn-secondary" onClick={() => navigator.clipboard?.writeText(fallbackText).then(() => ui.toast('Copiado.')).catch(() => ui.toast('Selecione o texto e copie.'))}>Copiar</button>
@@ -303,23 +427,8 @@ function Illustrations() {
   };
   const downloadList = async () => {
     const text = '\uFEFF' + csv();
-    const dl = await useCapability('downloads');
-    if (dl?.save) {
-      try {
-        await dl.save({ filename: 'yas-r1-lista-de-assets.csv', data: text, mimeType: 'text/csv' });
-        return;
-      } catch {
-        /* tenta o jeito do navegador */
-      }
-    }
-    try {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
-      a.download = 'yas-r1-lista-de-assets.csv';
-      a.click();
-    } catch {
-      ui.toast('Não consegui baixar a lista agora.', 'erro');
-    }
+    const r = await saveDownload('yas-r1-lista-de-assets.csv', text, 'text/csv');
+    if (r === 'failed') ui.toast('Não consegui baixar a lista agora.', 'erro');
   };
 
   const slotCard = (sl: (typeof SLOTS)[number]) => {

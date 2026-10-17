@@ -4,6 +4,7 @@
 // precisa ser reconstruído quando a arte nova chega.
 import React from 'react';
 import { useStore } from '../data/store';
+import { assetUrlSync, useAssetUrl } from '../platform/platform';
 import {
   CelebrationArt, Chest, DoorArt, DrawerArt, GardenDecor, Mascot, PlantArt, SPECIES_LABEL, SpecialFlower,
   StationIcon, StickerArt, TrailDecor, type Species,
@@ -203,15 +204,22 @@ export const STATUS_LABEL: Record<AssetStatus, string> = {
 
 const SLOT_MAP = new Map(SLOTS.map((s) => [s.key, s]));
 
-export const assetUrl = (id: string) => `/_blob/${id}`;
+/** endereço imediato de um arquivo (no site próprio pode ainda estar carregando) */
+export const assetUrl = (id: string) => assetUrlSync(id) ?? '';
+
+/** imagem de um arquivo enviado, no Claude ou no site próprio */
+export function AssetImg({ id, className, alt = '', onError, loading }: { id: string; className?: string; alt?: string; onError?: () => void; loading?: 'lazy' }) {
+  const url = useAssetUrl(id);
+  if (!url) return <span className={`asset-loading ${className ?? ''}`} aria-hidden="true" />;
+  return <img className={className} src={url} alt={alt} draggable={false} onError={onError} loading={loading} />;
+}
 
 /** Renderiza a arte da Yasmim se existir; senão, o provisório. */
 export function Asset({ slot, className, alt = '' }: { slot: string; className?: string; alt?: string }) {
   const { data } = useStore();
   const id = data.settings.assetMap[slot];
   const [broken, setBroken] = React.useState(false);
-  if (id && !broken)
-    return <img className={`asset-img ${className ?? ''}`} src={assetUrl(id)} alt={alt} draggable={false} onError={() => setBroken(true)} />;
+  if (id && !broken) return <AssetImg id={id} className={`asset-img ${className ?? ''}`} alt={alt} onError={() => setBroken(true)} />;
   const s = SLOT_MAP.get(slot);
   return <span className={`asset-svg ${className ?? ''}`}>{s?.render() ?? null}</span>;
 }

@@ -3,8 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useStore } from '../data/store';
 import { ConfirmButton, Field, useUI, LazyInput, numOrNull } from '../components/ui';
 import { Icon } from '../components/Icon';
-import { assetUrl } from '../assets/registry';
-import { uploadAudio, uploadImage, assetsCapability } from '../components/upload';
+import { AssetImg } from '../assets/registry';
+import { uploadAudio, uploadImage, canUploadImages } from '../components/upload';
 import { mimoTypes, rollMimo } from '../logic/rewards';
 import { play, SOUND_SLOTS, type SoundName } from '../logic/sound';
 import { setAmbientVolume } from '../logic/ambient';
@@ -23,7 +23,7 @@ export function Recompensas() {
   const [busy, setBusy] = useState(false);
   const [canUpload, setCanUpload] = useState<boolean | null>(null);
   React.useEffect(() => {
-    void assetsCapability().then((a) => setCanUpload(!!a));
+    void canUploadImages().then(setCanUpload);
   }, []);
 
   const onFiles = async (files: FileList) => {
@@ -69,7 +69,7 @@ export function Recompensas() {
             {imgs.map((im) => (
               <div key={im.id} className={`gal ${im.active ? '' : 'is-off'}`}>
                 <button className="gal-img" onClick={() => ui.enqueue({ kind: 'image', assetId: im.assetId })} title="Ver como aparece">
-                  <img src={assetUrl(im.assetId)} alt="" loading="lazy" />
+                  <AssetImg id={im.assetId} alt="" loading="lazy" />
                 </button>
                 <div className="gal-actions">
                   <label className="gal-check">

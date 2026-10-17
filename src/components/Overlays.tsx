@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { useStore } from '../data/store';
 import { Icon } from './Icon';
-import { assetUrl } from '../assets/registry';
+import { useAssetUrl } from '../platform/platform';
 import { play } from '../logic/sound';
 import { fmtLong } from '../logic/dates';
 import { NOTE_HEX } from '../logic/colors';
@@ -59,6 +59,7 @@ export function Party({ kisses = true }: { kisses?: boolean }) {
 /** Pop-up de conclusão: SOMENTE a imagem da Yasmim, sem texto nem moldura. */
 export function ImagePop({ assetId, onClose }: { assetId: string; onClose: () => void }) {
   useEsc(onClose);
+  const url = useAssetUrl(assetId);
   useEffect(() => {
     play('chapter');
     const t = setTimeout(() => play('kiss'), 700);
@@ -67,8 +68,8 @@ export function ImagePop({ assetId, onClose }: { assetId: string; onClose: () =>
   return (
     <motion.div className="imgpop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} role="dialog" aria-label="Recompensa">
       <Party />
-      <motion.img
-        src={assetUrl(assetId)}
+      {url && <motion.img
+        src={url}
         alt=""
         className="imgpop-img"
         draggable={false}
@@ -76,7 +77,7 @@ export function ImagePop({ assetId, onClose }: { assetId: string; onClose: () =>
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.9, opacity: 0 }}
         transition={{ type: 'spring', stiffness: 220, damping: 20 }}
-      />
+      />}
       <button className="imgpop-x" onClick={onClose} aria-label="Fechar"><Icon name="close" size={18} /></button>
     </motion.div>
   );

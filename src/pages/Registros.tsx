@@ -203,7 +203,7 @@ export function Registros() {
           </p>
         </div>
         <div className="reg-head-actions">
-          {mode === 'db' || mode === 'local' ? (
+          {mode === 'db' || mode === 'local' || mode === 'cloud' ? (
             <span className={`save-pill ${saving ? 'is-saving' : ''}`} role="status" aria-live="polite">
               {saving ? <span className="save-spin" aria-hidden="true" /> : <Icon name="cloudCheck" size={16} />}
               {saving ? 'Salvando…' : 'Tudo salvo'}

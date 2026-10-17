@@ -1,4 +1,6 @@
 import { EventWatcher, PreviewBar } from './components/EventDecor';
+import { BackupReminder } from './components/BackupReminder';
+import { platformKind } from './platform/platform';
 import React from 'react';
 import { MotionConfig, AnimatePresence, motion } from 'framer-motion';
 import { StoreProvider, useStore } from './data/store';
@@ -68,7 +70,9 @@ function Banners() {
       )}
       {mode === 'local' && (
         <div className="banner banner-local" role="status">
-          O banco do app não respondeu nesta janela, então as alterações estão sendo salvas só neste navegador. Abra o Yas R1 pelo Claude para sincronizar.
+          {platformKind() === 'local'
+            ? 'Este Yas R1 está salvando só neste navegador. Exporte backups com frequência (Configurações → Dados).'
+            : 'O banco do app não respondeu nesta janela, então as alterações estão sendo salvas só neste navegador. Recarregue a página para sincronizar.'}
         </div>
       )}
       {error && (
@@ -129,6 +133,7 @@ function Main() {
       <TopicSheet />
       <RewardWatcher />
       <EventWatcher />
+      <BackupReminder />
       <PreviewBar />
     </MotionConfig>
   );

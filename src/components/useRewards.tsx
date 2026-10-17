@@ -48,6 +48,12 @@ export function useRewards() {
 const SEEN = 'yasr1-ach-seen';
 
 /** Observa conquistas novas e cartas que chegaram, sem nenhuma ação da usuária. */
+let quietUntil = 0;
+/** chamado antes de restaurar um backup: nada de sorteios por causa da importação */
+export const quietRewards = (ms = 15000) => {
+  quietUntil = Date.now() + ms;
+};
+
 export function RewardWatcher() {
   const store = useStore();
   const ui = useUI();
@@ -81,7 +87,8 @@ export function RewardWatcher() {
         } catch {
           /* ignore */
         }
-        if (!first.current || fresh.length < 4) {
+        // muitas conquistas de uma vez = importação/restauração: só marca como vistas
+        if (fresh.length < 4 && Date.now() > quietUntil) {
           for (const a of fresh.slice(0, 2)) ui.toast(`Nova conquista no pote: ${a.emoji} ${a.title}`, 'diva');
           if (!fresh.every((a) => a.id.startsWith('cap-'))) {
             const v = rollMimo(store.snapshot(), fresh[0].title);

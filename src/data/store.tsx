@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { resolveAssetUrl } from '../platform/platform';
 import type { ErrorGroup, Activity, AgendaEvent, Chapter, DataSnapshot, Deck, ErrNote, Flashcard, Letter, Macete, Mission, Note, Session, Settings, Simulado, Topic, Voucher } from '../types';
 import { DEFAULT_SETTINGS } from '../types';
 import { createRepo, type Repo, type RepoMode } from './repo';
@@ -109,9 +110,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => setSoundVolume(data.settings.soundVolume ?? 0.7), [data.settings.soundVolume]);
   const soundKey = JSON.stringify(data.settings.soundAssets ?? {});
   useEffect(() => {
-    const map = Object.fromEntries(Object.entries(data.settings.soundAssets ?? {}).map(([k, id]) => [k, `/_blob/${id}`]));
-    const run = () => void loadCustomSounds(map);
-    if (Object.keys(map).length) window.addEventListener('pointerdown', run, { once: true });
+    const run = () =>
+      void Promise.all(Object.entries(data.settings.soundAssets ?? {}).map(async ([k, id]) => [k, await resolveAssetUrl(id)] as const)).then((pairs) =>
+        loadCustomSounds(Object.fromEntries(pairs.filter(([, u]) => !!u)) as Record<string, string>),
+      );
+    if (Object.keys(data.settings.soundAssets ?? {}).length) window.addEventListener('pointerdown', run, { once: true });
     else run();
     return () => window.removeEventListener('pointerdown', run);
     // eslint-disable-next-line react-hooks/exhaustive-deps
