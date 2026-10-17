@@ -1,3 +1,4 @@
+import { EventWatcher, PreviewBar } from './components/EventDecor';
 import React from 'react';
 import { MotionConfig, AnimatePresence, motion } from 'framer-motion';
 import { StoreProvider, useStore } from './data/store';
@@ -127,6 +128,8 @@ function Main() {
       </div>
       <TopicSheet />
       <RewardWatcher />
+      <EventWatcher />
+      <PreviewBar />
     </MotionConfig>
   );
 }

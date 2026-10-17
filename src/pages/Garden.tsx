@@ -1,3 +1,4 @@
+import { EventDecor } from '../components/EventDecor';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useMotionValue } from 'framer-motion';
 import { useStore } from '../data/store';
@@ -120,6 +121,7 @@ export function Garden() {
     <section className="garden">
       <div ref={sceneRef} className={`g-scene ${skyClass(new Date().getHours())} season-${season}`} onClick={() => setPop(null)}>
         <span className="g-sun" aria-hidden="true" />
+        <EventDecor scene="jardim" />
         {[0, 1].map((i) => (
           <div key={i} className={`cloud ${ambient ? 'is-drifting' : ''}`} style={{ left: `${i ? 70 : 18}%`, top: i ? 46 : 18, width: i ? 96 : 120, animationDelay: `${i * -9}s` }}>
             <Asset slot="trail.decor.nuvem" />

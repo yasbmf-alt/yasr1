@@ -4,6 +4,11 @@ import { useCapability } from '../data/repo';
 let cached: Promise<any> | null = null;
 export const assetsCapability = () => (cached ??= useCapability('assets'));
 
+/** o envio de imagens está disponível nesta janela? */
+export async function canUploadImages() {
+  return !!(await assetsCapability());
+}
+
 const typeFor = (f: File) =>
   f.type ||
   (f.name.endsWith('.svg') ? 'image/svg+xml' : f.name.endsWith('.webp') ? 'image/webp' : f.name.endsWith('.gif') ? 'image/gif' : f.name.match(/\.jpe?g$/) ? 'image/jpeg' : 'image/png');

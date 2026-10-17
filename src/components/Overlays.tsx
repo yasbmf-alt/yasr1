@@ -10,7 +10,8 @@ import { NOTE_HEX } from '../logic/colors';
 export type Overlay =
   | { kind: 'image'; assetId: string }
   | { kind: 'voucher'; voucherId: string }
-  | { kind: 'letter'; letterId: string };
+  | { kind: 'letter'; letterId: string }
+  | { kind: 'event'; eventId: string; preview?: boolean };
 
 function useEsc(onClose: () => void) {
   useEffect(() => {

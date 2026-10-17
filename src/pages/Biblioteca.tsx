@@ -1,3 +1,4 @@
+import { EventDecor } from '../components/EventDecor';
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useMotionValue } from 'framer-motion';
 import { useStore } from '../data/store';
@@ -84,6 +85,7 @@ export function Biblioteca() {
       </header>
 
       <div className="wardrobe-stage">
+        <EventDecor scene="biblioteca" />
         <div className="wardrobe" ref={wardrobeRef}>
           <div className="w-crown" aria-hidden="true" />
           <div className="w-body">

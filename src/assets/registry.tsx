@@ -9,6 +9,7 @@ import {
   StationIcon, StickerArt, TrailDecor, type Species,
 } from './art';
 import { STICKERS } from '../logic/stickers';
+import * as EV from './eventArt';
 import { Bridge, Bush, Fence, FlowerBed, FlowerCluster, Fern, Grass, Hedge, Lantern, Leaf, Mushrooms, Pine, Rocks, Stone, TreeBlossom, TreeRound, Tulips } from './trailArt';
 
 const TRAIL_ART: [string, string, React.ComponentType][] = [
@@ -42,6 +43,7 @@ export interface Slot {
   size: string; // tamanho recomendado
   idea?: string;
   render: () => React.ReactNode;
+  placeholder?: boolean; // ainda sem desenho provisório: precisa criar
 }
 
 const SPECIES: Species[] = ['ipe', 'mandacaru', 'lirio', 'girassol', 'pequizeiro', 'samambaia'];
@@ -67,6 +69,11 @@ export const GROUPS: { id: string; label: string; idea: string }[] = [
     id: 'Biblioteca',
     label: 'Armário',
     idea: 'O armário é montado em camadas para a porta abrir de verdade: porta esquerda e porta direita (mesmo tamanho, formato retrato, sem fundo), gaveta e fundo interno. Desenhe as portas de frente, com a dobradiça no lado de fora: o app gira cada uma pela borda externa. As capas dos livros você troca direto no livro, dentro do armário.',
+  },
+  {
+    id: 'Eventos',
+    label: 'Eventos especiais',
+    idea: 'Peças soltas, com fundo transparente, que entram nas laterais dos ambientes durante cada data. Mantenha a mesma espessura de traço e a paleta do app. As faixas (luzinhas, bandeirinhas, morcegos) são horizontais e longas, para ocupar o topo do cenário.',
   },
   {
     id: 'Adesivos',
@@ -120,6 +127,75 @@ export const SLOTS: Slot[] = [
     render: () => <StickerArt id={st.id} />,
   })),
 ];
+
+const BatGarland = () => (
+  <span className="ev-garland-row">
+    <span><EV.Bat /></span><span><EV.Bat /></span><span><EV.Bat /></span>
+  </span>
+);
+
+const EVENT_ART: [string, string, string, React.ComponentType][] = [
+  ['halloween.abobora', 'Halloween · abóbora', '300×270', EV.Pumpkin],
+  ['halloween.fantasma', 'Halloween · fantasminha', '240×300', EV.Ghost],
+  ['halloween.morcego', 'Halloween · morcego', '360×180', EV.Bat],
+  ['halloween.lua', 'Halloween · lua', '300×300', EV.Moon],
+  ['halloween.teia', 'Halloween · teia (canto)', '300×300', EV.Web],
+  ['halloween.morcegos', 'Halloween · faixa de morcegos', '1200×180', BatGarland],
+  ['natal.arvore', 'Natal · árvore', '300×360', EV.XmasTree],
+  ['natal.presente', 'Natal · presente', '300×300', EV.Gift],
+  ['natal.estrela', 'Natal · estrela', '300×300', EV.Star],
+  ['natal.laco', 'Natal · laço', '300×210', EV.Bow],
+  ['natal.enfeite', 'Natal · bola de enfeite', '180×240', EV.Ornament],
+  ['natal.luzinhas', 'Natal · faixa de luzinhas', '1200×180', EV.Lights],
+  ['praia.concha', 'Praia · conchinha', '300×270', EV.Shell],
+  ['praia.estrela-do-mar', 'Praia · estrela-do-mar', '300×300', EV.Starfish],
+  ['praia.coracao', 'Romance · coração', '300×270', EV.Heart],
+  ['praia.hibisco', 'Praia · flor tropical', '300×300', EV.Hibiscus],
+  ['praia.coqueiro', 'Praia · coqueiro', '300×360', EV.Palm],
+  ['aniversario.balao', 'Aniversário · balão rosa', '180×330', EV.Balloon],
+  ['aniversario.balao-azul', 'Aniversário · balão azul', '180×330', EV.BalloonBlue],
+  ['aniversario.presente', 'Aniversário · presentinho', '300×300', EV.Gift],
+  ['aniversario.laco', 'Aniversário · laço', '300×210', EV.Bow],
+  ['aniversario.bolo', 'Aniversário · bolo', '300×300', EV.Cake],
+  ['aniversario.bandeirinhas', 'Aniversário · faixa de bandeirinhas', '1200×180', EV.Bunting],
+  ['reveillon.fogos', 'Réveillon · fogos', '300×300', EV.Fireworks],
+  ['reveillon.serpentina', 'Réveillon · serpentina', '300×300', EV.Streamer],
+  ['formatura.capelo', 'Formatura · capelo', '360×270', EV.Cap],
+  ['formatura.diploma', 'Formatura · diploma', '360×180', EV.Diploma],
+  ['flores.margarida', 'Flores · margarida', '300×330', EV.Daisy],
+  ['natureza.sol', 'Natureza · sol', '300×300', EV.Sun],
+  ['natureza.broto', 'Natureza · broto', '300×300', EV.Sprout],
+  ['medico.estetoscopio', 'Dia do Médico · estetoscópio', '300×300', EV.Stethoscope],
+  ['medico.cruz', 'Dia do Médico · cruz', '300×300', EV.MedCross],
+  ['coracoes.envelope', 'Corações · envelope', '300×228', EV.Envelope],
+];
+
+SLOTS.push(
+  ...EVENT_ART.map(([k, label, size, C]) => ({ key: `event.${k}`, group: 'Eventos', label, size: `${size}, PNG transparente`, render: () => <C /> })),
+);
+
+// ── Organização dos arquivos (pastas, nomes e estado) ─────────
+
+export const FOLDER: Record<string, { folder: string; where: string }> = {
+  Geral: { folder: 'interface', where: 'Saudação e celebrações' },
+  Trilha: { folder: 'trilha', where: 'Minha Trilha' },
+  Jardim: { folder: 'jardim', where: 'Jardim' },
+  Biblioteca: { folder: 'biblioteca', where: 'Biblioteca (armário)' },
+  Adesivos: { folder: 'biblioteca/adesivos', where: 'Biblioteca (gaveta de adesivos)' },
+  Eventos: { folder: 'eventos', where: 'Eventos, nos ambientes marcados' },
+};
+
+/** nome de arquivo sugerido, sempre o mesmo para o mesmo slot */
+export const fileNameOf = (s: Slot) => `${FOLDER[s.group]?.folder ?? 'outros'}/${s.key.replace(/\./g, '-')}.png`;
+
+export type AssetStatus = 'enviado' | 'provisorio' | 'criar';
+export const statusOf = (s: Slot, assetMap: Record<string, string>): AssetStatus =>
+  assetMap[s.key] ? 'enviado' : s.placeholder ? 'criar' : 'provisorio';
+export const STATUS_LABEL: Record<AssetStatus, string> = {
+  enviado: 'Arte sua (existente)',
+  provisorio: 'Provisório · precisa substituir',
+  criar: 'Precisa criar',
+};
 
 const SLOT_MAP = new Map(SLOTS.map((s) => [s.key, s]));
 

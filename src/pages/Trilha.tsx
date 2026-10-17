@@ -10,6 +10,7 @@ import { areaOf, type Chapter, type Mission, type Note, type NoteColor } from '.
 import { chapterMissions, chapterProgress, currentChapter, missionProgress } from '../logic/progress';
 import { fmtRange, today, uid } from '../logic/dates';
 import { greeting, motivational } from '../logic/messages';
+import { EventChip, EventDecor } from '../components/EventDecor';
 import { play } from '../logic/sound';
 import { useAmbient } from '../components/useAmbient';
 import { buildScene, samplePath, SCENE_COLORS, themeFor, W, TOP, ROW, xAt as sceneXAt } from './trailScene';
@@ -91,7 +92,10 @@ function Greeting() {
         <Asset slot="mascot.greeting" />
       </div>
       <div className="greet-text">
-        <h1>{greeting()}, Yasmim!</h1>
+        <div className="greet-row">
+          <h1>{greeting()}, Yasmim!</h1>
+          <EventChip />
+        </div>
         <motion.button
           key={seed}
           className="diva-bubble"
@@ -298,6 +302,7 @@ function Board({ chapter, onOpen, onEdit, onNewMission }: { chapter: Chapter; on
           <span key={`pt${i}`} className="fx fx-primavera trail-petal" style={{ left: `${(i * 13 + 6) % 100}%`, animationDelay: `${i * 1.4}s`, animationDuration: `${10 + (i % 4) * 2}s` }} aria-hidden="true" />
         ))}
         {ambient && theme !== 'noturno' && <Butterflies H={H} />}
+        <EventDecor scene="trilha" />
         <TrailCat chapterIndex={chapterIndex} chapters={data.chapters.length} x={scene.props[1] ? (scene.props[1].x / W) * 100 : 12} y={scene.props[1] ? scene.props[1].y - 14 : 300} />
         {scene.props.length > 4 && <Candy x={(scene.props[scene.props.length - 3].x / W) * 100} y={scene.props[scene.props.length - 3].y - 30} />}
 

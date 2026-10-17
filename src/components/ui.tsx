@@ -6,6 +6,7 @@ import { play } from '../logic/sound';
 import { CHAPTER_LINES, DONE_LINES, MISSION_LINES, randomLine } from '../logic/messages';
 import { useStore } from '../data/store';
 import { ImagePop, LetterOpen, VoucherReveal, type Overlay } from './Overlays';
+import { EventCard } from './EventDecor';
 
 // ── Contexto de interface: celebrações, bolhas e navegação ────
 
@@ -161,6 +162,7 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
         {!cel && queue[0]?.kind === 'image' && <ImagePop key={JSON.stringify(queue[0])} assetId={queue[0].assetId} onClose={shift} />}
         {!cel && queue[0]?.kind === 'voucher' && <VoucherReveal key={JSON.stringify(queue[0])} voucherId={queue[0].voucherId} onClose={shift} />}
         {!cel && queue[0]?.kind === 'letter' && <LetterOpen key={JSON.stringify(queue[0])} letterId={queue[0].letterId} onClose={shift} />}
+        {!cel && queue[0]?.kind === 'event' && <EventCard key={JSON.stringify(queue[0])} eventId={queue[0].eventId} preview={queue[0].preview} onClose={shift} />}
       </AnimatePresence>
     </Ctx.Provider>
   );

@@ -160,6 +160,12 @@ export interface Settings {
   mimoChance: number; // 0–1
   rotations: Rotation[];
   eggsFound: Record<string, string>; // id → ISO da descoberta
+  // 3.0 · eventos especiais
+  events?: import('./logic/events').SpecialEvent[]; // só o que foi editado; o resto vem do padrão
+  eventsOff?: boolean; // desliga todas as decorações de evento
+  eventsSeen?: Record<string, string>; // "id:ano" → ISO da celebração vista
+  graduationDate?: string; // YYYY-MM-DD, data real da formatura
+  mascotLinesSeen?: Record<string, string>; // frases raras já ditas
 }
 
 export interface RewardImage {

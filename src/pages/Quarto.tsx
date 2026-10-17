@@ -1,3 +1,4 @@
+import { EventDecor } from '../components/EventDecor';
 import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useUI } from '../components/ui';
@@ -112,6 +113,7 @@ export function Quarto() {
         >
           <RoomArt active={active} onPick={pick} night={night} catAwake={eggs.catAwake} keyFound={eggs.keyFound} boxOpen={eggs.boxOpen} />
         </motion.div>
+        {!zoom && <EventDecor scene="quarto" />}
         <AnimatePresence>{eggs.overlay}</AnimatePresence>
       </div>
       <nav className="room-chips" aria-label="Atalhos do quarto">

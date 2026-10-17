@@ -2,17 +2,20 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useStore } from '../data/store';
 import { useUI, Field } from '../components/ui';
 import { Icon } from '../components/Icon';
-import { Asset, GROUPS, SLOTS } from '../assets/registry';
+import { Asset, FOLDER, GROUPS, SLOTS, STATUS_LABEL, fileNameOf, statusOf, type AssetStatus } from '../assets/registry';
+import { canUploadImages, uploadImage } from '../components/upload';
 import { isDemoOn, setDemo, useCapability } from '../data/repo';
 import type { DataSnapshot } from '../types';
 import { DEFAULT_PHRASES, DEFAULT_SETTINGS } from '../types';
 import { today } from '../logic/dates';
 import { play, setSoundVolume } from '../logic/sound';
 import { Recompensas, CartasCfg, SonsProprios } from './ConfigExtras';
+import { EventosCfg } from './ConfigEventos';
 
-type CfgTab = 'geral' | 'recompensas' | 'cartas' | 'sons' | 'ilustracoes';
+type CfgTab = 'geral' | 'eventos' | 'recompensas' | 'cartas' | 'sons' | 'ilustracoes';
 const CFG_TABS: { id: CfgTab; label: string }[] = [
   { id: 'geral', label: 'Geral' },
+  { id: 'eventos', label: 'Eventos' },
   { id: 'recompensas', label: 'Recompensas' },
   { id: 'cartas', label: 'Cartinhas' },
   { id: 'sons', label: 'Sons próprios' },
@@ -62,6 +65,7 @@ export function Configuracoes() {
           <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'is-on' : ''} onClick={() => pick(t.id)}>{t.label}</button>
         ))}
       </div>
+      {tab === 'eventos' && <EventosCfg />}
       {tab === 'recompensas' && <Recompensas />}
       {tab === 'cartas' && <CartasCfg />}
       {tab === 'sons' && <SonsProprios />}
@@ -264,39 +268,99 @@ function DataSection({ mode, data }: { mode: string; data: DataSnapshot }) {
 function Illustrations() {
   const { data, saveSettings } = useStore();
   const ui = useUI();
-  const [assets, setAssets] = useState<any>(undefined);
   const [busy, setBusy] = useState<string | null>(null);
-  const [group, setGroup] = useState(GROUPS[0].id);
+  const [group, setGroup] = useState<string>(GROUPS[0].id);
+  const [view, setView] = useState<'grupos' | 'lista'>('grupos');
+  const [statusF, setStatusF] = useState<AssetStatus | ''>('');
   const inputRef = useRef<HTMLInputElement>(null);
   const target = useRef<string | null>(null);
+  const [canUpload, setCanUpload] = useState<boolean | null>(null);
 
   useEffect(() => {
-    void useCapability('assets').then(setAssets);
+    void canUploadImages().then(setCanUpload);
   }, []);
 
   const upload = async (file: File) => {
     const slot = target.current;
-    if (!slot || !assets) return;
+    if (!slot) return;
     setBusy(slot);
-    try {
-      const type = file.type || (file.name.endsWith('.svg') ? 'image/svg+xml' : file.name.endsWith('.webp') ? 'image/webp' : 'image/png');
-      const r = await assets.upload(file, { type });
-      saveSettings({ assetMap: { ...data.settings.assetMap, [slot]: r.id } });
-      ui.toast('Arte aplicada.');
-    } catch (e: any) {
-      const msg =
-        e?.code === 'too_large' ? 'Arquivo grande demais (até 20 MB; SVG até 2 MB).'
-          : e?.code === 'unsupported_type' ? 'Use PNG, JPG, WebP, GIF ou SVG.'
-            : e?.code === 'quota_or_state' ? 'O espaço de imagens do app acabou.'
-              : 'Não consegui enviar essa imagem.';
-      ui.toast(msg, 'erro');
-    }
+    const r = await uploadImage(file);
     setBusy(null);
+    if ('error' in r) return ui.toast(r.error, 'erro');
+    saveSettings({ assetMap: { ...data.settings.assetMap, [slot]: r.id } });
+    ui.toast('Arte aplicada.');
   };
 
+  const map = data.settings.assetMap;
   const g = GROUPS.find((x) => x.id === group)!;
   const slots = SLOTS.filter((x) => x.group === group);
-  const customCount = Object.keys(data.settings.assetMap).length;
+  const counts = SLOTS.reduce((a, sl) => ({ ...a, [statusOf(sl, map)]: (a[statusOf(sl, map)] ?? 0) + 1 }), {} as Record<AssetStatus, number>);
+
+  const csv = () => {
+    const rows = [['arquivo', 'finalidade', 'tamanho recomendado', 'ambiente', 'estado', 'chave']];
+    for (const sl of SLOTS) rows.push([fileNameOf(sl), sl.label, sl.size, FOLDER[sl.group]?.where ?? sl.group, STATUS_LABEL[statusOf(sl, map)], sl.key]);
+    return rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\n');
+  };
+  const downloadList = async () => {
+    const text = '\uFEFF' + csv();
+    const dl = await useCapability('downloads');
+    if (dl?.save) {
+      try {
+        await dl.save({ filename: 'yas-r1-lista-de-assets.csv', data: text, mimeType: 'text/csv' });
+        return;
+      } catch {
+        /* tenta o jeito do navegador */
+      }
+    }
+    try {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+      a.download = 'yas-r1-lista-de-assets.csv';
+      a.click();
+    } catch {
+      ui.toast('Não consegui baixar a lista agora.', 'erro');
+    }
+  };
+
+  const slotCard = (sl: (typeof SLOTS)[number]) => {
+    const st = statusOf(sl, map);
+    const custom = st === 'enviado';
+    return (
+      <div key={sl.key} className={`slot ${custom ? 'is-custom' : ''}`}>
+        <div className="slot-prev"><Asset slot={sl.key} /></div>
+        <div className="slot-info">
+          <strong>{sl.label}</strong>
+          <span className={`asset-status st-${st}`}>{STATUS_LABEL[st]}</span>
+          <span className="muted mono">{fileNameOf(sl)}</span>
+          <span className="muted">{sl.size}</span>
+        </div>
+        <div className="slot-actions">
+          <button
+            className="btn btn-sm btn-secondary"
+            disabled={canUpload === false || busy === sl.key}
+            onClick={() => {
+              target.current = sl.key;
+              inputRef.current?.click();
+            }}
+          >
+            {busy === sl.key ? 'Enviando…' : custom ? 'Trocar' : 'Enviar arte'}
+          </button>
+          {custom && (
+            <button
+              className="btn btn-sm btn-quiet"
+              onClick={() => {
+                const m = { ...map };
+                delete m[sl.key];
+                saveSettings({ assetMap: m });
+              }}
+            >
+              Usar provisório
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <section className="card illus">
@@ -304,60 +368,68 @@ function Illustrations() {
         <div>
           <h2 className="h2">Ilustrações</h2>
           <p className="muted">
-            Cada peça do app é um espaço substituível. Envie sua arte e ela aparece no lugar do provisório, sem mexer no resto. {customCount > 0 && `${customCount} arte(s) sua(s) em uso.`}
+            Cada peça do app é um espaço substituível, com nome de arquivo fixo. Envie sua arte (PNG transparente ou SVG) e ela entra no lugar do provisório, com a mesma proporção e alinhamento.
+          </p>
+          <p className="asset-counts">
+            <span className="asset-status st-enviado">{counts.enviado ?? 0} suas</span>
+            <span className="asset-status st-provisorio">{counts.provisorio ?? 0} provisórias</span>
+            {(counts.criar ?? 0) > 0 && <span className="asset-status st-criar">{counts.criar} a criar</span>}
           </p>
         </div>
+        <div className="btn-row wrap">
+          <div className="seg" role="tablist" aria-label="Visualização">
+            <button role="tab" aria-selected={view === 'grupos'} className={view === 'grupos' ? 'is-on' : ''} onClick={() => setView('grupos')}>Por ambiente</button>
+            <button role="tab" aria-selected={view === 'lista'} className={view === 'lista' ? 'is-on' : ''} onClick={() => setView('lista')}>Lista completa</button>
+          </div>
+          <button className="btn btn-quiet btn-sm" onClick={downloadList}><Icon name="download" size={16} /> Baixar lista (planilha)</button>
+        </div>
       </div>
-      {assets === null && (
-        <p className="banner banner-local">O envio de imagens funciona quando o Yas R1 está aberto no Claude, na sua conta.</p>
+      {canUpload === false && (
+        <p className="banner banner-local">O envio de imagens não está disponível nesta janela.</p>
       )}
-      <div className="seg seg-wrap" role="tablist">
-        {GROUPS.map((x) => (
-          <button key={x.id} role="tab" aria-selected={group === x.id} className={group === x.id ? 'is-on' : ''} onClick={() => setGroup(x.id)}>
-            {x.label}
-          </button>
-        ))}
-      </div>
-      <p className="idea"><strong>Ideia de arte:</strong> {g.idea}</p>
-      <div className="slots">
-        {slots.map((sl) => {
-          const custom = !!data.settings.assetMap[sl.key];
-          return (
-            <div key={sl.key} className={`slot ${custom ? 'is-custom' : ''}`}>
-              <div className="slot-prev"><Asset slot={sl.key} /></div>
-              <div className="slot-info">
-                <strong>{sl.label}</strong>
-                <span className="muted mono">{sl.key}</span>
-                <span className="muted">{sl.size}</span>
-              </div>
-              <div className="slot-actions">
-                <button
-                  className="btn btn-sm btn-secondary"
-                  disabled={!assets || busy === sl.key}
-                  onClick={() => {
-                    target.current = sl.key;
-                    inputRef.current?.click();
-                  }}
-                >
-                  {busy === sl.key ? 'Enviando…' : custom ? 'Trocar' : 'Enviar arte'}
-                </button>
-                {custom && (
-                  <button
-                    className="btn btn-sm btn-quiet"
-                    onClick={() => {
-                      const m = { ...data.settings.assetMap };
-                      delete m[sl.key];
-                      saveSettings({ assetMap: m });
-                    }}
-                  >
-                    Usar provisório
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      {view === 'grupos' ? (
+        <>
+          <div className="seg seg-wrap" role="tablist">
+            {GROUPS.map((x) => (
+              <button key={x.id} role="tab" aria-selected={group === x.id} className={group === x.id ? 'is-on' : ''} onClick={() => setGroup(x.id)}>
+                {x.label}
+              </button>
+            ))}
+          </div>
+          <p className="idea"><strong>Ideia de arte:</strong> {g.idea} <span className="muted">Pasta sugerida: <span className="mono">{FOLDER[g.id]?.folder}/</span></span></p>
+          <div className="slots">{slots.map(slotCard)}</div>
+        </>
+      ) : (
+        <>
+          <div className="reg-filters">
+            <select id="asset-status-f" value={statusF} onChange={(e) => setStatusF(e.target.value as AssetStatus | '')} aria-label="Estado">
+              <option value="">Todos os estados</option>
+              <option value="enviado">Arte sua (existente)</option>
+              <option value="provisorio">Provisório · precisa substituir</option>
+              <option value="criar">Precisa criar</option>
+            </select>
+          </div>
+          <div className="table-scroll">
+            <table className="table asset-table">
+              <thead>
+                <tr><th>Prévia</th><th>Arquivo</th><th>Finalidade</th><th>Tamanho</th><th>Ambiente</th><th>Estado</th></tr>
+              </thead>
+              <tbody>
+                {SLOTS.filter((sl) => !statusF || statusOf(sl, map) === statusF).map((sl) => (
+                  <tr key={sl.key}>
+                    <td><span className="asset-mini"><Asset slot={sl.key} /></span></td>
+                    <td className="mono">{fileNameOf(sl)}</td>
+                    <td>{sl.label}</td>
+                    <td className="muted">{sl.size}</td>
+                    <td>{FOLDER[sl.group]?.where ?? sl.group}</td>
+                    <td><span className={`asset-status st-${statusOf(sl, map)}`}>{STATUS_LABEL[statusOf(sl, map)]}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
       <input
         ref={inputRef}
         id="asset-file"
