@@ -11,7 +11,7 @@ import {
 } from './art';
 import { STICKERS } from '../logic/stickers';
 import * as EV from './eventArt';
-import { Bridge, Bush, Fence, FlowerBed, FlowerCluster, Fern, Grass, Hedge, Lantern, Leaf, Mushrooms, Pine, Rocks, Stone, TreeBlossom, TreeRound, Tulips } from './trailArt';
+import { Bridge, Bush, Fence, FlowerBed, FlowerCluster, Fern, Grass, Hedge, Lantern, Leaf, Mushrooms, Pine, Pond, Rocks, Stone, TreeBlossom, TreeRound, Tulips } from './trailArt';
 
 const TRAIL_ART: [string, string, React.ComponentType][] = [
   ['arvore', 'árvore', TreeRound],
@@ -29,6 +29,7 @@ const TRAIL_ART: [string, string, React.ComponentType][] = [
   ['canteiro', 'canteiro', FlowerBed],
   ['sebe', 'cerca viva', Hedge],
   ['ponte', 'ponte', Bridge],
+  ['lago', 'lago', Pond],
   ['folha', 'folha', () => <Leaf />],
   ['pedra', 'pedra do caminho', () => <Stone />],
   ['florzinha', 'florzinha (clássico)', () => <TrailDecor kind="flor" />],

@@ -21,7 +21,7 @@ export function variedThemeFor(chapterNumber: number, salt = 'yas-r1') {
 }
 
 export const SCENE_COLORS: Record<SceneTheme, { bg: string; hill: string; hill2: string; edge: string; path: string; dash: string }> = {
-  classico: { bg: '#E6EFFD', hill: '#D5E3FA', hill2: '#DCE8FC', edge: '#A6C1EC', path: '#B9D0F3', dash: '#FFFFFF' },
+  classico: { bg: '#E3EEFC', hill: '#D5E3FA', hill2: '#DCE8FC', edge: '#94B2E3', path: '#C3D8F7', dash: '#FFFFFF' },
   florido: { bg: '#EFF6CF', hill: '#DDEBB0', hill2: '#E6F0C2', edge: '#C9B27E', path: '#F3E3C2', dash: '#FFFDF6' },
   bosque: { bg: '#E3EDCF', hill: '#CFE0B0', hill2: '#D8E7BE', edge: '#B08A62', path: '#D9B98F', dash: '#F3E3C2' },
   riacho: { bg: '#E7F2DA', hill: '#D2E6C0', hill2: '#DDEDCC', edge: '#C7AE84', path: '#EEDDBB', dash: '#FFFDF6' },
@@ -183,4 +183,162 @@ export function buildScene(theme: SceneTheme, n: number, H: number, seed: number
   }
   const pond = classic ? { x: seed % 2 ? 180 : 820, y: Math.min(H - 170, TOP + ROW * 1.55) } : theme === 'riacho' || theme === 'noturno' ? null : { x: seed % 2 ? 160 : 840, y: Math.min(H - 170, TOP + ROW * 1.55) };
   return { props, pathDeco, streams, pond };
+}
+
+// ── Paisagem do caminho clássico ─────────────────────────────
+// Em vez de enfeites soltos, o cenário é montado em zonas a partir da
+// distância até a trilha: bosque denso longe dela, arbustos e pedras no meio,
+// flores e grama na beira. Tudo é calculado em pixels (largura real do mapa),
+// para que as ilustrações mantenham a proporção em qualquer tela.
+
+/** altura/largura de cada ilustração, para a base sempre tocar o chão */
+export const PROP_ASPECT: Record<string, number> = {
+  arvore: 150 / 120, ipe: 150 / 120, pinheiro: 160 / 90, arbusto: 70 / 120, flor: 70 / 80,
+  tulipas: 1, pedras: 44 / 80, grama: 30 / 50, samambaia: 70 / 90, cogumelos: 56 / 70,
+};
+
+export interface Patch { cx: number; cy: number; rx: number; ry: number; tone: 'light' | 'dark' }
+export interface Landscape {
+  props: Prop[];
+  pond: { x: number; y: number; w: number } | null; // x em viewBox, y e w em px
+  patches: Patch[]; // manchas do gramado, em unidades do viewBox
+  scale: number;
+}
+
+export function buildLandscape(n: number, H: number, Bw: number, seed: number, samples: Pt[]): Landscape {
+  const r = rng(seed * 13 + n * 7 + 3);
+  const k = Bw / W; // px por unidade do viewBox
+  const s = Math.min(1.05, Math.max(0.5, Bw / 1150));
+  const path = samples.filter((_, i) => i % 2 === 0).map((p) => ({ x: p.x * k, y: p.y }));
+  const stations = Array.from({ length: n + 1 }, (_, i) => ({ x: xAt(i) * k, y: TOP + i * ROW, chest: i === n }));
+  const distPath = (x: number, y: number) => {
+    let m = Infinity;
+    for (const p of path) {
+      const d = (p.x - x) ** 2 + (p.y - y) ** 2;
+      if (d < m) m = d;
+    }
+    return Math.sqrt(m);
+  };
+  const pathXAt = (y: number) => {
+    let best = path[0];
+    for (const p of path) if (Math.abs(p.y - y) < Math.abs(best.y - y)) best = p;
+    return best?.x ?? Bw / 2;
+  };
+
+  type Box = { x0: number; x1: number; y0: number; y1: number };
+  const hit = (a: Box, b: Box) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+  // estação = anel + nome embaixo + balão "Continuar" em cima
+  const reserved: Box[] = stations.map((st) =>
+    st.chest
+      ? { x0: st.x - 80, x1: st.x + 80, y0: st.y - 70, y1: st.y + 70 }
+      : { x0: st.x - 100, x1: st.x + 100, y0: st.y - 112, y1: st.y + 122 },
+  );
+
+  // lago: o maior que couber num espaço livre ao lado da trilha
+  let pond: Landscape['pond'] = null;
+  if (n >= 1) {
+    const ys: number[] = [];
+    for (let y = TOP + 70; y < TOP + n * ROW - 30; y += 24) ys.push(y);
+    const xs: number[] = [];
+    for (let x = 60 * s; x < Bw - 60 * s; x += 24) xs.push(x);
+    outer: for (const w of [340, 300, 260, 220, 190].map((v) => v * s)) {
+      const h = w * 0.46;
+      const opts: { x: number; y: number }[] = [];
+      for (const y of ys) for (const x of xs) if (x - w / 2 > 6 && x + w / 2 < Bw - 6) opts.push({ x, y });
+      // começa por um ponto sorteado, para cada capítulo ter o lago num lugar
+      const off = Math.floor(r() * Math.max(1, opts.length));
+      for (let j = 0; j < opts.length; j++) {
+        const { x, y } = opts[(j + off) % opts.length];
+        const box = { x0: x - w / 2, x1: x + w / 2, y0: y - h / 2, y1: y + h / 2 };
+        if (reserved.some((b) => hit(b, box))) continue;
+        let ok = distPath(x, y) > 40 + h / 2;
+        for (let a = 0; ok && a < 16; a++) {
+          const t = (a / 16) * Math.PI * 2;
+          ok = distPath(x + (Math.cos(t) * w) / 2, y + (Math.sin(t) * h) / 2) > 34 * s;
+        }
+        if (!ok) continue;
+        reserved.push({ ...box, y0: box.y0 - 14 * s });
+        pond = { x: x / k, y, w };
+        break outer;
+      }
+    }
+  }
+
+  const props: Prop[] = [];
+  const placed: { x: number; y: number; w: number; h: number }[] = [];
+  const tryPlace = (kind: string, x: number, y: number, w: number, opts: { edge?: boolean; skipStations?: boolean } = {}) => {
+    const h = w * (PROP_ASPECT[kind] ?? 1);
+    if (y - h > H || y < 10) return false;
+    // nada nasce no horizonte nem cobre o título do capítulo
+    if (y < 96 || y - h < (opts.edge ? -34 : -6)) return false;
+    // não invade o caminho (base e miolo da copa)
+    const clear = 26 + w * 0.36;
+    if (distPath(x, y) < clear || distPath(x, y - h * 0.45) < 24 + w * 0.42) return false;
+    const box = { x0: x - w * 0.4, x1: x + w * 0.4, y0: y - h * 0.85, y1: y };
+    if (!opts.skipStations && reserved.some((b) => hit(b, box))) return false;
+    if (opts.skipStations && reserved.slice(0, n + 1).some((b) => hit({ x0: b.x0 + 12, x1: b.x1 - 12, y0: b.y0 + 30, y1: b.y1 - 6 }, box))) return false;
+    // copas podem se sobrepor (bosque), mas as bases não se empilham
+    if (placed.some((p) => Math.abs(p.x - x) < (p.w + w) * (opts.edge ? 0.2 : 0.3) && Math.abs(p.y - y) < Math.max(14, Math.min(p.h, h) * 0.26))) return false;
+    placed.push({ x, y, w, h });
+    props.push({ kind, x: x / k, y, size: w, flip: r() > 0.5, sway: !['pedras'].includes(kind) });
+    return true;
+  };
+  const pick = (tbl: [string, number][]) => {
+    let t = r() * tbl.reduce((a, [, p]) => a + p, 0);
+    for (const [kind, p] of tbl) if ((t -= p) <= 0) return kind;
+    return tbl[0][0];
+  };
+  const TREES: [string, number][] = [['arvore', 5], ['pinheiro', 3], ['ipe', 3]];
+
+  // 1. bosque que emoldura as laterais (árvores cortadas pela borda)
+  for (const side of [0, 1]) {
+    for (let y = 40 + r() * 30; y < H + 60; y += (54 + r() * 26) * s) {
+      const inset = (-14 + r() * 46) * s;
+      const x = side ? Bw - inset : inset;
+      tryPlace(pick(TREES), x, y, (150 + r() * 50) * s, { edge: true });
+    }
+  }
+
+  // 2. vegetação em zonas, da mais distante para a mais próxima da trilha
+  const step = 64 * s;
+  const cands: { x: number; y: number; d: number }[] = [];
+  for (let gy = 50; gy < H + 40; gy += step) {
+    for (let gx = step / 2; gx < Bw; gx += step) {
+      const x = gx + (r() - 0.5) * step * 0.8;
+      const y = gy + (r() - 0.5) * step * 0.8;
+      cands.push({ x, y, d: distPath(x, y) });
+    }
+  }
+  cands.sort((a, b) => b.d - a.d);
+  for (const c of cands) {
+    const roll = r();
+    if (c.d > 165 * s) {
+      if (roll < 0.6) tryPlace(pick(TREES), c.x, c.y, (122 + r() * 46) * s);
+    } else if (c.d > 92 * s) {
+      if (roll < 0.42) {
+        const kind = pick([['arbusto', 6], ['pedras', 1.5], ['tulipas', 1.5], ['samambaia', 1]]);
+        const w = kind === 'arbusto' ? 86 + r() * 22 : kind === 'pedras' ? 58 + r() * 14 : 50 + r() * 10;
+        tryPlace(kind, c.x, c.y, w * s);
+      }
+    } else if (c.d > 44 * s && roll < 0.42) {
+      const kind = pick([['flor', 5], ['grama', 3], ['tulipas', 1.5]]);
+      tryPlace(kind, c.x, c.y, (kind === 'grama' ? 30 + r() * 8 : 38 + r() * 10) * s);
+    }
+  }
+
+  // 3. canteirinhos que ladeiam cada estação, como uma praça
+  for (let i = 0; i < n; i++) {
+    const st = stations[i];
+    for (const sgn of [-1, 1]) tryPlace(r() > 0.35 ? 'flor' : 'tulipas', st.x + sgn * (108 + r() * 14), st.y + 46, 42 * Math.max(0.8, s), { skipStations: true });
+  }
+
+  // manchas de grama mais clara/escura para dar relevo ao gramado
+  const patches: Patch[] = [];
+  for (let y = 120; y < H; y += 110 + r() * 60) {
+    const side = r() > 0.5;
+    patches.push({ cx: side ? 120 + r() * 200 : 680 + r() * 200, cy: y, rx: 140 + r() * 120, ry: 34 + r() * 26, tone: r() > 0.45 ? 'light' : 'dark' });
+  }
+
+  props.sort((a, b) => a.y - b.y);
+  return { props, pond, patches, scale: s };
 }

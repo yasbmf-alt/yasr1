@@ -274,3 +274,35 @@ export function Stone({ k = 0 }: { k?: number }) {
 export function Stream() {
   return null;
 }
+
+export function Pond() {
+  const pads: [number, number, number, number][] = [[196, 70, 15, 20], [222, 84, 11, -30], [92, 82, 12, 60]];
+  return (
+    <svg {...s('0 0 300 138')}>
+      <path d="M22 74 C 18 36 82 14 152 16 C 226 18 286 40 282 76 C 278 112 214 128 148 126 C 78 124 26 110 22 74z" fill="#C3D8A4" />
+      <path d="M34 72 C 32 42 88 26 152 27 C 218 28 270 46 268 76 C 266 106 210 118 148 116 C 84 114 36 102 34 72z" fill="#9FC3EC" />
+      <path d="M44 74 C 44 50 94 38 152 38 C 212 39 258 54 256 78 C 254 102 206 110 148 108 C 90 106 44 98 44 74z" fill="#BCD8F7" />
+      <path d="M78 52 C 110 44 150 44 176 48" stroke="#fff" strokeWidth="5" fill="none" strokeLinecap="round" opacity=".7" />
+      <path d="M190 98 C 206 96 220 92 230 86" stroke="#fff" strokeWidth="3.5" fill="none" strokeLinecap="round" opacity=".55" />
+      {pads.map(([x, y, rr, rot], i) => (
+        <g key={i} transform={`rotate(${rot} ${x} ${y})`}>
+          <path d={`M${x} ${y} L ${x + rr} ${y - 3} A ${rr} ${rr * 0.62} 0 1 0 ${x + rr} ${y + 3} Z`} fill={i === 1 ? '#AFC47E' : '#8DA35C'} />
+        </g>
+      ))}
+      <g transform="translate(200 66)">
+        {[0, 72, 144, 216, 288].map((r) => <ellipse key={r} cx="0" cy="-5" rx="3.6" ry="6" fill="#F8C9F1" transform={`rotate(${r})`} />)}
+        <circle r="2.6" fill="#FFB86B" />
+      </g>
+      {/* juncos e pedrinhas na margem */}
+      {[[30, 0], [40, 1], [48, 2], [262, 1], [272, 0]].map(([x, i]) => (
+        <g key={x}>
+          <path d={`M${x} 86 Q ${x + (i % 2 ? 3 : -3)} 62 ${x + (i % 2 ? -2 : 2)} ${44 + i * 6}`} stroke="#7E9A4A" strokeWidth="3" fill="none" strokeLinecap="round" />
+          {i !== 1 && <rect x={x - 3 + (i % 2 ? -2 : 2)} y={42 + i * 6} width="6" height="14" rx="3" fill="#A9784F" />}
+        </g>
+      ))}
+      <ellipse cx="104" cy="122" rx="14" ry="8" fill="#C9C1D3" />
+      <ellipse cx="102" cy="119" rx="11" ry="5.5" fill="#E4DFEA" />
+      <ellipse cx="124" cy="126" rx="8" ry="5" fill="#B7AEC4" />
+    </svg>
+  );
+}

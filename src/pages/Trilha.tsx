@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { motion, useMotionValue, AnimatePresence } from 'framer-motion';
 import { useAnimation } from 'framer-motion';
 import { burst, multiTap } from '../logic/fx';
@@ -17,7 +17,7 @@ import { useActiveEvents } from '../components/EventDecor';
 import { EventChip, EventDecor } from '../components/EventDecor';
 import { play } from '../logic/sound';
 import { useAmbient } from '../components/useAmbient';
-import { buildScene, samplePath, SCENE_COLORS, themeFor, W, TOP, ROW, xAt as sceneXAt } from './trailScene';
+import { buildLandscape, buildScene, PROP_ASPECT, samplePath, SCENE_COLORS, themeFor, W, TOP, ROW, xAt as sceneXAt, type Landscape } from './trailScene';
 import { Leaf } from '../assets/trailArt';
 import { Candy, TrailCat } from '../components/Secrets';
 
@@ -261,7 +261,22 @@ function Board({ chapter, onOpen, onEdit, onNewMission }: { chapter: Chapter; on
   const progressEnd = prog.complete ? n : lastDone;
   const currentIdx = ms.findIndex((m) => !missionProgress(m).complete);
   const samples = useMemo(() => samplePath(pts), [n]); // eslint-disable-line react-hooks/exhaustive-deps
-  const scene = useMemo(() => buildScene(theme, n, H, chapter.number, samples), [theme, n, H, chapter.number, samples]);
+  const classic = theme === 'classico';
+  // a paisagem clássica é montada em pixels: precisa da largura real do mapa
+  const [bw, setBw] = useState(0);
+  useLayoutEffect(() => {
+    const el = boardRef.current;
+    if (!el) return undefined;
+    setBw(Math.round(el.clientWidth / 20) * 20);
+    const ro = new ResizeObserver(([e]) => setBw(Math.round(e.contentRect.width / 20) * 20));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const land = useMemo(() => (classic && bw ? buildLandscape(n, H, bw, chapter.number, samples) : null), [classic, n, H, bw, chapter.number, samples]);
+  const scene = useMemo(
+    () => (classic ? { props: land?.props ?? [], pathDeco: [], streams: [], pond: null } : buildScene(theme, n, H, chapter.number, samples)),
+    [classic, land, theme, n, H, chapter.number, samples],
+  );
   const chestCtl = useAnimation();
   // trecho recém-concluído do caminho: desenha só a parte nova, com brilho
   const prevEnd = useRef(progressEnd);
@@ -322,12 +337,18 @@ function Board({ chapter, onOpen, onEdit, onNewMission }: { chapter: Chapter; on
 
       <div className="board" ref={boardRef} style={{ height: H }}>
         <svg className="board-svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true">
-          <path d={`M0 0 H${W} V150 C ${W * 0.8} 110 ${W * 0.6} 190 ${W * 0.35} 140 S ${W * 0.1} 120 0 160z`} fill="var(--hill2)" />
-          <ellipse cx="180" cy="40" rx="320" ry="120" fill="var(--hill)" />
-          <ellipse cx="820" cy="10" rx="360" ry="130" fill="var(--hill)" />
-          {Array.from({ length: Math.ceil(H / 380) }).map((_, i) => (
-            <ellipse key={`m${i}`} cx={i % 2 ? 120 : 880} cy={300 + i * 380} rx="210" ry="80" fill="var(--hill2)" opacity=".7" />
-          ))}
+          {classic ? (
+            <LandscapeGround H={H} land={land} />
+          ) : (
+            <>
+              <path d={`M0 0 H${W} V150 C ${W * 0.8} 110 ${W * 0.6} 190 ${W * 0.35} 140 S ${W * 0.1} 120 0 160z`} fill="var(--hill2)" />
+              <ellipse cx="180" cy="40" rx="320" ry="120" fill="var(--hill)" />
+              <ellipse cx="820" cy="10" rx="360" ry="130" fill="var(--hill)" />
+              {Array.from({ length: Math.ceil(H / 380) }).map((_, i) => (
+                <ellipse key={`m${i}`} cx={i % 2 ? 120 : 880} cy={300 + i * 380} rx="210" ry="80" fill="var(--hill2)" opacity=".7" />
+              ))}
+            </>
+          )}
           {scene.pond && (
             <>
               <ellipse cx={scene.pond.x} cy={scene.pond.y} rx="96" ry="36" fill="#BFD8F5" />
@@ -344,8 +365,10 @@ function Board({ chapter, onOpen, onEdit, onNewMission }: { chapter: Chapter; on
               <path d={`M0 ${st.y - 4} C ${W * 0.25} ${st.y - 30} ${W * 0.5} ${st.y + 22} ${W * 0.75} ${st.y - 14} S ${W} ${st.y + 10} ${W} ${st.y}`} fill="none" stroke="#fff" strokeWidth="2.5" strokeDasharray="18 28" opacity=".8" vectorEffect="non-scaling-stroke" className="stream-flow" />
             </g>
           ))}
-          <path d={full} fill="none" stroke="var(--edge)" strokeWidth="50" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+          {classic && <path d={full} fill="none" stroke="var(--path-shadow)" strokeWidth="58" strokeLinecap="round" vectorEffect="non-scaling-stroke" transform="translate(0 5)" />}
+          <path d={full} fill="none" stroke="var(--edge)" strokeWidth={classic ? 54 : 50} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
           <path d={full} fill="none" stroke="var(--path)" strokeWidth={theme === 'pedras' ? 30 : 42} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+          {classic && <path d={full} fill="none" stroke="#fff" strokeOpacity=".28" strokeWidth="18" strokeLinecap="round" vectorEffect="non-scaling-stroke" transform="translate(-6 -3)" />}
           {theme === 'bosque' && <path d={full} fill="none" stroke="#C9A27E" strokeWidth="2" strokeDasharray="2 14" strokeLinecap="round" vectorEffect="non-scaling-stroke" opacity=".6" />}
           {progressEnd >= 1 && (
             <motion.path
@@ -380,7 +403,7 @@ function Board({ chapter, onOpen, onEdit, onNewMission }: { chapter: Chapter; on
           </>
         )}
         {theme !== 'noturno' && [0, 1, 2].map((i) => (
-          <div key={`c${i}`} className={`cloud ${ambient ? 'is-drifting' : ''}`} style={{ left: `${[12, 62, 84][i]}%`, top: [20, 70, 300][i], animationDelay: `${i * -7}s`, width: [110, 90, 120][i] }}>
+          <div key={`c${i}`} className={`cloud ${ambient ? 'is-drifting' : ''}`} style={{ left: `${[12, 62, 84][i]}%`, top: classic ? [-18, -4, -26][i] : [20, 70, 300][i], animationDelay: `${i * -7}s`, width: [110, 90, 120][i] }}>
             <Asset slot="trail.decor.nuvem" />
           </div>
         ))}
@@ -394,11 +417,19 @@ function Board({ chapter, onOpen, onEdit, onNewMission }: { chapter: Chapter; on
             <Asset slot="trail.decor.ponte" />
           </div>
         ))}
+        {land?.pond && (
+          <div className="pond" style={{ left: `${(land.pond.x / W) * 100}%`, top: land.pond.y, width: land.pond.w, height: land.pond.w * 0.46 }}>
+            <Asset slot="trail.decor.lago" />
+          </div>
+        )}
+        {classic && pts.map((p, i) => (
+          <span key={`cl${i}`} className={`clearing ${i === n ? 'clearing-chest' : ''}`} style={{ left: `${(p.x / W) * 100}%`, top: p.y }} aria-hidden="true" />
+        ))}
         {scene.props.map((p, i) => (
           <div
             key={i}
-            className={`prop ${p.sway && ambient ? 'is-swaying' : ''}`}
-            style={{ left: `${(p.x / W) * 100}%`, top: p.y, width: p.size, height: p.size, transform: `translate(-50%, -100%) ${p.flip ? 'scaleX(-1)' : ''}`, animationDelay: `${(i % 7) * -0.6}s` }}
+            className={`prop prop-${p.kind} ${p.sway && ambient ? 'is-swaying' : ''}`}
+            style={{ left: `${(p.x / W) * 100}%`, top: p.y, width: p.size, height: classic ? p.size * (PROP_ASPECT[p.kind] ?? 1) : p.size, transform: `translate(-50%, -100%) ${p.flip ? 'scaleX(-1)' : ''}`, animationDelay: `${(i % 7) * -0.6}s` }}
           >
             <Asset slot={`trail.decor.${p.kind}`} />
           </div>
@@ -414,7 +445,10 @@ function Board({ chapter, onOpen, onEdit, onNewMission }: { chapter: Chapter; on
         ))}
         {ambient && theme !== 'noturno' && <Butterflies H={H} />}
         <EventDecor scene="trilha" />
-        <TrailCat chapterIndex={chapterIndex} chapters={data.chapters.length} x={scene.props[1] ? (scene.props[1].x / W) * 100 : 12} y={scene.props[1] ? scene.props[1].y - 14 : 300} />
+        {(() => {
+          const hide = scene.props.find((p) => p.kind === 'arbusto') ?? scene.props[1];
+          return <TrailCat chapterIndex={chapterIndex} chapters={data.chapters.length} x={hide ? (hide.x / W) * 100 : 12} y={hide ? hide.y - 14 : 300} />;
+        })()}
         {scene.props.length > 4 && <Candy x={(scene.props[scene.props.length - 3].x / W) * 100} y={scene.props[scene.props.length - 3].y - 30} />}
 
         {ms.map((m, i) => (
@@ -475,6 +509,20 @@ function Board({ chapter, onOpen, onEdit, onNewMission }: { chapter: Chapter; on
         ))}
       </div>
     </section>
+  );
+}
+
+/** chão da paisagem clássica: colinas no horizonte, gramado e manchas de relevo */
+function LandscapeGround({ H, land }: { H: number; land: Landscape | null }) {
+  return (
+    <>
+      <path d={`M0 46 C 90 8 210 14 300 34 C 380 50 440 22 540 18 C 650 14 720 44 800 30 C 880 16 950 20 ${W} 38 V 120 H0z`} fill="var(--hill-far)" />
+      <path d={`M0 66 C 120 40 230 52 330 62 C 420 70 470 44 560 46 C 680 48 760 70 860 56 C 920 48 970 50 ${W} 58 V 140 H0z`} fill="var(--hill-mid)" />
+      <path d={`M0 84 C 140 66 300 72 420 66 C 470 63 530 63 580 66 C 700 72 860 66 ${W} 80 V ${H} H0z`} fill="var(--meadow)" />
+      {land?.patches.map((p, i) => (
+        <ellipse key={i} cx={p.cx} cy={p.cy} rx={p.rx} ry={p.ry} fill={p.tone === 'light' ? 'var(--meadow-light)' : 'var(--meadow-dark)'} opacity=".75" />
+      ))}
+    </>
   );
 }
 
