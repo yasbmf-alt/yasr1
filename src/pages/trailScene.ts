@@ -292,10 +292,10 @@ export function buildLandscape(n: number, H: number, Bw: number, seed: number, s
 
   // 1. bosque que emoldura as laterais (árvores cortadas pela borda)
   for (const side of [0, 1]) {
-    for (let y = 40 + r() * 30; y < H + 60; y += (54 + r() * 26) * s) {
+    for (let y = 40 + r() * 30; y < H + 60; y += (130 + r() * 70) * s) {
       const inset = (-14 + r() * 46) * s;
       const x = side ? Bw - inset : inset;
-      tryPlace(pick(TREES), x, y, (150 + r() * 50) * s, { edge: true });
+      tryPlace(pick(TREES), x, y, (112 + r() * 30) * s, { edge: true });
     }
   }
 
@@ -313,14 +313,14 @@ export function buildLandscape(n: number, H: number, Bw: number, seed: number, s
   for (const c of cands) {
     const roll = r();
     if (c.d > 165 * s) {
-      if (roll < 0.6) tryPlace(pick(TREES), c.x, c.y, (122 + r() * 46) * s);
+      if (roll < 0.16) tryPlace(pick(TREES), c.x, c.y, (96 + r() * 28) * s);
     } else if (c.d > 92 * s) {
-      if (roll < 0.42) {
+      if (roll < 0.14) {
         const kind = pick([['arbusto', 6], ['pedras', 1.5], ['tulipas', 1.5], ['samambaia', 1]]);
-        const w = kind === 'arbusto' ? 86 + r() * 22 : kind === 'pedras' ? 58 + r() * 14 : 50 + r() * 10;
+        const w = kind === 'arbusto' ? 72 + r() * 16 : kind === 'pedras' ? 50 + r() * 12 : 44 + r() * 8;
         tryPlace(kind, c.x, c.y, w * s);
       }
-    } else if (c.d > 44 * s && roll < 0.42) {
+    } else if (c.d > 44 * s && roll < 0.16) {
       const kind = pick([['flor', 5], ['grama', 3], ['tulipas', 1.5]]);
       tryPlace(kind, c.x, c.y, (kind === 'grama' ? 30 + r() * 8 : 38 + r() * 10) * s);
     }
