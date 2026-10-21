@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../data/store';
 import { Icon } from '../components/Icon';
-import { ConceptMapEditor } from '../components/ConceptMap';
+import { SimMapEditor } from '../components/ConceptMap';
+import { MapSummary } from '../components/TopicStudy';
+import { syncSimMap } from '../logic/conceptMap';
 import { BIG_AREAS, CORRECTION_STATUS, REASONS, type BigArea, type CorrectionStatus, type ErrorGroup, type Simulado } from '../types';
 import { fmtShort } from '../logic/dates';
 import { areaWrong, isMistake, topicOccurrences } from '../logic/simErrors';
@@ -63,6 +65,17 @@ export function Correcao({ onEdit }: { onEdit: (s: Simulado) => void }) {
   const detailed = (s: Simulado, a: BigArea) => (s.errors ?? []).some((g) => g.area === a);
   const [area, setArea] = useState<BigArea | null>(null);
   const [key, setKey] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
+  const [view, setView] = useState<'mapa' | 'resumo'>('mapa');
+
+  // o mapa do simulado nasce (e ganha os temas novos) sozinho
+  const errSig = JSON.stringify((sim?.errors ?? []).map((g) => [g.id, g.area, g.topicId]));
+  useEffect(() => {
+    if (!sim) return;
+    const m = syncSimMap(sim, data.topics);
+    if (m) saveSimulado({ ...sim, map: m });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sim?.id, errSig]);
 
   // ao trocar de simulado, abre a primeira área com erros detalhados
   useEffect(() => {
@@ -73,10 +86,6 @@ export function Correcao({ onEdit }: { onEdit: (s: Simulado) => void }) {
 
   const entries = sim && area ? entriesOf(sim, area, topicName) : [];
   const entry = entries.find((e) => e.key === key) ?? null;
-  useEffect(() => {
-    if (!entry && entries.length && key == null) setKey(entries[0].key);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sim?.id, area, entries.length]);
 
   if (!sims.length)
     return (
@@ -92,7 +101,9 @@ export function Correcao({ onEdit }: { onEdit: (s: Simulado) => void }) {
     remember(KEY_SIM, id);
     setArea(null);
     setKey(null);
+    setTick((t) => t + 1);
   };
+  const focusId = (entry && sim.map?.nodes.find((n) => n.ref === entry.key)?.id) || (area && sim.map?.nodes.find((n) => n.area === area)?.id) || null;
   const setStatus = (e: TopicEntry, st: CorrectionStatus) => {
     const ids = new Set(e.groups.map((g) => g.id));
     saveSimulado({ ...sim, errors: (sim.errors ?? []).map((g) => (ids.has(g.id) ? { ...g, status: st } : g)) });
@@ -123,7 +134,7 @@ export function Correcao({ onEdit }: { onEdit: (s: Simulado) => void }) {
             const nTopics = new Set((sim.errors ?? []).filter((g) => g.area === a).map((g) => g.topicId ?? g.id)).size;
             return (
               <div key={a} className={`corr-area ${a === area ? 'is-on' : ''}`}>
-                <button className="corr-area-btn" onClick={() => { setArea(a); setKey(null); }} aria-expanded={a === area}>
+                <button className="corr-area-btn" onClick={() => { setArea(a); setKey(null); setTick((t) => t + 1); }} aria-expanded={a === area}>
                   <i style={{ background: AREA_CHART[a].color }} />
                   <span className="corr-area-name">{AREA_CHART[a].short}</span>
                   <span className="corr-area-meta">
@@ -135,7 +146,7 @@ export function Correcao({ onEdit }: { onEdit: (s: Simulado) => void }) {
                   <div className="corr-topics">
                     {list.length === 0 && <p className="muted small corr-empty">Nenhum tema anotado nesta área.</p>}
                     {list.map((e) => (
-                      <button key={e.key} className={`corr-topic ${e.key === entry?.key ? 'is-on' : ''}`} onClick={() => setKey(e.key)}>
+                      <button key={e.key} className={`corr-topic ${e.key === entry?.key ? 'is-on' : ''}`} onClick={() => { setKey(e.key); setTick((t) => t + 1); }}>
                         <span className={`corr-dot st-${e.status}`} title={CORRECTION_STATUS.find((x) => x.id === e.status)?.label} />
                         <span className="corr-topic-name">{e.name}</span>
                         <span className="corr-topic-n">{e.mistakes ? `${e.mistakes} erro${e.mistakes > 1 ? 's' : ''}` : 'revisar'}</span>
@@ -150,16 +161,40 @@ export function Correcao({ onEdit }: { onEdit: (s: Simulado) => void }) {
         </nav>
 
         <section className="corr-main">
-          {!anyDetailed ? (
-            <div className="corr-hint">
-              <h3>Este simulado ainda não tem erros por tema</h3>
-              <p>Abra o simulado e use a setinha de cada grande área para anotar os temas, os motivos e o que faltou saber. Depois é só voltar aqui.</p>
+          {!anyDetailed && (
+            <div className="corr-hint corr-hint-sm">
+              <p>Este simulado ainda não tem erros por tema. Use a setinha de cada grande área no registro para anotar os temas; eles entram sozinhos no mapa.</p>
               <button className="btn btn-primary btn-sm" onClick={() => onEdit(sim)}><Icon name="edit" size={15} /> Detalhar erros</button>
             </div>
-          ) : !entry ? (
-            <div className="corr-hint"><p>Escolha um tema à esquerda para abrir o mapa conceitual.</p></div>
-          ) : (
-            <TopicWork entry={entry} sim={sim} onStatus={(st) => setStatus(entry, st)} />
+          )}
+          {entry && <TopicFacts entry={entry} sim={sim} onStatus={(st) => setStatus(entry, st)} />}
+          <div className="corr-viewbar">
+            <div className="seg" role="tablist" aria-label="Ver como">
+              <button role="tab" aria-selected={view === 'mapa'} className={view === 'mapa' ? 'is-on' : ''} onClick={() => setView('mapa')}>Mapa</button>
+              <button role="tab" aria-selected={view === 'resumo'} className={view === 'resumo' ? 'is-on' : ''} onClick={() => setView('resumo')}>Resumo</button>
+            </div>
+          </div>
+          {sim.map && view === 'mapa' && (
+            <SimMapEditor
+              sim={sim}
+              focusNodeId={tick ? focusId : null} // ao abrir, mostra o mapa inteiro
+              focusTick={tick}
+              height="min(680px, 74vh)"
+              onSelect={(n) => {
+                if (!n || !sim.map) return;
+                if (n.ref) {
+                  const parent = sim.map.nodes.find((x) => x.id === n.parentId);
+                  if (parent?.area) setArea(parent.area);
+                  setKey(n.ref);
+                } else if (n.area) {
+                  setArea(n.area);
+                  setKey(null);
+                }
+              }}
+            />
+          )}
+          {sim.map && view === 'resumo' && (
+            <MapSummary sections={[{ key: sim.id, map: sim.map }]} onNode={(_, id) => { setView('mapa'); setKey(sim.map!.nodes.find((n) => n.id === id)?.ref ?? key); setTick((t) => t + 1); }} />
           )}
         </section>
       </div>
@@ -167,7 +202,7 @@ export function Correcao({ onEdit }: { onEdit: (s: Simulado) => void }) {
   );
 }
 
-function TopicWork({ entry, sim, onStatus }: { entry: TopicEntry; sim: Simulado; onStatus: (s: CorrectionStatus) => void }) {
+function TopicFacts({ entry, sim, onStatus }: { entry: TopicEntry; sim: Simulado; onStatus: (s: CorrectionStatus) => void }) {
   const { data } = useStore();
   const others = entry.topicId ? topicOccurrences(data.simulados, entry.topicId).filter((o) => o.sim.id !== sim.id && isMistake(o.group)) : [];
   const otherSims = [...new Map(others.map((o) => [o.sim.id, o.sim])).values()];
@@ -215,11 +250,6 @@ function TopicWork({ entry, sim, onStatus }: { entry: TopicEntry; sim: Simulado;
         ))}
       </div>
 
-      {entry.topicId ? (
-        <ConceptMapEditor topicId={entry.topicId} height="min(640px, 72vh)" />
-      ) : (
-        <div className="corr-hint"><p>Este erro não tem tema. Edite o simulado e dê um nome ao tema para abrir o mapa conceitual.</p></div>
-      )}
     </div>
   );
 }

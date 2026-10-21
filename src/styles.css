@@ -2024,3 +2024,12 @@ h5.sum-h { font-size: 14px; }
 .tcombo-opt.is-hi, .tcombo-opt:hover { background: var(--surface-2); }
 .tcombo-area { font-size: 11px; font-weight: 700; color: var(--muted); }
 .tcombo-create { color: var(--azul); font-weight: 700; justify-content: flex-start; border-top: 1px solid var(--line); border-radius: 0 0 8px 8px; }
+.corr-main { display: flex; flex-direction: column; gap: 10px; }
+.corr-viewbar { display: flex; justify-content: flex-end; }
+.corr-hint-sm { padding: 14px 18px; text-align: left; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.corr-hint-sm p { margin: 0; flex: 1 1 260px; }
+.tmaps { display: flex; flex-direction: column; gap: 8px; }
+.tmaps p { margin: 0; }
+.tmaps-pick { display: flex; flex-wrap: wrap; gap: 6px; }
+.sum-sec { margin: 18px 0 2px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); border-top: 1.5px solid var(--line); padding-top: 12px; }
+.sum-sec:first-child { margin-top: 0; border-top: 0; padding-top: 0; }

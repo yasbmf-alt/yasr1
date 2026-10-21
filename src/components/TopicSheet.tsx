@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useStore } from '../data/store';
 import { useUI, Modal, Field, type TopicTab } from './ui';
-import { ConceptMapEditor } from './ConceptMap';
-import { ExamHistory, TopicQuestions, TopicSummary } from './TopicStudy';
+import { ExamHistory, TopicMaps, TopicQuestions, TopicSummary } from './TopicStudy';
 import { topicOccurrences } from '../logic/simErrors';
 import { areaOf, activityLabel, type Priority } from '../types';
 import { STAGE_LABEL, STAGE_NEXT, topicStats } from '../logic/progress';
@@ -18,17 +17,20 @@ export function TopicSheet() {
   const [logging, setLogging] = useState(false);
   const [tab, setTab] = useState<TopicTab>('geral');
   const [focusNode, setFocusNode] = useState<string | null>(null);
+  const [focusSim, setFocusSim] = useState<string | null>(null);
   useEffect(() => {
     setTab(topicFocus?.tab ?? 'geral');
     setFocusNode(topicFocus?.nodeId ?? null);
+    setFocusSim(topicFocus?.simId ?? null);
   }, [topicId, topicFocus]);
   const topic = data.topics.find((t) => t.id === topicId);
   const close = () => {
     setLogging(false);
     openTopic(null);
   };
-  const toMap = (nodeId: string | null = null) => {
+  const toMap = (nodeId: string | null = null, simId: string | null = null) => {
     setFocusNode(nodeId);
+    setFocusSim(simId);
     setTab('mapa');
   };
   if (!topic) return <Modal open={false} onClose={close} title="">{null}</Modal>;
@@ -50,8 +52,8 @@ export function TopicSheet() {
           <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'is-on' : ''} onClick={() => { setTab(id); if (id !== 'mapa') setFocusNode(null); }}>{label}</button>
         ))}
       </div>
-      {tab === 'mapa' && <ConceptMapEditor topicId={topic.id} focusNodeId={focusNode} height="min(620px, 64vh)" />}
-      {tab === 'resumo' && <TopicSummary topic={topic} onNode={(id) => toMap(id)} />}
+      {tab === 'mapa' && <TopicMaps topic={topic} simId={focusSim} nodeId={focusNode} onPick={(id) => { setFocusSim(id); setFocusNode(null); }} />}
+      {tab === 'resumo' && <TopicSummary topic={topic} onNode={(simId, id) => toMap(id, simId)} />}
       {tab === 'questoes' && <TopicQuestions topic={topic} />}
       {tab === 'geral' && (
       <div className="sheet">

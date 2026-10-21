@@ -8,6 +8,7 @@ export interface SearchHit {
   where: string; // onde achou, para mostrar ao lado do resultado
   text: string;
   nodeId?: string;
+  simId?: string; // o nó está no mapa deste simulado
 }
 
 const snippet = (text: string, q: string) => {
@@ -38,6 +39,20 @@ export function searchLibrary(d: DataSnapshot, raw: string, limit = 30): SearchH
       if (n.id === t.map!.rootId && !has(n.explanation) && !has(n.notes)) continue;
       const field = [n.title, n.explanation, n.notes, ...(n.list ?? [])].find((x) => has(x));
       if (field) push({ topic: t, where: 'Mapa', text: n.title && field !== n.title ? `${n.title}: ${snippet(field, q)}` : snippet(field, q), nodeId: n.id });
+    }
+  }
+  // 2b. mapas dos simulados: o resultado aponta para o tema do ramo
+  for (const sim of d.simulados) {
+    const nodes = sim.map?.nodes ?? [];
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    for (const n of nodes) {
+      if (n.ref || n.area || n.id === sim.map!.rootId) continue;
+      const field = [n.title, n.explanation, n.notes, ...(n.list ?? [])].find((x) => has(x));
+      if (!field) continue;
+      let up = n.parentId ? byId.get(n.parentId) : undefined;
+      while (up && !up.ref) up = up.parentId ? byId.get(up.parentId) : undefined;
+      const t = up?.ref ? tmap.get(up.ref) : null;
+      if (t) push({ topic: t, where: 'Mapa', text: n.title && field !== n.title ? `${n.title}: ${snippet(field, q)}` : snippet(field, q), nodeId: n.id, simId: sim.id });
     }
   }
   // 3. subtópicos e lacunas dos simulados

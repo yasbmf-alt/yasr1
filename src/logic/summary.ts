@@ -17,7 +17,8 @@ export interface SumBlock {
 
 const hasContent = (b: Omit<SumBlock, 'depth' | 'nodeId'>) => !!(b.title || b.explanation || b.list.length || b.notes || b.links.length || b.images);
 
-export function summarize(map: ConceptMap | undefined): SumBlock[] {
+/** resumo a partir de um nó (padrão: a raiz, incluindo os nós soltos) */
+export function summarize(map: ConceptMap | undefined, fromId?: string): SumBlock[] {
   if (!map) return [];
   const out: SumBlock[] = [];
   const seen = new Set<string>();
@@ -34,8 +35,9 @@ export function summarize(map: ConceptMap | undefined): SumBlock[] {
     if (hasContent(b) || kids.length) out.push(b);
     for (const k of kids) walk(k.id, depth + 1);
   };
-  walk(map.rootId, 0);
-  // nós soltos (fora da árvore do tema) entram no fim, cada um como uma seção
+  walk(fromId ?? map.rootId, 0);
+  if (fromId && fromId !== map.rootId) return out;
+  // nós soltos (fora da árvore) entram no fim, cada um como uma seção
   const loose = map.nodes.filter((n) => !n.parentId && n.id !== map.rootId).sort((a, b) => a.y - b.y || a.x - b.x);
   for (const n of loose) walk(n.id, 1);
   return out;

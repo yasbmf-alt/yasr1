@@ -1,6 +1,7 @@
 // Mapa conceitual: árvore de nós livres (cada nó guarda a própria posição).
-// Um mapa por tema; o tema é a raiz. Nada aqui inventa conteúdo.
-import type { ConceptMap, MapColor, MapNode, Topic } from '../types';
+// Cada simulado tem um mapa (simulado → grandes áreas → temas). Nada aqui inventa conteúdo.
+import type { BigArea, ConceptMap, MapColor, MapNode, Simulado, Topic } from '../types';
+import { BIG_AREAS } from '../types';
 import { uid } from './dates';
 
 export const NODE_W = 200; // largura de referência para posicionar nós novos
@@ -91,3 +92,85 @@ export const MAP_COLORS: { id: MapColor; label: string; bg: string; line: string
   { id: 'pessego', label: 'Pêssego', bg: '#FFEDEC', line: '#F2A2A6' },
 ];
 export const colorOf = (c: MapColor | undefined) => MAP_COLORS.find((x) => x.id === c) ?? MAP_COLORS[0];
+
+// ── Mapa do simulado: simulado → grandes áreas → temas errados ──
+
+const AREA_COLOR: Record<BigArea, MapColor> = { clinica: 'rosa', cirurgia: 'azul', pediatria: 'manteiga', go: 'lilas', preventiva: 'lima' };
+const AREA_LABEL: Record<BigArea, string> = { clinica: 'Clínica Médica', cirurgia: 'Cirurgia', pediatria: 'Pediatria', go: 'Ginecologia e Obstetrícia', preventiva: 'Preventiva' };
+
+/** chave do tema de um grupo de erros (o tema, ou o próprio grupo quando não há tema) */
+export const refOf = (g: { topicId?: string | null; id: string }) => g.topicId ?? `g:${g.id}`;
+
+/** tamanho aproximado de um nó pelo texto (antes de medir na tela) */
+const guess = (nodes: MapNode[]) => new Map(nodes.map((n) => [n.id, { w: Math.min(260, 34 + n.title.length * 7.4), h: n.title.length > 30 ? 58 : 40 }]));
+
+/** copia os ramos de um mapa antigo do tema para baixo de um nó (com ids novos) */
+function cloneBranches(src: ConceptMap, under: string): MapNode[] {
+  const ids = new Map<string, string>();
+  const out: MapNode[] = [];
+  const walk = (id: string, parent: string) => {
+    for (const k of childrenOf(src.nodes, id)) {
+      const nid = uid();
+      ids.set(k.id, nid);
+      out.push({ ...k, id: nid, parentId: parent });
+      walk(k.id, nid);
+    }
+  };
+  walk(src.rootId, under);
+  return out;
+}
+
+/**
+ * Cria o mapa do simulado ou acrescenta o que falta (áreas e temas novos).
+ * Nunca apaga nem muda o que a pessoa escreveu. Devolve null se nada mudou.
+ */
+export function syncSimMap(sim: Simulado, topics: Topic[]): ConceptMap | null {
+  const fresh = !sim.map;
+  const map: ConceptMap = sim.map
+    ? { ...sim.map, nodes: [...sim.map.nodes] }
+    : { rootId: uid(), nodes: [], updatedAt: '' };
+  if (fresh) map.nodes.push({ id: map.rootId, parentId: null, title: sim.name, x: 0, y: 0, color: 'azul' });
+  let changed = fresh;
+  const tmap = new Map(topics.map((t) => [t.id, t]));
+  for (const a of BIG_AREAS) {
+    const groups = (sim.errors ?? []).filter((g) => g.area === a);
+    let an = map.nodes.find((n) => n.area === a);
+    if (!an) {
+      const sib = map.nodes.filter((n) => n.parentId === map.rootId);
+      const y = sib.length ? Math.max(...sib.map((n) => n.y)) + 60 : 0;
+      an = { id: uid(), parentId: map.rootId, title: AREA_LABEL[a], x: 260, y, color: AREA_COLOR[a], area: a };
+      map.nodes.push(an);
+      changed = true;
+    }
+    const seen = new Set<string>();
+    for (const g of groups) {
+      const ref = refOf(g);
+      if (seen.has(ref) || map.nodes.some((n) => n.ref === ref)) continue;
+      seen.add(ref);
+      const t = g.topicId ? tmap.get(g.topicId) : null;
+      const kids = childrenOf(map.nodes, an.id);
+      const last = kids.at(-1);
+      const tn: MapNode = {
+        id: uid(), parentId: an.id, title: t?.name ?? (g.subject?.trim() || 'Sem tema'),
+        x: an.x + 300, y: last ? last.y + 56 : an.y, color: AREA_COLOR[a], ref,
+      };
+      map.nodes.push(tn);
+      // quem já tinha começado um mapa no próprio tema não perde nada
+      if (t?.map && t.map.nodes.length > 1) map.nodes.push(...cloneBranches(t.map, tn.id));
+      changed = true;
+    }
+  }
+  if (!changed) return null;
+  const nodes = fresh ? tidy(map.nodes, map.rootId, guess(map.nodes)) : map.nodes;
+  return { ...map, nodes, updatedAt: new Date().toISOString() };
+}
+
+/** onde um tema aparece nos mapas dos simulados */
+export function topicInSimMaps(sims: Simulado[], topicId: string) {
+  const out: { sim: Simulado; nodeId: string }[] = [];
+  for (const s of sims) {
+    const n = s.map?.nodes.find((x) => x.ref === topicId);
+    if (n) out.push({ sim: s, nodeId: n.id });
+  }
+  return out.sort((a, b) => b.sim.date.localeCompare(a.sim.date));
+}

@@ -4,7 +4,7 @@ import { useStore } from '../data/store';
 import { AssetImg } from '../assets/registry';
 import { uploadImage } from './upload';
 import { useUI } from './ui';
-import type { MapColor, MapNode } from '../types';
+import type { ConceptMap, MapColor, MapNode, Simulado } from '../types';
 import { MAP_COLORS, childSpot, childrenOf, colorOf, descendants, emptyMap, newNode, tidy, visibleNodes, NODE_H, NODE_W, type Size } from '../logic/conceptMap';
 
 type View = { x: number; y: number; z: number };
@@ -16,15 +16,22 @@ type Gesture =
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 
 /**
- * Mapa conceitual do tema, num quadro infinito. Um único mapa por tema:
- * o mesmo aparece na Correção de Simulados e na Biblioteca.
+ * Mapa conceitual num quadro infinito (o mapa vem por parâmetro).
+ * O mapa do simulado aparece igual na Correção e na Biblioteca.
  */
-export function ConceptMapEditor({ topicId, focusNodeId, height }: { topicId: string; focusNodeId?: string | null; height?: number | string }) {
-  const store = useStore();
-  const storeRef = useRef(store);
-  storeRef.current = store;
+export function ConceptMapEditor({ mapKey, map, makeMap, onSave, focusNodeId, focusTick, onSelect, height }: {
+  mapKey: string; // identidade do mapa (troca = carrega outro)
+  map: ConceptMap | undefined;
+  makeMap?: () => ConceptMap; // mapa inicial quando ainda não existe
+  onSave: (m: ConceptMap) => void;
+  focusNodeId?: string | null;
+  focusTick?: number; // muda para centralizar de novo no mesmo nó
+  onSelect?: (n: MapNode | null) => void;
+  height?: number | string;
+}) {
   const ui = useUI();
-  const topic = store.data.topics.find((t) => t.id === topicId);
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
 
   const [nodes, setNodes] = useState<MapNode[]>([]);
   const [rootId, setRootId] = useState('');
@@ -56,17 +63,15 @@ export function ConceptMapEditor({ topicId, focusNodeId, height }: { topicId: st
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const editStart = useRef<MapNode[] | null>(null);
 
-  // ── salvar (no próprio tema) ──
+  // ── salvar ──
   const commitSave = useCallback(() => {
     if (timer.current) window.clearTimeout(timer.current);
     timer.current = null;
     if (!dirty.current || !loadedFor.current) return;
-    const t = storeRef.current.snapshot().topics.find((x) => x.id === loadedFor.current);
-    if (!t) return;
     const updatedAt = new Date().toISOString();
     lastSaved.current = updatedAt;
     dirty.current = false;
-    storeRef.current.saveTopic({ ...t, map: { rootId: rootRef.current, nodes: nodesRef.current, updatedAt } });
+    onSaveRef.current({ rootId: rootRef.current, nodes: nodesRef.current, updatedAt });
   }, []);
   const scheduleSave = useCallback(() => {
     dirty.current = true;
@@ -82,17 +87,17 @@ export function ConceptMapEditor({ topicId, focusNodeId, height }: { topicId: st
 
   // ── carregar ──
   useEffect(() => {
-    if (!topic) return;
-    if (loadedFor.current !== topicId) {
+    if (!map && !makeMap) return;
+    if (loadedFor.current !== mapKey) {
       if (loadedFor.current) commitSave();
-      const m = topic.map ?? emptyMap(topic);
+      const m = map ?? makeMap!();
       setNodes(m.nodes);
       setRootId(m.rootId);
       past.current = [];
       future.current = [];
       setHist({ past: 0, future: 0 });
-      loadedFor.current = topicId;
-      lastSaved.current = topic.map?.updatedAt ?? '';
+      loadedFor.current = mapKey;
+      lastSaved.current = map?.updatedAt ?? '';
       dirty.current = false;
       setSel(focusNodeId ?? null);
       setEditing(null);
@@ -101,22 +106,41 @@ export function ConceptMapEditor({ topicId, focusNodeId, height }: { topicId: st
       return;
     }
     // atualização vinda de outro aparelho: só aplica se não há edição pendente
-    const m = topic.map;
+    const m = map;
     if (m && !dirty.current && m.updatedAt > lastSaved.current) {
       setNodes(m.nodes);
       setRootId(m.rootId);
       lastSaved.current = m.updatedAt;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topicId, topic?.map?.updatedAt, !!topic]);
+  }, [mapKey, map?.updatedAt, !!map]);
 
   useEffect(() => {
-    if (focusNodeId && nodes.some((n) => n.id === focusNodeId)) {
+    if (focusNodeId && nodesRef.current.some((n) => n.id === focusNodeId)) {
       setSel(focusNodeId);
+      // abre os ramos recolhidos acima do nó
+      const up = new Set<string>();
+      let cur = nodesRef.current.find((n) => n.id === focusNodeId);
+      while (cur?.parentId) {
+        up.add(cur.parentId);
+        cur = nodesRef.current.find((n) => n.id === cur!.parentId);
+      }
+      if (nodesRef.current.some((n) => up.has(n.id) && n.collapsed)) {
+        const next = nodesRef.current.map((n) => (up.has(n.id) ? { ...n, collapsed: false } : n));
+        nodesRef.current = next;
+        setNodes(next);
+      }
       needFit.current = focusNodeId;
+      // Tab/Enter já funcionam no nó escolhido
+      if (focusTick) wrap.current?.focus({ preventScroll: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusNodeId]);
+  }, [focusNodeId, focusTick]);
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
+  useEffect(() => {
+    onSelectRef.current?.(sel ? nodesRef.current.find((n) => n.id === sel) ?? null : null);
+  }, [sel]);
 
   // ── histórico ──
   const pushHistory = (snap = nodesRef.current) => {
@@ -243,7 +267,8 @@ export function ConceptMapEditor({ topicId, focusNodeId, height }: { topicId: st
     addChild(me.parentId);
   };
   const remove = (id: string) => {
-    if (id === rootRef.current) return;
+    const me = nodesRef.current.find((n) => n.id === id);
+    if (!me || id === rootRef.current || me.area || me.ref) return; // áreas e temas vêm do simulado
     const gone = descendants(nodesRef.current, id);
     gone.add(id);
     apply((ns) => ns.filter((n) => !gone.has(n.id)));
@@ -422,7 +447,8 @@ export function ConceptMapEditor({ topicId, focusNodeId, height }: { topicId: st
     : null;
   const grid = 22 * view.z;
 
-  if (!topic) return null;
+  if (!map && !makeMap) return null;
+  const fixed = (n: MapNode) => n.id === rootId || !!n.area || !!n.ref; // nós que o app criou
   return (
     <div className={`cm ${panel && selNode ? 'has-panel' : ''}`} ref={wrap} style={{ height: height ?? 560 }} tabIndex={0} onKeyDown={onKeyDown}>
       <div
@@ -489,7 +515,7 @@ export function ConceptMapEditor({ topicId, focusNodeId, height }: { topicId: st
             {selNode.parentId && <button type="button" onClick={() => addSibling(selNode.id)} title="Novo nó ao lado (Enter)"><Icon name="plus" size={14} /> Irmão</button>}
             <button type="button" onClick={() => startEdit(selNode.id)} title="Renomear (F2)"><Icon name="edit" size={14} /></button>
             <button type="button" onClick={() => setPanel(true)} title="Detalhes: notas, lista, links, imagens"><Icon name="note" size={14} /> Detalhes</button>
-            {selNode.id !== rootId && <button type="button" onClick={() => remove(selNode.id)} title="Apagar (Delete)" aria-label="Apagar nó"><Icon name="trash" size={14} /></button>}
+            {!fixed(selNode) && <button type="button" onClick={() => remove(selNode.id)} title="Apagar (Delete)" aria-label="Apagar nó"><Icon name="trash" size={14} /></button>}
           </div>
         )}
       </div>
@@ -511,7 +537,7 @@ export function ConceptMapEditor({ topicId, focusNodeId, height }: { topicId: st
         <NodePanel
           key={selNode.id}
           node={selNode}
-          isRoot={selNode.id === rootId}
+          isRoot={fixed(selNode)}
           nodes={nodes}
           onClose={() => setPanel(false)}
           onFocusField={() => pushHistory()}
@@ -691,5 +717,41 @@ function NodePanel({ node, isRoot, nodes, onClose, onFocusField, onChange, onCha
         <button type="button" className="btn btn-quiet btn-sm cm-del" onClick={onRemove}><Icon name="trash" size={14} /> Apagar nó e ramos</button>
       )}
     </aside>
+  );
+}
+
+/** mapa avulso de um tema (criado antes dos mapas por simulado) */
+export function TopicMapEditor({ topicId, ...rest }: { topicId: string; focusNodeId?: string | null; height?: number | string }) {
+  const store = useStore();
+  const topic = store.data.topics.find((t) => t.id === topicId);
+  if (!topic) return null;
+  return (
+    <ConceptMapEditor
+      mapKey={`t:${topicId}`}
+      map={topic.map}
+      makeMap={() => emptyMap(topic)}
+      onSave={(m) => {
+        const t = store.snapshot().topics.find((x) => x.id === topicId);
+        if (t) store.saveTopic({ ...t, map: m });
+      }}
+      {...rest}
+    />
+  );
+}
+
+/** mapa de correção do simulado: simulado → grandes áreas → temas */
+export function SimMapEditor({ sim, ...rest }: { sim: Simulado; focusNodeId?: string | null; focusTick?: number; onSelect?: (n: MapNode | null) => void; height?: number | string }) {
+  const store = useStore();
+  if (!sim.map) return null;
+  return (
+    <ConceptMapEditor
+      mapKey={`s:${sim.id}`}
+      map={sim.map}
+      onSave={(m) => {
+        const s = store.snapshot().simulados.find((x) => x.id === sim.id);
+        if (s) store.saveSimulado({ ...s, map: m });
+      }}
+      {...rest}
+    />
   );
 }

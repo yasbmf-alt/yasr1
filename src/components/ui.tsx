@@ -23,6 +23,7 @@ export type TopicTab = 'geral' | 'mapa' | 'resumo' | 'questoes';
 export interface TopicFocus {
   tab?: TopicTab;
   nodeId?: string | null;
+  simId?: string | null; // mapa de qual simulado
 }
 
 interface UI {

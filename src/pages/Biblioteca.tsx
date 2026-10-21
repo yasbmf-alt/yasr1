@@ -137,7 +137,7 @@ export function Biblioteca() {
                   className="lib-hit"
                   onClick={() => {
                     setQ('');
-                    ui.openTopic(h.topic.id, h.nodeId ? { tab: 'mapa', nodeId: h.nodeId } : { tab: h.where === 'Subtópico' || h.where === 'Lacuna' ? 'questoes' : 'geral' });
+                    ui.openTopic(h.topic.id, h.nodeId ? { tab: 'mapa', nodeId: h.nodeId, simId: h.simId ?? 'tema' } : { tab: h.where === 'Subtópico' || h.where === 'Lacuna' ? 'questoes' : 'geral' });
                   }}
                 >
                   <span className="lib-hit-t">{h.topic.name}</span>

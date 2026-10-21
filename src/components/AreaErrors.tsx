@@ -199,7 +199,12 @@ function TopicCombo({ id, area, topics, value, linked, onPick, onText }: {
           if (e.key === 'ArrowDown') { e.preventDefault(); setHi((h) => (h + 1) % n); }
           else if (e.key === 'ArrowUp') { e.preventDefault(); setHi((h) => (h - 1 + n) % n); }
           else if (e.key === 'Enter') { e.preventDefault(); choose(hi); }
-          else if (e.key === 'Escape') setOpen(false);
+          else if (e.key === 'Escape') {
+            // fecha só a lista, não a janela do simulado
+            e.preventDefault();
+            e.stopPropagation();
+            setOpen(false);
+          }
         }}
         placeholder="Digite o tema, ex.: Bronquiolite"
         aria-label="Tema"

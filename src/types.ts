@@ -128,6 +128,9 @@ export interface MapNode {
   list?: string[];
   links?: MapLink[];
   images?: string[]; // ids de arquivo
+  // nós criados pelo app no mapa do simulado
+  area?: BigArea; // nó da grande área
+  ref?: string; // nó do tema: id do tema (ou "g:<id do grupo>" quando o erro não tem tema)
 }
 export interface ConceptMap {
   rootId: string;
@@ -339,6 +342,7 @@ export interface Simulado {
   errors?: ErrorGroup[];
   notes: string;
   createdAt: string;
+  map?: ConceptMap; // mapa de correção: simulado → grandes áreas → temas errados
 }
 
 // ── Flashcards ─────────────────────────────────────────────────

@@ -2,10 +2,12 @@ import React from 'react';
 import { useStore } from '../data/store';
 import { useUI } from './ui';
 import { Icon } from './Icon';
-import { CORRECTION_STATUS, REASONS, type CorrectionStatus, type ErrorReason, type MistakeItem, type Topic } from '../types';
+import { CORRECTION_STATUS, REASONS, type CorrectionStatus, type ErrorReason, type ConceptMap, type MistakeItem, type Topic } from '../types';
 import { fmtShort } from '../logic/dates';
 import { isMistake, normName, topicOccurrences } from '../logic/simErrors';
 import { summarize, summaryText } from '../logic/summary';
+import { topicInSimMaps } from '../logic/conceptMap';
+import { SimMapEditor, TopicMapEditor } from './ConceptMap';
 
 const reasonLabel = (r: ErrorReason) => REASONS.find((x) => x.id === r)?.label ?? r;
 const statusLabel = (s: CorrectionStatus | undefined) => CORRECTION_STATUS.find((x) => x.id === (s ?? 'nao'))?.label;
@@ -93,20 +95,28 @@ export function ExamHistory({ topic, onMap }: { topic: Topic; onMap: () => void 
   );
 }
 
-/** Resumo escrito do mapa (somente leitura): o mapa é a fonte. */
-export function TopicSummary({ topic, onNode }: { topic: Topic; onNode: (id: string) => void }) {
+export interface SumSection {
+  key: string; // ex.: id do simulado, ou "tema" para o mapa avulso
+  label?: string; // título da seção (quando há várias)
+  map: ConceptMap;
+  fromId?: string; // ramo a partir do qual resumir
+}
+
+/** Resumo escrito dos mapas (somente leitura): o mapa é a fonte. */
+export function MapSummary({ sections, onNode, emptyText }: { sections: SumSection[]; onNode: (key: string, nodeId: string) => void; emptyText?: string }) {
   const ui = useUI();
-  const blocks = summarize(topic.map);
-  const useful = blocks.filter((b) => b.depth > 0 || b.explanation || b.list.length || b.notes);
-  if (!useful.length)
+  const parts = sections.map((sec) => ({ sec, blocks: summarize(sec.map, sec.fromId) }));
+  const useful = parts.some((p) => p.blocks.some((b) => b.explanation || b.list.length || b.notes || b.links.length || b.depth > (p.sec.fromId ? 0 : 1)));
+  if (!useful)
     return (
       <div className="ts-empty">
-        <p>O resumo aparece sozinho quando você escrever no mapa conceitual. Ele só organiza o que você anotou, na ordem dos ramos.</p>
+        <p>{emptyText ?? 'O resumo aparece sozinho quando você escrever no mapa. Ele só organiza o que você anotou, na ordem dos ramos.'}</p>
       </div>
     );
+  const text = (fmt: 'md' | 'txt') => parts.map((p) => (p.sec.label ? `${fmt === 'md' ? '# ' : ''}${p.sec.label}\n\n` : '') + summaryText(p.blocks.map((b) => (p.sec.label ? { ...b, depth: b.depth + 1 } : b)), fmt)).join('\n');
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(summaryText(blocks, 'md'));
+      await navigator.clipboard.writeText(text('md'));
       ui.toast('Resumo copiado.');
     } catch {
       ui.toast('Não consegui copiar. Selecione o texto e copie manualmente.', 'erro');
@@ -119,24 +129,29 @@ export function TopicSummary({ topic, onNode }: { topic: Topic; onNode: (id: str
         <button className="btn btn-quiet btn-sm" onClick={copy}><Icon name="copy" size={15} /> Copiar resumo</button>
       </div>
       <article className="sum-doc">
-        {blocks.map((b) => {
-          const H = (b.depth === 0 ? 'h2' : b.depth === 1 ? 'h3' : b.depth === 2 ? 'h4' : 'h5') as 'h2';
-          return (
-            <section key={b.nodeId} className={`sum-b d${Math.min(b.depth, 4)}`}>
-              <H className="sum-h">
-                <button className="sum-h-btn" onClick={() => onNode(b.nodeId)} title="Ver no mapa">{b.title || '(sem título)'}</button>
-              </H>
-              {b.explanation && b.explanation.split('\n').map((l, i) => <p key={i}>{l}</p>)}
-              {b.list.length > 0 && <ul>{b.list.map((l, i) => <li key={i}>{l}</li>)}</ul>}
-              {b.notes && <blockquote>{b.notes}</blockquote>}
-              {b.links.length > 0 && (
-                <ul className="sum-links">
-                  {b.links.map((l, i) => <li key={i}>{/^https?:\/\//.test(l.url) ? <a href={l.url} target="_blank" rel="noreferrer noopener">{l.label || l.url}</a> : `${l.label} ${l.url}`}</li>)}
-                </ul>
-              )}
-            </section>
-          );
-        })}
+        {parts.map(({ sec, blocks }) => (
+          <React.Fragment key={sec.key}>
+            {sec.label && <p className="sum-sec">{sec.label}</p>}
+            {blocks.map((b) => {
+              const H = (b.depth === 0 ? 'h2' : b.depth === 1 ? 'h3' : b.depth === 2 ? 'h4' : 'h5') as 'h2';
+              return (
+                <section key={b.nodeId} className={`sum-b d${Math.min(b.depth, 4)}`}>
+                  <H className="sum-h">
+                    <button className="sum-h-btn" onClick={() => onNode(sec.key, b.nodeId)} title="Ver no mapa">{b.title || '(sem título)'}</button>
+                  </H>
+                  {b.explanation && b.explanation.split('\n').map((l, i) => <p key={i}>{l}</p>)}
+                  {b.list.length > 0 && <ul>{b.list.map((l, i) => <li key={i}>{l}</li>)}</ul>}
+                  {b.notes && <blockquote>{b.notes}</blockquote>}
+                  {b.links.length > 0 && (
+                    <ul className="sum-links">
+                      {b.links.map((l, i) => <li key={i}>{/^https?:\/\//.test(l.url) ? <a href={l.url} target="_blank" rel="noreferrer noopener">{l.label || l.url}</a> : `${l.label} ${l.url}`}</li>)}
+                    </ul>
+                  )}
+                </section>
+              );
+            })}
+          </React.Fragment>
+        ))}
       </article>
     </div>
   );
@@ -169,4 +184,45 @@ export function TopicQuestions({ topic }: { topic: Topic }) {
       ))}
     </ul>
   );
+}
+
+/** Aba "Mapa conceitual" do tema: o ramo do tema no mapa de cada simulado (ou o mapa avulso). */
+export function TopicMaps({ topic, simId, nodeId, onPick }: { topic: Topic; simId: string | null; nodeId: string | null; onPick: (simId: string | null) => void }) {
+  const { data } = useStore();
+  const occ = topicInSimMaps(data.simulados, topic.id);
+  const legacy = (topic.map?.nodes.length ?? 0) > 1 || occ.length === 0;
+  const cur = occ.find((o) => o.sim.id === simId) ?? (simId === 'tema' && legacy ? null : occ[0] ?? null);
+  return (
+    <div className="tmaps">
+      {(occ.length > 1 || (occ.length > 0 && legacy)) && (
+        <div className="tmaps-pick">
+          {occ.map((o) => (
+            <button key={o.sim.id} className={`chip-mini ${cur?.sim.id === o.sim.id ? 'is-on' : ''}`} onClick={() => onPick(o.sim.id)}>{o.sim.name} · {fmtShort(o.sim.date)}</button>
+          ))}
+          {legacy && <button className={`chip-mini ${!cur ? 'is-on' : ''}`} onClick={() => onPick('tema')}>Mapa avulso do tema</button>}
+        </div>
+      )}
+      {cur ? (
+        <>
+          <p className="muted small">Este é o mapa do simulado {cur.sim.name}: o mesmo da Correção de Simulados.</p>
+          <SimMapEditor sim={cur.sim} focusNodeId={nodeId ?? cur.nodeId} height="min(600px, 62vh)" />
+        </>
+      ) : (
+        <>
+          {occ.length === 0 && <p className="muted small">Este tema ainda não apareceu nos erros de um simulado. Você pode montar um mapa avulso aqui.</p>}
+          <TopicMapEditor topicId={topic.id} focusNodeId={nodeId} height="min(600px, 62vh)" />
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Aba "Resumo" do tema: ramos do tema em todos os mapas, sem duplicar nada. */
+export function TopicSummary({ topic, onNode }: { topic: Topic; onNode: (simId: string, nodeId: string) => void }) {
+  const { data } = useStore();
+  const occ = topicInSimMaps(data.simulados, topic.id);
+  const sections: SumSection[] = occ.map((o) => ({ key: o.sim.id, label: `${o.sim.name} · ${fmtShort(o.sim.date)}`, map: o.sim.map!, fromId: o.nodeId }));
+  if ((topic.map?.nodes.length ?? 0) > 1) sections.push({ key: 'tema', label: sections.length ? 'Mapa avulso do tema' : undefined, map: topic.map! });
+  if (sections.length === 1) sections[0] = { ...sections[0], label: undefined };
+  return <MapSummary sections={sections} onNode={onNode} />;
 }
