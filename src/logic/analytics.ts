@@ -34,6 +34,7 @@ export function errorRecords(d: DataSnapshot): ErrorRecord[] {
   }
   for (const sim of d.simulados) {
     for (const g of sim.errors ?? []) {
+      if (g.kind === 'revisar') continue;
       const t = g.topicId ? tmap.get(g.topicId) : null;
       out.push({
         key: `${sim.id}:${g.id}`, date: sim.date, source: 'simulado', sourceId: sim.id, area: (t?.area ?? g.area ?? 'geral') as Area,

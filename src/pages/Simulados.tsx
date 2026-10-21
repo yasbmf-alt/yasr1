@@ -9,6 +9,8 @@ import { addDays, fmtLong, fmtMinutes, fmtShort, today, uid, weekStart } from '.
 import { occurrences } from '../logic/agenda';
 import { Diagnostico } from './Diagnostico';
 import { ErrorGroups } from '../components/ErrorGroups';
+import { AreaErrors } from '../components/AreaErrors';
+import { areaWrong, categorized, finalizeGroup, isMistake, linkTopics, withItems } from '../logic/simErrors';
 
 // Cores de gráfico por grande área (validadas para daltonismo com rótulo direto).
 export const AREA_CHART: Record<BigArea, { label: string; short: string; color: string }> = {
@@ -336,9 +338,10 @@ export function emptySim(): Simulado {
 }
 
 export function SimuladoForm({ value, onClose }: { value: Simulado | 'new' | null; onClose: () => void }) {
-  const { data, saveSimulado } = useStore();
+  const { data, saveSimulado, saveTopic } = useStore();
   const ui = useUI();
   const [s, setS] = useState<Simulado>(emptySim());
+  const [openAreas, setOpenAreas] = useState<BigArea[]>([]);
   const [hh, setHh] = useState('');
   const [mm, setMm] = useState('');
   const [tag, setTag] = useState('');
@@ -347,7 +350,9 @@ export function SimuladoForm({ value, onClose }: { value: Simulado | 'new' | nul
   useEffect(() => {
     if (!value) return;
     const base = value === 'new' ? emptySim() : { ...emptySim(), ...value, areas: { ...emptySim().areas, ...value.areas } };
+    base.errors = (base.errors ?? []).map(withItems);
     setS(base);
+    setOpenAreas(BIG_AREAS.filter((a) => base.errors!.some((g) => g.area === a)));
     setHh(base.minutes != null ? String(Math.floor(base.minutes / 60)) : '');
     setMm(base.minutes != null ? String(base.minutes % 60) : '');
     setTag('');
@@ -379,10 +384,17 @@ export function SimuladoForm({ value, onClose }: { value: Simulado | 'new' | nul
           const m = numOrNull(mm) ?? 0;
           const total = s.total ?? (sumT || null);
           const correct = s.correct ?? (sumT ? sumC : null);
-          const errs = (s.errors ?? []).filter((g) => g.count > 0);
-          if (total != null && correct != null && errs.reduce((a, g) => a + g.count, 0) > total - correct) return setErr('Há mais erros classificados do que erros na prova.');
-          saveSimulado({ ...s, errors: errs, name: s.name.trim(), total, correct, minutes: hh || mm ? h * 60 + m : null });
-          ui.toast('Simulado registrado.');
+          const kept = (s.errors ?? []).filter((g) => (isMistake(g) ? g.count > 0 : !!(g.subject?.trim() || g.topicId)));
+          for (const a of BIG_AREAS) {
+            const w = areaWrong(s, a);
+            if (w != null && categorized(kept, a) > w) return setErr(`Em ${AREA_CHART[a].short}, há mais erros categorizados do que erros na área.`);
+          }
+          if (total != null && correct != null && kept.filter(isMistake).reduce((a, g) => a + g.count, 0) > total - correct) return setErr('Há mais erros classificados do que erros na prova.');
+          // liga cada tema à Biblioteca (reaproveita o tema existente; cria só os que faltam)
+          const { groups, created } = linkTopics(kept.map(finalizeGroup), data.topics);
+          for (const t of created) saveTopic(t);
+          saveSimulado({ ...s, errors: groups, name: s.name.trim(), total, correct, minutes: hh || mm ? h * 60 + m : null });
+          ui.toast(created.length ? `Simulado registrado · ${created.length} tema${created.length > 1 ? 's novos' : ' novo'} na Biblioteca.` : 'Simulado registrado.');
           onClose();
         }}
       >
@@ -417,26 +429,53 @@ export function SimuladoForm({ value, onClose }: { value: Simulado | 'new' | nul
 
         <div className="area-form">
           <span className="field-label">Por grande área (acertos / total)</span>
-          {BIG_AREAS.map((a) => (
-            <div key={a} className="area-line">
-              <span className="area-name"><i style={{ background: AREA_CHART[a].color }} />{AREA_CHART[a].label}</span>
-              <input id={`sa-${a}-c`} inputMode="numeric" value={s.areas[a].correct ?? ''} onChange={(e) => setArea(a, 'correct', e.target.value)} aria-label={`Acertos em ${AREA_CHART[a].short}`} />
-              <span className="muted">/</span>
-              <input id={`sa-${a}-t`} inputMode="numeric" value={s.areas[a].total ?? ''} onChange={(e) => setArea(a, 'total', e.target.value)} aria-label={`Total em ${AREA_CHART[a].short}`} />
-              <span className="area-pct">{fmtPct(pct(s.areas[a].correct, s.areas[a].total))}</span>
-            </div>
-          ))}
+          {BIG_AREAS.map((a) => {
+            const open = openAreas.includes(a);
+            const mine = (s.errors ?? []).filter((g) => g.area === a);
+            const n = categorized(mine, a);
+            return (
+              <div key={a} className={`area-block ${open ? 'is-open' : ''}`}>
+                <div className="area-line">
+                  <button
+                    type="button"
+                    className="area-name area-toggle"
+                    onClick={() => setOpenAreas(open ? openAreas.filter((x) => x !== a) : [...openAreas, a])}
+                    aria-expanded={open}
+                    title="Temas e motivos dos erros"
+                  >
+                    <Icon name={open ? 'chevronD' : 'chevronR'} size={14} />
+                    <i style={{ background: AREA_CHART[a].color }} />{AREA_CHART[a].label}
+                    {n > 0 && <span className="area-badge">{n} erro{n > 1 ? 's' : ''} detalhado{n > 1 ? 's' : ''}</span>}
+                  </button>
+                  <input id={`sa-${a}-c`} inputMode="numeric" value={s.areas[a].correct ?? ''} onChange={(e) => setArea(a, 'correct', e.target.value)} aria-label={`Acertos em ${AREA_CHART[a].short}`} />
+                  <span className="muted">/</span>
+                  <input id={`sa-${a}-t`} inputMode="numeric" value={s.areas[a].total ?? ''} onChange={(e) => setArea(a, 'total', e.target.value)} aria-label={`Total em ${AREA_CHART[a].short}`} />
+                  <span className="area-pct">{fmtPct(pct(s.areas[a].correct, s.areas[a].total))}</span>
+                </div>
+                {open && (
+                  <AreaErrors
+                    area={a}
+                    groups={mine}
+                    wrong={areaWrong(s, a)}
+                    onChange={(g) => setS({ ...s, errors: [...(s.errors ?? []).filter((x) => x.area !== a), ...g] })}
+                  />
+                )}
+              </div>
+            );
+          })}
           {sumT > 0 && s.total != null && sumT !== s.total && (
             <p className="field-hint">As áreas somam {sumT} questões e o total informado é {s.total}.</p>
           )}
         </div>
 
+        {(s.errors ?? []).some((g) => !g.area) && (
         <ErrorGroups
-          value={s.errors ?? []}
-          onChange={(g) => setS({ ...s, errors: g })}
+          value={(s.errors ?? []).filter((g) => !g.area)}
+          onChange={(g) => setS({ ...s, errors: [...(s.errors ?? []).filter((x) => x.area), ...g] })}
           wrong={(s.total ?? (sumT || null)) != null && (s.correct ?? (sumT ? sumC : null)) != null ? ((s.total ?? sumT) as number) - ((s.correct ?? sumC) as number) : null}
           withSubject
         />
+        )}
         <Field label="Principais temas errados (lista rápida)">
           <div className="tags">
             {s.wrongTopics.map((t) => (

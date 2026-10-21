@@ -11,7 +11,20 @@ export type ActivityType = 'videoaula' | 'questoes' | 'revisao' | 'flashcards' |
 
 // ── Erros classificados (registrados uma vez, usados em diagnóstico, gaveta e gráficos) ──
 export type Subtema = 'diagnostico' | 'classificacao' | 'tratamento' | 'complicacoes' | 'conduta' | 'fisiopatologia' | 'epidemiologia' | 'outro';
-export type ErrorReason = 'conceito' | 'desatencao' | 'interpretacao' | 'esquecimento';
+export type ErrorReason = 'conceito' | 'raciocinio' | 'desatencao' | 'interpretacao' | 'esquecimento' | 'tempo';
+/** um erro individual dentro de um grupo (simulados): motivo, questão e lacuna próprios */
+export interface MistakeItem {
+  id: string;
+  question?: string; // número da questão (opcional)
+  reason?: ErrorReason | null;
+  gap?: string; // "O que eu precisava saber para acertar?"
+}
+export type CorrectionStatus = 'nao' | 'estudo' | 'corrigido';
+export const CORRECTION_STATUS: { id: CorrectionStatus; label: string }[] = [
+  { id: 'nao', label: 'Não iniciado' },
+  { id: 'estudo', label: 'Em estudo' },
+  { id: 'corrigido', label: 'Corrigido' },
+];
 export interface ErrorGroup {
   id: string;
   subtema: Subtema | null;
@@ -22,6 +35,11 @@ export interface ErrorGroup {
   area?: BigArea | null;
   topicId?: string | null;
   subject?: string; // matéria/doença em texto quando não há tema cadastrado
+  // detalhamento por erro (simulados). `reasons` continua sendo a união dos motivos.
+  subtopic?: string; // subtópico em texto livre, ex.: "Escore de Wells"
+  items?: MistakeItem[];
+  kind?: 'erro' | 'revisar'; // revisar = acertei, mas quero revisar (não conta como erro)
+  status?: CorrectionStatus; // correção desta ocorrência
 }
 export const SUBTEMAS: { id: Subtema; label: string }[] = [
   { id: 'diagnostico', label: 'Diagnóstico' },
@@ -34,10 +52,12 @@ export const SUBTEMAS: { id: Subtema; label: string }[] = [
   { id: 'outro', label: 'Outro' },
 ];
 export const REASONS: { id: ErrorReason; label: string; long: string }[] = [
-  { id: 'conceito', label: 'Conceito', long: 'confusão de conceitos' },
+  { id: 'conceito', label: 'Conceito', long: 'falta de conhecimento do conceito' },
+  { id: 'raciocinio', label: 'Raciocínio clínico', long: 'raciocínio clínico incorreto' },
   { id: 'desatencao', label: 'Desatenção', long: 'desatenção' },
   { id: 'interpretacao', label: 'Interpretação', long: 'interpretação do enunciado' },
-  { id: 'esquecimento', label: 'Esquecimento', long: 'esquecimento' },
+  { id: 'esquecimento', label: 'Esquecimento', long: 'conteúdo esquecido' },
+  { id: 'tempo', label: 'Tempo', long: 'pressão do tempo' },
 ];
 export const subtemaLabel = (s: Subtema | null | undefined) => SUBTEMAS.find((x) => x.id === s)?.label ?? 'Sem subtema';
 export const reasonLabel = (r: ErrorReason) => REASONS.find((x) => x.id === r)?.label ?? r;
@@ -89,6 +109,30 @@ export interface Topic {
   nextReviewOverride: string | null;
   coverAssetId: string | null;
   createdAt: string;
+  map?: ConceptMap; // mapa conceitual único do tema (compartilhado por todos os simulados)
+}
+
+// ── Mapa conceitual ────────────────────────────────────────────
+export type MapColor = 'azul' | 'rosa' | 'lilas' | 'lima' | 'manteiga' | 'pessego' | 'neutro';
+export interface MapLink { label: string; url: string }
+export interface MapNode {
+  id: string;
+  parentId: string | null; // null = nó solto (a raiz é o próprio tema)
+  title: string;
+  x: number;
+  y: number;
+  color?: MapColor;
+  collapsed?: boolean;
+  notes?: string;
+  explanation?: string;
+  list?: string[];
+  links?: MapLink[];
+  images?: string[]; // ids de arquivo
+}
+export interface ConceptMap {
+  rootId: string;
+  nodes: MapNode[];
+  updatedAt: string;
 }
 
 export interface Session {

@@ -153,7 +153,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       },
       saveTopic: (t) => put('topics', t),
       deleteTopic: (id) => {
-        const used = cur().missions.some((m) => m.topicId === id) || cur().sessions.some((s) => s.topicId === id);
+        const used = cur().missions.some((m) => m.topicId === id) || cur().sessions.some((s) => s.topicId === id)
+          || cur().simulados.some((s) => (s.errors ?? []).some((g) => g.topicId === id));
         if (used) return false;
         remove('topics', id);
         return true;
