@@ -8,6 +8,7 @@ import { BIG_AREAS, type BigArea, type Simulado } from '../types';
 import { addDays, fmtLong, fmtMinutes, fmtShort, today, uid, weekStart } from '../logic/dates';
 import { occurrences } from '../logic/agenda';
 import { Diagnostico } from './Diagnostico';
+import { Correcao } from './Correcao';
 import { ErrorGroups } from '../components/ErrorGroups';
 import { AreaErrors } from '../components/AreaErrors';
 import { areaWrong, categorized, finalizeGroup, isMistake, linkTopics, withItems } from '../logic/simErrors';
@@ -24,18 +25,21 @@ export const AREA_CHART: Record<BigArea, { label: string; short: string; color: 
 const pct = (c: number | null | undefined, t: number | null | undefined) => (t && c != null ? c / t : null);
 const fmtPct = (v: number | null) => (v == null ? '—' : `${Math.round(v * 100)}%`);
 
+type SimTab = 'provas' | 'diag' | 'corr';
+
 export function Simulados() {
   const { data } = useStore();
   const [editing, setEditing] = useState<Simulado | 'new' | null>(null);
   const [agendaDraft, setAgendaDraft] = useState<EventDraft | null>(null);
-  const [tab, setTab] = useState<'provas' | 'diag'>(() => {
+  const [tab, setTab] = useState<SimTab>(() => {
     try {
-      return localStorage.getItem('yasr1-sim-tab') === 'diag' ? 'diag' : 'provas';
+      const t = localStorage.getItem('yasr1-sim-tab');
+      return t === 'diag' || t === 'corr' ? t : 'provas';
     } catch {
       return 'provas';
     }
   });
-  const pickTab = (t: 'provas' | 'diag') => {
+  const pickTab = (t: SimTab) => {
     setTab(t);
     try {
       localStorage.setItem('yasr1-sim-tab', t);
@@ -67,11 +71,14 @@ export function Simulados() {
 
       <div className="seg seg-tabs" role="tablist" aria-label="Seções">
         <button role="tab" aria-selected={tab === 'provas'} className={tab === 'provas' ? 'is-on' : ''} onClick={() => pickTab('provas')}>Provas</button>
+        <button role="tab" aria-selected={tab === 'corr'} className={tab === 'corr' ? 'is-on' : ''} onClick={() => pickTab('corr')}>Correção de Simulados</button>
         <button role="tab" aria-selected={tab === 'diag'} className={tab === 'diag' ? 'is-on' : ''} onClick={() => pickTab('diag')}>🧠 Meu Diagnóstico</button>
       </div>
 
       {tab === 'diag' ? (
         <Diagnostico />
+      ) : tab === 'corr' ? (
+        <Correcao onEdit={setEditing} />
       ) : list.length === 0 ? (
         <div className="empty-big">
           <h2>Nenhum simulado registrado</h2>
