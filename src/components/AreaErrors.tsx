@@ -1,8 +1,8 @@
-import React, { useId, useState } from 'react';
+import React, { useId, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Icon } from './Icon';
 import { useStore } from '../data/store';
-import { REASONS, type BigArea, type ErrorGroup, type ErrorReason, type MistakeItem } from '../types';
+import { REASONS, areaOf, type BigArea, type ErrorGroup, type ErrorReason, type MistakeItem, type Topic } from '../types';
 import { uid } from '../logic/dates';
 import { isMistake, newItem, normName } from '../logic/simErrors';
 
@@ -34,20 +34,18 @@ export function AreaErrors({ area, groups, wrong, onChange }: {
   };
   const add = (kind: 'erro' | 'revisar') =>
     onChange([...groups, { id: uid(), area, kind, subtema: null, reasons: [], count: kind === 'erro' ? 1 : 0, note: '', subject: '', subtopic: '', topicId: null, items: kind === 'erro' ? [newItem()] : [] }]);
-  // temas desta área primeiro na sugestão
-  const sugg = [...data.topics].sort((a, b) => Number(b.area === area) - Number(a.area === area) || a.name.localeCompare(b.name, 'pt-BR'));
-
   const topicInput = (g: ErrorGroup, i: number) => (
-    <input
+    <TopicCombo
       id={`${fid}-t${i}`}
-      list={`${fid}-topics`}
+      area={area}
+      topics={data.topics}
       value={g.topicId ? data.topics.find((t) => t.id === g.topicId)?.name ?? g.subject ?? '' : g.subject ?? ''}
-      onChange={(e) => {
-        const t = data.topics.find((x) => normName(x.name) === normName(e.target.value));
-        set(g.id, { topicId: t?.id ?? null, subject: e.target.value });
+      linked={!!g.topicId}
+      onPick={(t) => set(g.id, { topicId: t.id, subject: t.name })}
+      onText={(v) => {
+        const t = data.topics.find((x) => normName(x.name) === normName(v));
+        set(g.id, { topicId: t?.id ?? null, subject: v });
       }}
-      placeholder="Tema, ex.: Bronquiolite"
-      aria-label="Tema"
     />
   );
 
@@ -101,9 +99,6 @@ export function AreaErrors({ area, groups, wrong, onChange }: {
           <Icon name="plus" size={14} /> Acertei, mas quero revisar
         </button>
       </div>
-      <datalist id={`${fid}-topics`}>
-        {sugg.map((t) => <option key={t.id} value={t.name} />)}
-      </datalist>
     </div>
   );
 }
@@ -161,6 +156,74 @@ function MistakeGroup({ g, topic, fid, canAdd, onSub, onCount, onItem, onRemove 
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+/**
+ * Campo de tema: digita e filtra os temas da Biblioteca (os desta área
+ * primeiro). Se o tema ainda não existe, a última opção é criá-lo — ele vai
+ * para a Biblioteca quando o simulado é salvo.
+ */
+function TopicCombo({ id, area, topics, value, linked, onPick, onText }: {
+  id: string; area: BigArea; topics: Topic[]; value: string; linked: boolean;
+  onPick: (t: Topic) => void; onText: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [hi, setHi] = useState(0);
+  const box = useRef<HTMLDivElement>(null);
+  const q = normName(value);
+  const list = topics
+    .filter((t) => !q || normName(t.name).includes(q))
+    .sort((a, b) => Number(b.area === area) - Number(a.area === area)
+      || Number(normName(b.name).startsWith(q)) - Number(normName(a.name).startsWith(q))
+      || a.name.localeCompare(b.name, 'pt-BR'))
+    .slice(0, 8);
+  const exact = topics.some((t) => normName(t.name) === q);
+  const canCreate = !!value.trim() && !exact;
+  const n = list.length + (canCreate ? 1 : 0);
+  const choose = (k: number) => {
+    if (k < list.length) onPick(list[k]);
+    else if (canCreate) onText(value.trim());
+    setOpen(false);
+  };
+  return (
+    <div className="tcombo" ref={box} onBlur={(e) => { if (!box.current?.contains(e.relatedTarget as Node)) setOpen(false); }}>
+      <input
+        id={id}
+        value={value}
+        onChange={(e) => { onText(e.target.value); setOpen(true); setHi(0); }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={(e) => {
+          if (!open || !n) return;
+          if (e.key === 'ArrowDown') { e.preventDefault(); setHi((h) => (h + 1) % n); }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); setHi((h) => (h - 1 + n) % n); }
+          else if (e.key === 'Enter') { e.preventDefault(); choose(hi); }
+          else if (e.key === 'Escape') setOpen(false);
+        }}
+        placeholder="Digite o tema, ex.: Bronquiolite"
+        aria-label="Tema"
+        role="combobox"
+        aria-expanded={open}
+        aria-autocomplete="list"
+        autoComplete="off"
+      />
+      {value.trim() && !linked && !open && <span className="tcombo-new" title="Será criado na Biblioteca ao salvar o simulado">novo</span>}
+      {open && n > 0 && (
+        <div className="tcombo-list" role="listbox">
+          {list.map((t, k) => (
+            <button type="button" key={t.id} role="option" aria-selected={k === hi} className={`tcombo-opt ${k === hi ? 'is-hi' : ''}`} onMouseDown={(e) => e.preventDefault()} onClick={() => choose(k)}>
+              <span>{t.name}</span>
+              {t.area !== area && <span className="tcombo-area">{areaOf(t.area).short}</span>}
+            </button>
+          ))}
+          {canCreate && (
+            <button type="button" role="option" aria-selected={hi === list.length} className={`tcombo-opt tcombo-create ${hi === list.length ? 'is-hi' : ''}`} onMouseDown={(e) => e.preventDefault()} onClick={() => choose(list.length)}>
+              <Icon name="plus" size={14} /> Criar tema “{value.trim()}”
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
