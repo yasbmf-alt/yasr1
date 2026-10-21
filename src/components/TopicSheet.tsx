@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useStore } from '../data/store';
-import { useUI, Modal, Field } from './ui';
+import { useUI, Modal, Field, type TopicTab } from './ui';
+import { ConceptMapEditor } from './ConceptMap';
+import { ExamHistory, TopicQuestions, TopicSummary } from './TopicStudy';
+import { topicOccurrences } from '../logic/simErrors';
 import { areaOf, activityLabel, type Priority } from '../types';
 import { STAGE_LABEL, STAGE_NEXT, topicStats } from '../logic/progress';
 import { fmtLong, fmtMinutes, fmtShort, relDay } from '../logic/dates';
@@ -10,13 +13,23 @@ import { SessionEditor } from './SessionForm';
 
 /** Ficha do tema — usada pelo jardim, pelas revisões e (na próxima etapa) pela biblioteca. */
 export function TopicSheet() {
-  const { topicId, openTopic } = useUI();
+  const { topicId, openTopic, topicFocus } = useUI();
   const { data, saveTopic } = useStore();
   const [logging, setLogging] = useState(false);
+  const [tab, setTab] = useState<TopicTab>('geral');
+  const [focusNode, setFocusNode] = useState<string | null>(null);
+  useEffect(() => {
+    setTab(topicFocus?.tab ?? 'geral');
+    setFocusNode(topicFocus?.nodeId ?? null);
+  }, [topicId, topicFocus]);
   const topic = data.topics.find((t) => t.id === topicId);
   const close = () => {
     setLogging(false);
     openTopic(null);
+  };
+  const toMap = (nodeId: string | null = null) => {
+    setFocusNode(nodeId);
+    setTab('mapa');
   };
   if (!topic) return <Modal open={false} onClose={close} title="">{null}</Modal>;
 
@@ -32,6 +45,15 @@ export function TopicSheet() {
 
   return (
     <Modal open={!!topicId} onClose={close} title={topic.name} wide>
+      <div className="seg seg-tabs topic-tabs" role="tablist" aria-label="Seções do tema">
+        {([['geral', 'Visão geral'], ['mapa', 'Mapa conceitual'], ['resumo', 'Resumo'], ['questoes', `Questões${(() => { const n = topicOccurrences(data.simulados, topic.id).length; return n ? ` · ${n}` : ''; })()}`]] as [TopicTab, string][]).map(([id, label]) => (
+          <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'is-on' : ''} onClick={() => { setTab(id); if (id !== 'mapa') setFocusNode(null); }}>{label}</button>
+        ))}
+      </div>
+      {tab === 'mapa' && <ConceptMapEditor topicId={topic.id} focusNodeId={focusNode} height="min(620px, 64vh)" />}
+      {tab === 'resumo' && <TopicSummary topic={topic} onNode={(id) => toMap(id)} />}
+      {tab === 'questoes' && <TopicQuestions topic={topic} />}
+      {tab === 'geral' && (
       <div className="sheet">
         <div className="sheet-top">
           <div className="sheet-plant" style={{ background: area.color }}>
@@ -62,6 +84,8 @@ export function TopicSheet() {
           <div className="stat"><span className="stat-v">{fmtMinutes(st.minutes || null)}</span><span className="stat-l">tempo total</span></div>
           <div className="stat"><span className="stat-v">{relDay(st.lastDate)}</span><span className="stat-l">última sessão</span></div>
         </div>
+
+        <ExamHistory topic={topic} onMap={() => toMap()} />
 
         <div className="sheet-cols">
           <section>
@@ -129,6 +153,7 @@ export function TopicSheet() {
           </button>
         )}
       </div>
+      )}
     </Modal>
   );
 }

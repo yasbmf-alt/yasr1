@@ -19,14 +19,21 @@ interface Celebration {
   extras: string[];
 }
 
+export type TopicTab = 'geral' | 'mapa' | 'resumo' | 'questoes';
+export interface TopicFocus {
+  tab?: TopicTab;
+  nodeId?: string | null;
+}
+
 interface UI {
   page: Page;
   go(p: Page): void;
   toast(text: string, tone?: 'diva' | 'info' | 'erro'): void;
   celebrate(c: Omit<Celebration, 'line'> & { line?: string }): void;
   activityDone(): void;
-  openTopic(id: string | null): void;
+  openTopic(id: string | null, focus?: TopicFocus): void;
   topicId: string | null;
+  topicFocus: TopicFocus | null; // aba (e nó do mapa) para abrir a página do tema
   openMission(id: string): void;
   pendingMission: string | null;
   clearPendingMission(): void;
@@ -58,6 +65,7 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<{ id: number; text: string; tone: string }[]>([]);
   const [cel, setCel] = useState<Celebration | null>(null);
   const [topicId, setTopicId] = useState<string | null>(null);
+  const [topicFocus, setTopicFocus] = useState<TopicFocus | null>(null);
   const [pendingMission, setPendingMission] = useState<string | null>(null);
   const [pendingBook, setPendingBook] = useState<string | null>(null);
   const [roomView, setRoomView] = useState<string | null>(null);
@@ -98,8 +106,12 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
       play('check');
       toast(randomLine(phrases.length && Math.random() < 0.5 ? phrases : DONE_LINES), 'diva');
     },
-    openTopic: setTopicId,
+    openTopic: (id, focus) => {
+      setTopicId(id);
+      setTopicFocus(focus ?? null);
+    },
     topicId,
+    topicFocus,
     openMission: (id) => {
       setPendingMission(id);
       setPage('trilha');

@@ -16,6 +16,8 @@ import { STICKERS } from '../logic/stickers';
 import { play } from '../logic/sound';
 import { uploadImage } from '../components/upload';
 import { BookMacetes, BookNotes } from '../components/BookPages';
+import { topicOccurrences } from '../logic/simErrors';
+import { searchLibrary } from '../logic/search';
 
 interface Book {
   t: Topic;
@@ -25,6 +27,9 @@ interface Shelf {
   area: Area | null;
   books: Book[];
 }
+
+type LibFilter = 'todos' | 'simulados' | 'pendentes';
+const LIB_FILTER_KEY = 'yasr1-lib-filtro';
 
 const BOOK_W = 66;
 const BOOK_GAP = 12;
@@ -45,14 +50,43 @@ export function Biblioteca() {
     }
   }, [ui.pendingBook, ui]);
 
-  const books = useMemo(
+  const [filter, setFilterState] = useState<LibFilter>(() => {
+    try {
+      const f = localStorage.getItem(LIB_FILTER_KEY);
+      return f === 'simulados' || f === 'pendentes' ? f : 'todos';
+    } catch {
+      return 'todos';
+    }
+  });
+  const setFilter = (f: LibFilter) => {
+    setFilterState(f);
+    try {
+      localStorage.setItem(LIB_FILTER_KEY, f);
+    } catch {
+      /* ignore */
+    }
+  };
+  const allBooks = useMemo(
     () =>
       data.topics
-        .map((t) => ({ t, st: topicStats(t, data.sessions) }))
-        .filter((b) => b.st.sessions.length > 0)
-        .sort((a, b) => (a.st.firstDate ?? '').localeCompare(b.st.firstDate ?? '') || a.t.name.localeCompare(b.t.name)),
-    [data.topics, data.sessions],
+        .map((t) => {
+          const occ = topicOccurrences(data.simulados, t.id);
+          const st = topicStats(t, data.sessions);
+          // primeiro contato com o tema: estudo ou simulado
+          const first = [st.firstDate, occ.at(-1)?.sim.date].filter(Boolean).sort()[0] ?? null;
+          const t0 = today();
+          // pendente: correção de simulado em aberto, ou revisão de estudo vencida
+          const pending = occ.some((o) => (o.group.status ?? 'nao') !== 'corrigido') || (!!st.nextReview && st.sessions.length > 0 && st.nextReview <= t0);
+          return { t, st, first, inSims: occ.length > 0, pending, hasMap: (t.map?.nodes.length ?? 0) > 1 };
+        })
+        .filter((b) => b.st.sessions.length > 0 || b.inSims || b.hasMap)
+        .sort((a, b) => (a.first ?? '').localeCompare(b.first ?? '') || a.t.name.localeCompare(b.t.name)),
+    [data.topics, data.sessions, data.simulados],
   );
+  const books = allBooks.filter((b) => (filter === 'simulados' ? b.inSims : filter === 'pendentes' ? b.pending : true));
+  const counts = { simulados: allBooks.filter((b) => b.inSims).length, pendentes: allBooks.filter((b) => b.pending).length };
+  const [q, setQ] = useState('');
+  const hits = useMemo(() => searchLibrary(data, q), [data, q]);
 
   // livro especial do dia: em alguns dias, um livro guarda uma frase
   const specialBook = eggDay('livro-especial', 3) && books.length ? books[dayHash('livro-qual') % books.length].t.id : null;
@@ -81,9 +115,47 @@ export function Biblioteca() {
     <div className="page page-lib">
       <header className="lib-head">
         <h1 className="h1">Biblioteca</h1>
+        <div className="lib-search">
+          <Icon name="search" size={16} />
+          <input
+            id="lib-search"
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Buscar tema, subtópico, mapa ou nota"
+            aria-label="Buscar na Biblioteca"
+            autoComplete="off"
+          />
+          {q.trim().length >= 2 && (
+            <div className="lib-hits" role="listbox" aria-label="Resultados">
+              {hits.length === 0 && <p className="muted small">Nada encontrado.</p>}
+              {hits.map((h, i) => (
+                <button
+                  key={i}
+                  role="option"
+                  aria-selected={false}
+                  className="lib-hit"
+                  onClick={() => {
+                    setQ('');
+                    ui.openTopic(h.topic.id, h.nodeId ? { tab: 'mapa', nodeId: h.nodeId } : { tab: h.where === 'Subtópico' || h.where === 'Lacuna' ? 'questoes' : 'geral' });
+                  }}
+                >
+                  <span className="lib-hit-t">{h.topic.name}</span>
+                  <span className="lib-hit-w">{h.where}</span>
+                  {h.where !== 'Tema' && <span className="lib-hit-x">{h.text}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <AnimatePresence>
           {open && (
             <motion.div className="lib-controls" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+              <div className="seg" role="tablist" aria-label="Filtrar livros">
+                <button className={filter === 'todos' ? 'is-on' : ''} onClick={() => setFilter('todos')}>Todos</button>
+                <button className={filter === 'simulados' ? 'is-on' : ''} onClick={() => setFilter('simulados')}>Nos simulados{counts.simulados ? ` · ${counts.simulados}` : ''}</button>
+                <button className={filter === 'pendentes' ? 'is-on' : ''} onClick={() => setFilter('pendentes')}>Pendentes de revisão{counts.pendentes ? ` · ${counts.pendentes}` : ''}</button>
+              </div>
               <div className="seg" role="tablist" aria-label="Organizar livros">
                 <button className={order === 'estudo' ? 'is-on' : ''} onClick={() => saveSettings({ libraryOrder: 'estudo' })}>Ordem de estudo</button>
                 <button className={order === 'area' ? 'is-on' : ''} onClick={() => saveSettings({ libraryOrder: 'area' })}>Especialidade</button>
@@ -113,7 +185,7 @@ export function Biblioteca() {
           <div className="w-body">
             <div className="w-interior">
               <span className="w-interior-bg" aria-hidden="true"><Asset slot="library.interior" /></span>
-              <Shelves books={books} order={order} open={open} selected={selected} jumping={jumping} onPick={pick} special={specialBook} />
+              <Shelves books={books} order={order} open={open} selected={selected} jumping={jumping} onPick={pick} special={specialBook} filter={filter} />
             </div>
             <Door side="left" open={open} onClick={toggle} />
             <Door side="right" open={open} onClick={toggle} />
@@ -161,8 +233,8 @@ function Door({ side, open, onClick }: { side: 'left' | 'right'; open: boolean; 
 
 // ── Prateleiras e livros ──────────────────────────────────────
 
-function Shelves({ books, order, open, selected, jumping, onPick, special }: {
-  books: Book[]; order: 'estudo' | 'area'; open: boolean; selected: string | null; jumping: string | null; onPick: (id: string) => void; special: string | null;
+function Shelves({ books, order, open, selected, jumping, onPick, special, filter }: {
+  books: Book[]; order: 'estudo' | 'area'; open: boolean; selected: string | null; jumping: string | null; onPick: (id: string) => void; special: string | null; filter: LibFilter;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [perShelf, setPerShelf] = useState(8);
@@ -193,7 +265,11 @@ function Shelves({ books, order, open, selected, jumping, onPick, special }: {
     <div className="shelves" ref={ref}>
       {books.length === 0 && open && (
         <motion.p className="shelves-empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}>
-          Cada tema vira um livro aqui no primeiro registro de estudo.
+          {filter === 'simulados'
+            ? 'Nenhum tema ligado a simulados ainda. Detalhe os erros de um simulado para eles aparecerem aqui.'
+            : filter === 'pendentes'
+              ? 'Nada pendente de revisão. Tudo em dia!'
+              : 'Cada tema vira um livro aqui no primeiro registro de estudo.'}
         </motion.p>
       )}
       {shelves.map((sh, i) => (
@@ -344,6 +420,7 @@ function OpenBook({ topicId, onClose }: { topicId: string; onClose: () => void }
             </dl>
             <div className="pr-actions">
               <button className="btn btn-primary btn-sm" onClick={() => { onClose(); ui.openTopic(t.id); }}>Ver ficha completa</button>
+              <button className="btn btn-quiet btn-sm" onClick={() => { onClose(); ui.openTopic(t.id, { tab: 'mapa' }); }}><Icon name="brain" size={15} /> Mapa conceitual</button>
               <button className="btn btn-quiet btn-sm" disabled={busy} onClick={() => fileRef.current?.click()}>
                 <Icon name="upload" size={15} /> {busy ? 'Enviando…' : t.coverAssetId ? 'Trocar capa' : 'Personalizar capa'}
               </button>
