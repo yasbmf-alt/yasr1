@@ -28,8 +28,9 @@ interface Shelf {
   books: Book[];
 }
 
-type LibFilter = 'todos' | 'simulados' | 'pendentes';
-const LIB_FILTER_KEY = 'yasr1-lib-filtro';
+// duas estantes: temas estudados na trilha e temas que vieram dos simulados
+type LibShelf = 'trilha' | 'simulados';
+const LIB_SHELF_KEY = 'yasr1-lib-estante';
 
 const BOOK_W = 66;
 const BOOK_GAP = 12;
@@ -50,22 +51,22 @@ export function Biblioteca() {
     }
   }, [ui.pendingBook, ui]);
 
-  const [filter, setFilterState] = useState<LibFilter>(() => {
+  const [shelf, setShelfState] = useState<LibShelf>(() => {
     try {
-      const f = localStorage.getItem(LIB_FILTER_KEY);
-      return f === 'simulados' || f === 'pendentes' ? f : 'todos';
+      return localStorage.getItem(LIB_SHELF_KEY) === 'simulados' ? 'simulados' : 'trilha';
     } catch {
-      return 'todos';
+      return 'trilha';
     }
   });
-  const setFilter = (f: LibFilter) => {
-    setFilterState(f);
+  const setShelf = (f: LibShelf) => {
+    setShelfState(f);
     try {
-      localStorage.setItem(LIB_FILTER_KEY, f);
+      localStorage.setItem(LIB_SHELF_KEY, f);
     } catch {
       /* ignore */
     }
   };
+  const [pendingOnly, setPendingOnly] = useState(false);
   const allBooks = useMemo(
     () =>
       data.topics
@@ -77,14 +78,17 @@ export function Biblioteca() {
           const t0 = today();
           // pendente: correção de simulado em aberto, ou revisão de estudo vencida
           const pending = occ.some((o) => (o.group.status ?? 'nao') !== 'corrigido') || (!!st.nextReview && st.sessions.length > 0 && st.nextReview <= t0);
-          return { t, st, first, inSims: occ.length > 0, pending, hasMap: (t.map?.nodes.length ?? 0) > 1 };
+          // trilha: estudado em sessões ou missões (ou com mapa avulso); simulados: apareceu nos erros de um simulado
+          const inTrail = st.sessions.length > 0 || data.missions.some((m) => m.topicId === t.id) || (t.map?.nodes.length ?? 0) > 1;
+          return { t, st, first, inSims: occ.length > 0, inTrail, pending };
         })
-        .filter((b) => b.st.sessions.length > 0 || b.inSims || b.hasMap)
+        .filter((b) => b.inTrail || b.inSims)
         .sort((a, b) => (a.first ?? '').localeCompare(b.first ?? '') || a.t.name.localeCompare(b.t.name)),
-    [data.topics, data.sessions, data.simulados],
+    [data.topics, data.sessions, data.simulados, data.missions],
   );
-  const books = allBooks.filter((b) => (filter === 'simulados' ? b.inSims : filter === 'pendentes' ? b.pending : true));
-  const counts = { simulados: allBooks.filter((b) => b.inSims).length, pendentes: allBooks.filter((b) => b.pending).length };
+  const onShelf = allBooks.filter((b) => (shelf === 'simulados' ? b.inSims : b.inTrail));
+  const books = pendingOnly ? onShelf.filter((b) => b.pending) : onShelf;
+  const counts = { trilha: allBooks.filter((b) => b.inTrail).length, simulados: allBooks.filter((b) => b.inSims).length, pendentes: onShelf.filter((b) => b.pending).length };
   const [q, setQ] = useState('');
   const hits = useMemo(() => searchLibrary(data, q), [data, q]);
 
@@ -151,11 +155,13 @@ export function Biblioteca() {
         <AnimatePresence>
           {open && (
             <motion.div className="lib-controls" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-              <div className="seg" role="tablist" aria-label="Filtrar livros">
-                <button className={filter === 'todos' ? 'is-on' : ''} onClick={() => setFilter('todos')}>Todos</button>
-                <button className={filter === 'simulados' ? 'is-on' : ''} onClick={() => setFilter('simulados')}>Nos simulados{counts.simulados ? ` · ${counts.simulados}` : ''}</button>
-                <button className={filter === 'pendentes' ? 'is-on' : ''} onClick={() => setFilter('pendentes')}>Pendentes de revisão{counts.pendentes ? ` · ${counts.pendentes}` : ''}</button>
+              <div className="seg" role="tablist" aria-label="Estante">
+                <button className={shelf === 'trilha' ? 'is-on' : ''} onClick={() => setShelf('trilha')}>Temas da trilha{counts.trilha ? ` · ${counts.trilha}` : ''}</button>
+                <button className={shelf === 'simulados' ? 'is-on' : ''} onClick={() => setShelf('simulados')}>Temas dos simulados{counts.simulados ? ` · ${counts.simulados}` : ''}</button>
               </div>
+              <button className={`lib-pend ${pendingOnly ? 'is-on' : ''}`} aria-pressed={pendingOnly} onClick={() => setPendingOnly(!pendingOnly)}>
+                Pendentes de revisão{counts.pendentes ? ` · ${counts.pendentes}` : ''}
+              </button>
               <div className="seg" role="tablist" aria-label="Organizar livros">
                 <button className={order === 'estudo' ? 'is-on' : ''} onClick={() => saveSettings({ libraryOrder: 'estudo' })}>Ordem de estudo</button>
                 <button className={order === 'area' ? 'is-on' : ''} onClick={() => saveSettings({ libraryOrder: 'area' })}>Especialidade</button>
@@ -185,7 +191,7 @@ export function Biblioteca() {
           <div className="w-body">
             <div className="w-interior">
               <span className="w-interior-bg" aria-hidden="true"><Asset slot="library.interior" /></span>
-              <Shelves books={books} order={order} open={open} selected={selected} jumping={jumping} onPick={pick} special={specialBook} filter={filter} />
+              <Shelves books={books} order={order} open={open} selected={selected} jumping={jumping} onPick={pick} special={specialBook} shelf={shelf} pendingOnly={pendingOnly} />
             </div>
             <Door side="left" open={open} onClick={toggle} />
             <Door side="right" open={open} onClick={toggle} />
@@ -233,8 +239,8 @@ function Door({ side, open, onClick }: { side: 'left' | 'right'; open: boolean; 
 
 // ── Prateleiras e livros ──────────────────────────────────────
 
-function Shelves({ books, order, open, selected, jumping, onPick, special, filter }: {
-  books: Book[]; order: 'estudo' | 'area'; open: boolean; selected: string | null; jumping: string | null; onPick: (id: string) => void; special: string | null; filter: LibFilter;
+function Shelves({ books, order, open, selected, jumping, onPick, special, shelf, pendingOnly }: {
+  books: Book[]; order: 'estudo' | 'area'; open: boolean; selected: string | null; jumping: string | null; onPick: (id: string) => void; special: string | null; shelf: LibShelf; pendingOnly: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [perShelf, setPerShelf] = useState(8);
@@ -265,10 +271,10 @@ function Shelves({ books, order, open, selected, jumping, onPick, special, filte
     <div className="shelves" ref={ref}>
       {books.length === 0 && open && (
         <motion.p className="shelves-empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}>
-          {filter === 'simulados'
-            ? 'Nenhum tema ligado a simulados ainda. Detalhe os erros de um simulado para eles aparecerem aqui.'
-            : filter === 'pendentes'
-              ? 'Nada pendente de revisão. Tudo em dia!'
+          {pendingOnly
+            ? 'Nada pendente de revisão nesta estante. Tudo em dia!'
+            : shelf === 'simulados'
+              ? 'Nenhum tema dos simulados ainda. Detalhe os erros de um simulado para eles aparecerem aqui.'
               : 'Cada tema vira um livro aqui no primeiro registro de estudo.'}
         </motion.p>
       )}

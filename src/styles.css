@@ -2138,3 +2138,6 @@ h5.sum-h { font-size: 14px; }
 /* ── Registros agrupados por tema no dia ───────────────────── */
 .reg-group-items { padding: 4px 10px 10px 26px; display: flex; flex-direction: column; gap: 6px; }
 .reg-group-items .reg-card { box-shadow: inset 0 0 0 1.5px var(--line); }
+.lib-pend { border: 0; background: var(--surface-2); color: var(--muted); font-weight: 700; font-size: 13.5px; padding: 8px 14px; border-radius: 999px; cursor: pointer; }
+.lib-pend:hover { color: var(--fg); }
+.lib-pend.is-on { background: var(--rosa); color: var(--rosa-ink); }
