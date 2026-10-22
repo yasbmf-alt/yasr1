@@ -10,7 +10,7 @@ import { Icon } from '../components/Icon';
 import { Asset, AssetImg } from '../assets/registry';
 import { SPECIES_BY_AREA, StationIcon } from '../assets/art';
 import { AREAS, areaOf, type Area, type Topic } from '../types';
-import { STAGE_LABEL, topicStats, type TopicStats } from '../logic/progress';
+import { STAGE_LABEL, missionProgress, topicStats, type TopicStats } from '../logic/progress';
 import { fmtLong, relDay } from '../logic/dates';
 import { STICKERS } from '../logic/stickers';
 import { play } from '../logic/sound';
@@ -78,8 +78,10 @@ export function Biblioteca() {
           const t0 = today();
           // pendente: correção de simulado em aberto, ou revisão de estudo vencida
           const pending = occ.some((o) => (o.group.status ?? 'nao') !== 'corrigido') || (!!st.nextReview && st.sessions.length > 0 && st.nextReview <= t0);
-          // trilha: estudado em sessões ou missões (ou com mapa avulso); simulados: apareceu nos erros de um simulado
-          const inTrail = st.sessions.length > 0 || data.missions.some((m) => m.topicId === t.id) || (t.map?.nodes.length ?? 0) > 1;
+          // trilha: tema de missão só entra quando uma missão dele é concluída (missão só programada não conta);
+          // tema fora das missões entra no primeiro registro de estudo. Simulados: apareceu nos erros de um simulado.
+          const ms = data.missions.filter((m) => m.topicId === t.id);
+          const inTrail = ms.length ? ms.some((m) => missionProgress(m).complete) : st.sessions.length > 0 || (t.map?.nodes.length ?? 0) > 1;
           return { t, st, first, inSims: occ.length > 0, inTrail, pending };
         })
         .filter((b) => b.inTrail || b.inSims)
@@ -275,7 +277,7 @@ function Shelves({ books, order, open, selected, jumping, onPick, special, shelf
             ? 'Nada pendente de revisão nesta estante. Tudo em dia!'
             : shelf === 'simulados'
               ? 'Nenhum tema dos simulados ainda. Detalhe os erros de um simulado para eles aparecerem aqui.'
-              : 'Cada tema vira um livro aqui no primeiro registro de estudo.'}
+              : 'Cada tema de missão vira um livro aqui quando você conclui a missão dele.'}
         </motion.p>
       )}
       {shelves.map((sh, i) => (
