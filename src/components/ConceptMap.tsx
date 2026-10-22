@@ -41,6 +41,23 @@ export function ConceptMapEditor({ mapKey, map, makeMap, onSave, focusNodeId, fo
   const [panel, setPanel] = useState(false);
   const [, setSizeVer] = useState(0);
   const [hist, setHist] = useState({ past: 0, future: 0 });
+  const [full, setFull] = useState(false);
+  // foco: ao abrir um ramo, os ramos vizinhos se fecham (menos coisa aberta ao mesmo tempo)
+  const [focusMode, setFocusModeState] = useState(() => {
+    try {
+      return localStorage.getItem('yasr1-mapa-foco') !== '0';
+    } catch {
+      return true;
+    }
+  });
+  const setFocusMode = (v: boolean) => {
+    setFocusModeState(v);
+    try {
+      localStorage.setItem('yasr1-mapa-foco', v ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+  };
 
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
@@ -276,6 +293,56 @@ export function ConceptMapEditor({ mapKey, map, makeMap, onSave, focusNodeId, fo
     setPanel(false);
   };
   const patch = (id: string, p: Partial<MapNode>, history = true) => apply((ns) => ns.map((n) => (n.id === id ? { ...n, ...p } : n)), history);
+  // esconder / mostrar os ramos de um tópico
+  const setBranch = (id: string, open: boolean) =>
+    apply((ns) => {
+      const me = ns.find((n) => n.id === id);
+      const hasKids = (x: string) => ns.some((n) => n.parentId === x);
+      return ns.map((n) => {
+        if (n.id === id) return { ...n, collapsed: !open };
+        // modo foco: fecha os irmãos que têm ramos
+        if (open && focusMode && me && n.parentId === me.parentId && n.id !== id && !n.area && hasKids(n.id)) return { ...n, collapsed: true };
+        return n;
+      });
+    });
+  const setAll = (open: boolean) =>
+    apply((ns) => {
+      const hasKids = (x: string) => ns.some((n) => n.parentId === x);
+      // a raiz e as grandes áreas ficam sempre abertas, para os temas continuarem visíveis
+      return ns.map((n) => (n.id === rootRef.current || n.area || !hasKids(n.id) ? { ...n, collapsed: false } : { ...n, collapsed: !open }));
+    });
+
+  // tela inteira (com reserva para navegadores sem a API, como o iPhone)
+  useEffect(() => {
+    const h = () => setFull(document.fullscreenElement === wrap.current);
+    document.addEventListener('fullscreenchange', h);
+    return () => document.removeEventListener('fullscreenchange', h);
+  }, []);
+  const toggleFull = async () => {
+    const el = wrap.current;
+    if (!el) return;
+    if (!full) {
+      try {
+        const req = el.requestFullscreen ?? (el as unknown as { webkitRequestFullscreen?: () => Promise<void> }).webkitRequestFullscreen;
+        if (req) {
+          await req.call(el);
+          return;
+        }
+      } catch {
+        /* cai na tela inteira simulada */
+      }
+      setFull(true);
+    } else if (document.fullscreenElement) await document.exitFullscreen();
+    else setFull(false);
+  };
+  useEffect(() => {
+    if (!full) return undefined;
+    // dá tempo do quadro mudar de tamanho antes de enquadrar
+    const id = setTimeout(() => fit(), 120);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [full]);
+
   const finishEdit = (id: string, title: string) => {
     setEditing(null);
     wrap.current?.focus({ preventScroll: true }); // atalhos continuam funcionando
@@ -374,6 +441,8 @@ export function ConceptMapEditor({ mapKey, map, makeMap, onSave, focusNodeId, fo
       pushHistory(g.before);
       scheduleSave();
     }
+    // clicar num tópico recolhido abre os ramos dele
+    if (g.mode === 'node' && !g.moved && nodesRef.current.find((n) => n.id === g.id)?.collapsed) setBranch(g.id, true);
     if (g.mode === 'pan' && !g.moved) {
       setSel(null);
       setEditing(null);
@@ -403,6 +472,11 @@ export function ConceptMapEditor({ mapKey, map, makeMap, onSave, focusNodeId, fo
     if (mod && e.key.toLowerCase() === 'y' && !typing) {
       e.preventDefault();
       redo();
+      return;
+    }
+    if (e.key === 'Escape' && full && !document.fullscreenElement && !sel && !typing) {
+      e.stopPropagation();
+      setFull(false);
       return;
     }
     if (typing || !sel) return;
@@ -450,7 +524,7 @@ export function ConceptMapEditor({ mapKey, map, makeMap, onSave, focusNodeId, fo
   if (!map && !makeMap) return null;
   const fixed = (n: MapNode) => n.id === rootId || !!n.area || !!n.ref; // nós que o app criou
   return (
-    <div className={`cm ${panel && selNode ? 'has-panel' : ''}`} ref={wrap} style={{ height: height ?? 560 }} tabIndex={0} onKeyDown={onKeyDown}>
+    <div className={`cm ${panel && selNode ? 'has-panel' : ''} ${full ? 'is-full' : ''}`} ref={wrap} style={{ height: full ? undefined : height ?? 560 }} tabIndex={0} onKeyDown={onKeyDown}>
       <div
         className="cm-viewport"
         ref={vp}
@@ -497,11 +571,11 @@ export function ConceptMapEditor({ mapKey, map, makeMap, onSave, focusNodeId, fo
                   <button
                     type="button"
                     className={`cm-collapse ${n.collapsed ? 'is-closed' : ''}`}
-                    onClick={() => patch(n.id, { collapsed: !n.collapsed })}
-                    aria-label={n.collapsed ? `Mostrar ${kids} ramos` : 'Recolher ramos'}
-                    title={n.collapsed ? `Mostrar ${kids} ramo${kids > 1 ? 's' : ''}` : 'Recolher'}
+                    onClick={() => setBranch(n.id, !!n.collapsed)}
+                    aria-label={n.collapsed ? `Mostrar ${kids} ramos` : 'Esconder ramos'}
+                    title={n.collapsed ? `Mostrar ${kids} ramo${kids > 1 ? 's' : ''}` : 'Esconder os ramos'}
                   >
-                    {n.collapsed ? kids : '−'}
+                    {n.collapsed ? `+${kids}` : '−'}
                   </button>
                 )}
               </div>
@@ -530,8 +604,18 @@ export function ConceptMapEditor({ mapKey, map, makeMap, onSave, focusNodeId, fo
         <span className="cm-sep" />
         <button type="button" onClick={fit} title="Ver o mapa inteiro">Centralizar</button>
         <button type="button" onClick={() => { apply((ns) => tidy(ns, rootId, sizes.current)); needFit.current = 'all'; }} title="Organizar os ramos a partir do tema">Organizar</button>
+        <span className="cm-sep" />
+        <button type="button" onClick={() => setAll(false)} title="Esconder os ramos de todos os tópicos">Recolher tudo</button>
+        <button type="button" onClick={() => setAll(true)} title="Mostrar todos os ramos">Abrir tudo</button>
+        <button type="button" className={`cm-focus ${focusMode ? 'is-on' : ''}`} aria-pressed={focusMode} onClick={() => setFocusMode(!focusMode)} title="Foco: ao abrir um tópico, os vizinhos se fecham">Foco</button>
+        <span className="cm-sep" />
+        <button type="button" onClick={() => void toggleFull()} aria-label={full ? 'Sair da tela inteira' : 'Tela inteira'} title={full ? 'Sair da tela inteira (Esc)' : 'Tela inteira'}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+            {full ? <path d="M6 2v4H2M10 2v4h4M6 14v-4H2M10 14v-4h4" /> : <path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4" />}
+          </svg>
+        </button>
       </div>
-      <p className="cm-ui cm-hint">Duplo clique no fundo cria um nó · <kbd>Tab</kbd> ramo · <kbd>Enter</kbd> irmão · arraste para mover</p>
+      <p className="cm-ui cm-hint">Duplo clique no fundo cria um nó · <kbd>Tab</kbd> ramo · <kbd>Enter</kbd> irmão · clique num tópico recolhido para abrir</p>
 
       {panel && selNode && (
         <NodePanel

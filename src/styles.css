@@ -2141,3 +2141,13 @@ h5.sum-h { font-size: 14px; }
 .lib-pend { border: 0; background: var(--surface-2); color: var(--muted); font-weight: 700; font-size: 13.5px; padding: 8px 14px; border-radius: 999px; cursor: pointer; }
 .lib-pend:hover { color: var(--fg); }
 .lib-pend.is-on { background: var(--rosa); color: var(--rosa-ink); }
+/* mapa: tela inteira e ramos recolhidos */
+.cm:fullscreen, .cm.is-full { height: 100vh !important; height: 100dvh !important; border-radius: 0; box-shadow: none; }
+.cm.is-full { position: fixed; inset: 0; z-index: 1000; }
+.cm-node .cm-collapse { opacity: 1 !important; }
+.cm-collapse { width: auto; min-width: 22px; padding: 0 5px; }
+.cm-collapse.is-closed { font-size: 11px; }
+.cm-node:has(.cm-collapse.is-closed) { box-shadow: 3px 3px 0 -1px #fff, 3px 3px 0 0 var(--line), 0 1px 2px rgba(46, 74, 127, 0.06); }
+.cm-focus.is-on { background: var(--rosa) !important; color: var(--rosa-ink) !important; }
+.cm-toolbar { max-width: calc(100% - 20px); overflow-x: auto; scrollbar-width: none; }
+.cm-toolbar button { flex: none; }
