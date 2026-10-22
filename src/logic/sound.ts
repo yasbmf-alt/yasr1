@@ -362,7 +362,8 @@ const MUSIC_BOX: [number, number][] = [
 export type SoundName =
   | 'check' | 'uncheck' | 'mission' | 'chapter' | 'pop' | 'grow' | 'flip'
   | 'door' | 'doorClose' | 'drawer' | 'drawerClose' | 'page' | 'bookClose' | 'paper' | 'envelope'
-  | 'sticker' | 'note' | 'drop' | 'key' | 'kiss' | 'meow' | 'purr' | 'musicbox' | 'candy';
+  | 'sticker' | 'note' | 'drop' | 'key' | 'kiss' | 'meow' | 'purr' | 'musicbox' | 'candy'
+  | 'fizzle' | 'ignite';
 
 export function play(name: SoundName) {
   if (!enabled || volume <= 0) return;
@@ -389,6 +390,13 @@ export function play(name: SoundName) {
         break;
       case 'pop':
         tone(660, 0, 0.07, 'sine', 0.07);
+        break;
+      case 'fizzle': // chama apagando: dois tons baixinhos, sem drama
+        tone(440, 0, 0.16, 'sine', 0.035);
+        tone(349, 0.13, 0.3, 'sine', 0.03);
+        break;
+      case 'ignite': // chama acendendo de novo
+        [392, 523, 784].forEach((f, i) => tone(f, i * 0.07, 0.22, 'triangle', 0.05));
         break;
       case 'flip':
         void (cache.get('page') ? playBuffer(cache.get('page')!, 0.7) : render('page').then((x) => x && playBuffer(x, 0.7)));

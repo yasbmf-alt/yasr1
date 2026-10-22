@@ -5,7 +5,9 @@ import { SimMapEditor } from '../components/ConceptMap';
 import { MapSummary } from '../components/TopicStudy';
 import { syncSimMap } from '../logic/conceptMap';
 import { BIG_AREAS, CORRECTION_STATUS, REASONS, type BigArea, type CorrectionStatus, type ErrorGroup, type Simulado } from '../types';
-import { fmtShort } from '../logic/dates';
+import { fmtMinutes, fmtShort, today, uid } from '../logic/dates';
+import { ConfirmButton, numOrNull, useUI } from '../components/ui';
+import type { Session } from '../types';
 import { areaWrong, isMistake, topicOccurrences } from '../logic/simErrors';
 import { AREA_CHART } from './Simulados';
 
@@ -124,6 +126,8 @@ export function Correcao({ onEdit }: { onEdit: (s: Simulado) => void }) {
           );
         })}
       </div>
+
+      <CorrectionLog sim={sim} />
 
       <div className="corr-body">
         <nav className="corr-nav" aria-label="Grandes áreas e temas">
@@ -251,5 +255,80 @@ function TopicFacts({ entry, sim, onStatus }: { entry: TopicEntry; sim: Simulado
       </div>
 
     </div>
+  );
+}
+
+/**
+ * Tempo de correção do simulado. Cada registro vira uma sessão de estudo do
+ * tipo "Correção de simulado": entra no total do dia, nas estatísticas, na
+ * sequência e no Jardim. O tempo da prova (do registro do simulado) fica à
+ * parte, então nada é contado duas vezes.
+ */
+function CorrectionLog({ sim }: { sim: Simulado }) {
+  const { data, saveSession, deleteSession, saveSimulado, snapshot } = useStore();
+  const ui = useUI();
+  const [date, setDate] = useState(today());
+  const [hh, setHh] = useState('');
+  const [mm, setMm] = useState('');
+  const logs = data.sessions.filter((s) => s.type === 'correcao' && s.simuladoId === sim.id).sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
+  const total = logs.reduce((a, s) => a + (s.minutes ?? 0), 0);
+  const minutes = (numOrNull(hh) ?? 0) * 60 + (numOrNull(mm) ?? 0);
+  const done = !!sim.correctionDoneAt;
+  const setDone = (v: boolean) => {
+    const cur = snapshot().simulados.find((x) => x.id === sim.id);
+    if (cur) saveSimulado({ ...cur, correctionDoneAt: v ? today() : null });
+  };
+  const add = () => {
+    if (minutes <= 0) return;
+    const s: Session = {
+      id: uid(), date: date || today(), topicId: '', missionId: null, activityId: null, type: 'correcao', minutes,
+      questions: null, correct: null, errorTopics: [], notes: '', createdAt: new Date().toISOString(), simuladoId: sim.id,
+    };
+    saveSession(s);
+    setHh('');
+    setMm('');
+    ui.toast(`Correção registrada: ${fmtMinutes(minutes)}.`);
+  };
+  return (
+    <section className={`corr-log ${done ? 'is-done' : ''}`} aria-label="Registro da correção">
+      <div className="corr-log-head">
+        <div>
+          <strong>Correção de {sim.name}</strong>
+          <span className="muted small">
+            {done ? `Concluída em ${fmtShort(sim.correctionDoneAt!)}` : 'Em andamento'}
+            {total ? ` · ${fmtMinutes(total)} de correção registrados` : ''}
+          </span>
+        </div>
+        <label className="corr-log-check">
+          <input type="checkbox" checked={done} onChange={(e) => setDone(e.target.checked)} />
+          Correção concluída
+        </label>
+      </div>
+      <form className="corr-log-form" onSubmit={(e) => { e.preventDefault(); add(); }}>
+        <label>
+          <span>Data</span>
+          <input id="corr-date" type="date" value={date} max={today()} onChange={(e) => setDate(e.target.value)} />
+        </label>
+        <label>
+          <span>Tempo corrigindo</span>
+          <span className="time-pair">
+            <input id="corr-h" inputMode="numeric" value={hh} onChange={(e) => setHh(e.target.value.replace(/\D/g, ''))} placeholder="h" aria-label="Horas" /> h
+            <input id="corr-m" inputMode="numeric" value={mm} onChange={(e) => setMm(e.target.value.replace(/\D/g, ''))} placeholder="min" aria-label="Minutos" /> min
+          </span>
+        </label>
+        <button type="submit" className="btn btn-primary btn-sm" disabled={minutes <= 0}><Icon name="clock" size={15} /> Registrar tempo</button>
+      </form>
+      {logs.length > 0 && (
+        <ul className="corr-log-list">
+          {logs.map((l) => (
+            <li key={l.id}>
+              <span className="mono">{fmtShort(l.date)}</span>
+              <span>{fmtMinutes(l.minutes)}</span>
+              <ConfirmButton className="icon-btn icon-btn-sm" label={<Icon name="trash" size={14} />} question="Apagar este tempo?" confirmLabel="Apagar" onConfirm={() => deleteSession(l.id)} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

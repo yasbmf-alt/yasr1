@@ -20,6 +20,7 @@ import { useAmbient } from '../components/useAmbient';
 import { buildLandscape, buildScene, PROP_ASPECT, samplePath, SCENE_COLORS, themeFor, W, TOP, ROW, xAt as sceneXAt, type Landscape } from './trailScene';
 import { Leaf } from '../assets/trailArt';
 import { Candy, TrailCat } from '../components/Secrets';
+import { StreakFlame } from '../components/StreakFlame';
 
 // Cada capítulo ganha um "mapa" de cor própria, como os andares da referência.
 const THEMES = [
@@ -183,6 +184,7 @@ function Greeting() {
           </motion.button>
         </AnimatePresence>
       </div>
+      <StreakFlame />
     </header>
   );
 }

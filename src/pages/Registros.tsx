@@ -9,8 +9,9 @@ import { SessionEditor } from '../components/SessionForm';
 import { SimuladoForm, AREA_CHART } from './Simulados';
 import { play } from '../logic/sound';
 import { topicStats } from '../logic/progress';
+import { groupPct, groupStudy, type StudyGroup } from '../logic/studyGroups';
 import {
-  ACTIVITY_TYPES, AREAS, BIG_AREAS, MASTERY, activityLabel, areaOf, reasonLabel, subtemaLabel,
+  ACTIVITY_TYPES, AREAS, BIG_AREAS, CORRECTION_TYPE, MASTERY, activityLabel, areaOf, reasonLabel, subtemaLabel,
   type ActivityType, type Area, type Session, type Simulado, type Topic,
 } from '../types';
 import { addDays, DIAS_CURTOS, fmtMinutes, fmtShort, fromKey, MESES_LONGOS, pad, toKey, today } from '../logic/dates';
@@ -70,6 +71,7 @@ function writePref(key: string, v: string) {
 export function Registros() {
   const { data, saving, mode } = useStore();
   const reduce = useReducedMotion();
+  const ui = useUI();
   const [q, setQ] = useState('');
   const [period, setPeriodRaw] = useState<Period>(() => readPref<Period>('yasr1-reg-period', 'tudo'));
   const [area, setArea] = useState<Area | ''>('');
@@ -183,6 +185,28 @@ export function Registros() {
     simCount.current = data.simulados.length;
   }, [data.simulados]);
 
+  // correção de simulado se edita na própria Correção de Simulados
+  const openCorrection = (s: Session) => {
+    try {
+      localStorage.setItem('yasr1-sim-tab', 'corr');
+      if (s.simuladoId) localStorage.setItem('yasr1-corr-sim', s.simuladoId);
+    } catch {
+      /* ignore */
+    }
+    ui.go('simulados');
+  };
+
+  // no dia, as atividades do mesmo tema viram um cartão só (os registros continuam separados por dentro)
+  const dayRows = (items: Entry[]) => {
+    const sess = items.filter((e): e is Extract<Entry, { kind: 'session' }> => e.kind === 'session');
+    const byId = new Map(sess.map((e) => [e.s.id, e]));
+    const out: ({ kind: 'group'; g: StudyGroup; entries: Entry[]; at: string } | { kind: 'sim'; e: Entry; at: string })[] = [
+      ...groupStudy(sess.map((e) => e.s), data.topics, data.simulados).map((g) => ({ kind: 'group' as const, g, entries: g.sessions.map((x) => byId.get(x.id)!), at: g.createdAt })),
+      ...items.filter((e) => e.kind === 'simulado').map((e) => ({ kind: 'sim' as const, e, at: e.createdAt })),
+    ];
+    return out.sort((a, b) => b.at.localeCompare(a.at));
+  };
+
   // agrupado por dia
   const groups: { date: string; items: Entry[] }[] = [];
   for (const e of rows.slice(0, limit)) {
@@ -240,6 +264,7 @@ export function Registros() {
         <select id="reg-type" value={type} onChange={(e) => setType(e.target.value as TypeFilter)} aria-label="Tipo de atividade">
           <option value="">Todos os tipos</option>
           {ACTIVITY_TYPES.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+          <option value={CORRECTION_TYPE.id}>{CORRECTION_TYPE.label}</option>
           <option value="simulado">Simulado</option>
         </select>
         <select id="reg-status" value={status} onChange={(e) => setStatus(e.target.value as Status)} aria-label="Status">
@@ -284,18 +309,32 @@ export function Registros() {
               <motion.div key={g.date} className="reg-day" layout={!reduce} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
                 <h3 className="reg-day-title">{dayLabel(g.date)}</h3>
                 <AnimatePresence initial={false}>
-                  {g.items.map((e) => (
-                    <EntryCard
-                      key={e.id}
-                      e={e}
-                      open={open === e.id}
-                      fresh={fresh === e.id}
-                      nextReview={e.kind === 'session' ? reviews.get(e.s.topicId) ?? null : null}
-                      onToggle={() => setOpen(open === e.id ? null : e.id)}
-                      onEdit={() => (e.kind === 'session' ? setEditing({ s: e.s }) : setSimEditing(e.sim))}
-                      onDuplicate={() => e.kind === 'session' && setEditing({ s: e.s, dup: true })}
-                    />
-                  ))}
+                  {dayRows(g.items).map((r) =>
+                    r.kind === 'group' ? (
+                      <GroupCard
+                        key={r.g.key}
+                        g={r.g}
+                        entries={r.entries}
+                        open={open === r.g.key}
+                        fresh={!!fresh && r.entries.some((e) => e.id === fresh)}
+                        reviews={reviews}
+                        onToggle={() => setOpen(open === r.g.key ? null : r.g.key)}
+                        onEdit={(s) => (s.type === 'correcao' ? openCorrection(s) : setEditing({ s }))}
+                        onDuplicate={(s) => (s.type === 'correcao' ? openCorrection(s) : setEditing({ s, dup: true }))}
+                      />
+                    ) : (
+                      <EntryCard
+                        key={r.e.id}
+                        e={r.e}
+                        open={open === r.e.id}
+                        fresh={fresh === r.e.id}
+                        nextReview={null}
+                        onToggle={() => setOpen(open === r.e.id ? null : r.e.id)}
+                        onEdit={() => r.e.kind === 'simulado' && setSimEditing(r.e.sim)}
+                        onDuplicate={() => undefined}
+                      />
+                    ),
+                  )}
                 </AnimatePresence>
               </motion.div>
             ))}
@@ -331,6 +370,69 @@ export function Registros() {
   );
 }
 
+// ── Cartão de um tema no dia (várias atividades) ──────────────
+
+function GroupCard({ g, entries, open, fresh, reviews, onToggle, onEdit, onDuplicate }: {
+  g: StudyGroup; entries: Entry[]; open: boolean; fresh: boolean; reviews: Map<string, string | null>;
+  onToggle: () => void; onEdit: (s: Session) => void; onDuplicate: (s: Session) => void;
+}) {
+  const reduce = useReducedMotion();
+  const [inner, setInner] = useState<string | null>(null);
+  const p = groupPct(g);
+  const a = areaOf(g.area);
+  const correction = g.sessions[0]?.type === 'correcao';
+  return (
+    <motion.article
+      layout={!reduce ? 'position' : false}
+      className={`reg-card reg-group ${open ? 'is-open' : ''} ${fresh ? 'is-fresh' : ''}`}
+      initial={{ opacity: 0, y: 10, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+      transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+    >
+      <button className="reg-row" onClick={onToggle} aria-expanded={open} aria-label={`${g.title}: ${entries.length} atividade${entries.length > 1 ? 's' : ''}`}>
+        <span className="reg-dot" style={{ background: correction ? 'var(--azul)' : a.color }} aria-hidden="true" />
+        <span className="reg-main">
+          <span className="reg-name">{g.title}</span>
+          <span className="reg-meta">
+            <span>{g.minutes ? `Tempo total: ${fmtMinutes(g.minutes)}` : 'Sem tempo registrado'}</span>
+          </span>
+        </span>
+        {p != null && <span className={`pct ${pctTone(p)}`} title="Acerto geral do tema no dia">{p}%</span>}
+        <motion.span className="reg-chev" animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.2 }} aria-hidden="true">
+          <Icon name="chevronD" size={18} />
+        </motion.span>
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            className="reg-detail-wrap reg-group-items"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: reduce ? 0 : 0.26, ease: [0.3, 0.7, 0.2, 1] }}
+          >
+            {entries.map((e) =>
+              e.kind === 'session' ? (
+                <EntryCard
+                  key={e.id}
+                  e={e}
+                  open={inner === e.id}
+                  fresh={false}
+                  nextReview={reviews.get(e.s.topicId) ?? null}
+                  onToggle={() => setInner(inner === e.id ? null : e.id)}
+                  onEdit={() => onEdit(e.s)}
+                  onDuplicate={() => onDuplicate(e.s)}
+                />
+              ) : null,
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.article>
+  );
+}
+
 // ── Cartão de registro ────────────────────────────────────────
 
 function EntryCard({ e, open, fresh, nextReview, onToggle, onEdit, onDuplicate }: {
@@ -342,7 +444,7 @@ function EntryCard({ e, open, fresh, nextReview, onToggle, onEdit, onDuplicate }
   const reviewTone = nextReview ? (nextReview < t0 ? 'is-late' : nextReview <= addDays(t0, 7) ? 'is-soon' : 'is-later') : '';
   const isSim = e.kind === 'simulado';
   const a = isSim ? null : areaOf(e.topic?.area ?? 'geral');
-  const title = isSim ? e.sim.name : e.topic?.name ?? (e.s.topicId ? 'Tema removido' : 'Estudo livre');
+  const title = isSim ? e.sim.name : e.s.type === 'correcao' ? 'Correção de simulado' : e.topic?.name ?? (e.s.topicId ? 'Tema removido' : 'Estudo livre');
   const minutes = isSim ? e.sim.minutes : e.s.minutes;
   const q = isSim ? e.sim.total : e.s.questions;
   const c = isSim ? e.sim.correct : e.s.correct;

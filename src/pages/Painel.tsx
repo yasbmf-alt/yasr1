@@ -6,7 +6,7 @@ import { Icon } from '../components/Icon';
 import { ColumnChart, LineChart, PctBars, PeriodFilter, Stat, StackBar, usePeriod } from '../components/charts';
 import { RankBars } from './Diagnostico';
 import { AREA_CHART } from './Simulados';
-import { ACTIVITY_TYPES, AREAS, BIG_AREAS, type DataSnapshot } from '../types';
+import { ACTIVITY_TYPES, AREAS, BIG_AREAS, CORRECTION_TYPE, type DataSnapshot } from '../types';
 import { areaQA, diagnose, errorRecords, inPeriod, reasonRanking, subtemaRanking, topicQA, totals } from '../logic/analytics';
 import { addDays, DIAS_CURTOS, fmtMinutes, fmtShort, fromKey, today, weekStart } from '../logic/dates';
 import { duration, occurrences } from '../logic/agenda';
@@ -339,7 +339,7 @@ function Constancia({ days }: { days: number }) {
         <h2 className="card-title">Distribuição do tempo por atividade</h2>
         {byType.size ? (
           <StackBar
-            parts={[...ACTIVITY_TYPES.map((x) => ({ id: x.id as string, label: x.label })), { id: 'simulado', label: 'Simulados' }].map((x, i) => ({ id: x.id, label: x.label, value: byType.get(x.id) ?? 0, color: TYPE_COLORS[i % TYPE_COLORS.length] }))}
+            parts={[...ACTIVITY_TYPES.map((x) => ({ id: x.id as string, label: x.label })), { id: CORRECTION_TYPE.id as string, label: CORRECTION_TYPE.label }, { id: 'simulado', label: 'Simulados' }].map((x, i) => ({ id: x.id, label: x.label, value: byType.get(x.id) ?? 0, color: TYPE_COLORS[i % TYPE_COLORS.length] }))}
             format={fmtMinutes}
           />
         ) : <Empty text="Sem tempo registrado neste período." />}

@@ -7,7 +7,7 @@
 
 export type Area = 'clinica' | 'cirurgia' | 'go' | 'pediatria' | 'preventiva' | 'geral';
 
-export type ActivityType = 'videoaula' | 'questoes' | 'revisao' | 'flashcards' | 'leitura' | 'outro' | 'foco';
+export type ActivityType = 'videoaula' | 'questoes' | 'revisao' | 'flashcards' | 'leitura' | 'outro' | 'foco' | 'correcao';
 
 // ── Erros classificados (registrados uma vez, usados em diagnóstico, gaveta e gráficos) ──
 export type Subtema = 'diagnostico' | 'classificacao' | 'tratamento' | 'complicacoes' | 'conduta' | 'fisiopatologia' | 'epidemiologia' | 'outro';
@@ -158,6 +158,7 @@ export interface Session {
   method?: string; // revisão: como revisou
   mastery?: number | null; // revisão: percepção de domínio, 1 a 5
   watched?: 'completa' | 'parcial' | null; // videoaula: conclusão
+  simuladoId?: string; // correção de simulado: qual prova foi corrigida
 }
 
 export const QUESTION_SOURCES = ['Medway', 'Prova anterior', 'Banco de questões', 'Apostila', 'Simulado', 'Outra'];
@@ -215,6 +216,7 @@ export interface Settings {
   mascotLinesSeen?: Record<string, string>; // frases raras já ditas
   lastBackupAt?: string; // ISO do último backup baixado
   backupReminder?: boolean; // lembrete semanal de backup (padrão: ligado)
+  streakBreakSeen?: string; // último dia da sequência perdida cuja animação triste já foi mostrada
 }
 
 export interface RewardImage {
@@ -343,6 +345,7 @@ export interface Simulado {
   notes: string;
   createdAt: string;
   map?: ConceptMap; // mapa de correção: simulado → grandes áreas → temas errados
+  correctionDoneAt?: string | null; // YYYY-MM-DD em que a correção foi concluída
 }
 
 // ── Flashcards ─────────────────────────────────────────────────
@@ -461,4 +464,6 @@ export const ACTIVITY_TYPES: { id: ActivityType; label: string }[] = [
   { id: 'foco', label: 'Sessão de foco' },
 ];
 
-export const activityLabel = (t: ActivityType) => ACTIVITY_TYPES.find((a) => a.id === t)?.label ?? t;
+// a correção de simulado é registrada pela Correção de Simulados, não pelos formulários de sessão
+export const CORRECTION_TYPE = { id: 'correcao' as ActivityType, label: 'Correção de simulado' };
+export const activityLabel = (t: ActivityType) => (t === 'correcao' ? CORRECTION_TYPE.label : ACTIVITY_TYPES.find((a) => a.id === t)?.label ?? t);

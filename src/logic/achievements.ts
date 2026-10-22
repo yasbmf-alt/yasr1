@@ -21,7 +21,7 @@ function crossing(items: { date: string; v: number }[], limit: number) {
   return null;
 }
 
-function bestStreakDate(dates: string[], len: number) {
+export function bestStreakDate(dates: string[], len: number) {
   const s = [...new Set(dates)].sort();
   let run = 0;
   let prev: string | null = null;

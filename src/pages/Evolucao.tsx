@@ -7,7 +7,8 @@ import { Asset } from '../assets/registry';
 import { SPECIES_BY_AREA } from '../assets/art';
 import { Garden } from './Garden';
 import { Registros } from './Registros';
-import { activityLabel, areaOf } from '../types';
+import { areaOf } from '../types';
+import { groupPct, groupStudy } from '../logic/studyGroups';
 import { dayVolumes, dominantArea, intensity, weeklyMinutes } from '../logic/progress';
 import { DIAS_CURTOS, fmtMinutes, fmtShort, fromKey, MESES_LONGOS, pad, toKey, today } from '../logic/dates';
 
@@ -155,7 +156,9 @@ function CalendarCard({ selected, onSelect }: { selected: string; onSelect: (d: 
 function DayDetail({ day }: { day: string }) {
   const { data } = useStore();
   const ui = useUI();
-  const list = data.sessions.filter((s) => s.date === day).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const list = data.sessions.filter((s) => s.date === day);
+  // um item por tema no dia: tempo somado e acerto geral (só onde houve questões)
+  const groups = groupStudy(list, data.topics, data.simulados).sort((a, b) => b.minutes - a.minutes || a.title.localeCompare(b.title, 'pt-BR'));
   const total = list.reduce((a, s) => a + (s.minutes ?? 0), 0);
   const d = fromKey(day);
   return (
@@ -165,16 +168,17 @@ function DayDetail({ day }: { day: string }) {
         <p className="muted">Nenhum registro neste dia.</p>
       ) : (
         <>
-          <p className="muted">{list.length} sessão(ões) · {fmtMinutes(total || null)}</p>
+          <p className="muted">{groups.length} {groups.length === 1 ? 'tema' : 'temas'} · {fmtMinutes(total || null)}</p>
           <ul className="day-list">
-            {list.map((s) => {
-              const tp = data.topics.find((x) => x.id === s.topicId);
+            {groups.map((g) => {
+              const p = groupPct(g);
+              const tp = data.topics.find((x) => x.id === g.topicId);
               return (
-                <li key={s.id}>
+                <li key={g.key}>
                   <button onClick={() => tp && ui.openTopic(tp.id)}>
-                    <span className="review-dot" style={{ background: areaOf(tp?.area ?? 'geral').color }} />
-                    <span className="day-name">{tp?.name ?? (s.topicId ? 'Tema removido' : 'Estudo livre')}</span>
-                    <span className="muted">{activityLabel(s.type)}{s.minutes ? ` · ${fmtMinutes(s.minutes)}` : ''}</span>
+                    <span className="review-dot" style={{ background: areaOf(g.area).color }} />
+                    <span className="day-name">{g.title}</span>
+                    <span className="muted">{[g.minutes ? fmtMinutes(g.minutes) : null, p != null ? `${p}% de acerto` : null].filter(Boolean).join(' · ')}</span>
                   </button>
                 </li>
               );
