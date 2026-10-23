@@ -2151,3 +2151,11 @@ h5.sum-h { font-size: 14px; }
 .cm-focus.is-on { background: var(--rosa) !important; color: var(--rosa-ink) !important; }
 .cm-toolbar { max-width: calc(100% - 20px); overflow-x: auto; scrollbar-width: none; }
 .cm-toolbar button { flex: none; }
+
+/* ── Flashcards · rever cartões ────────────────────────────── */
+.study-nav { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.study-nav .icon-btn:disabled { opacity: 0.3; cursor: default; }
+.study-where { font-size: 13px; font-weight: 700; color: var(--muted); min-width: 170px; text-align: center; }
+.study-where.is-past { color: var(--rosa-ink); background: var(--rosa); border-radius: 999px; padding: 3px 12px; }
+.study-past-note { text-align: center; margin: 0; }
+.rate.is-chosen { box-shadow: 0 0 0 3px var(--azul); }

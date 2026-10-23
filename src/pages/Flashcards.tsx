@@ -5,6 +5,7 @@ import { Modal, Field, ConfirmButton, LazyInput, useUI } from '../components/ui'
 import { Icon } from '../components/Icon';
 import { AREAS, areaOf, type Area, type Deck, type Flashcard } from '../types';
 import { isDue, newCardState, previewLabel, RATING_LABEL, schedule, type Rating } from '../logic/fsrs';
+import type { CardState } from '../types';
 import { parseAny, type RawCard } from '../logic/cardImport';
 import { relDay, today, toKey, uid } from '../logic/dates';
 import { play } from '../logic/sound';
@@ -357,19 +358,27 @@ function Study({ deckId, onClose }: { deckId: string; onClose: () => void }) {
   });
   const [total] = useState(queue.length);
   const [flipped, setFlipped] = useState(false);
+  const [revealed, setRevealed] = useState(false); // já viu a resposta: dá para desvirar e ainda responder
   const [stats, setStats] = useState({ reviewed: 0, ok: 0, again: 0 });
+  // cartões já respondidos nesta sessão, para poder voltar e rever
+  const [history, setHistory] = useState<{ id: string; prev: CardState; rating: Rating }[]>([]);
+  const [back, setBack] = useState(0); // 0 = cartão atual; 1 = o último respondido; …
   const startedAt = useRef(Date.now());
-  const logged = useRef(false);
-  const card = data.cards.find((c) => c.id === queue[0]);
-  const finished = !card;
+  const logged = useRef<{ id: string; createdAt: string } | null>(null);
+  const past = back > 0 ? history[history.length - back] : null;
+  const card = data.cards.find((c) => c.id === (past ? past.id : queue[0]));
+  const finished = !past && !data.cards.some((c) => c.id === queue[0]);
+  // um cartão revisto só pode mudar de nota se não foi respondido de novo depois
+  const canChange = !!past && !history.slice(history.length - back + 1).some((h) => h.id === past.id);
 
   const logSession = () => {
-    if (logged.current || stats.reviewed === 0 || !deck?.topicId) return;
-    logged.current = true;
+    if (stats.reviewed === 0 || !deck?.topicId) return;
+    // um registro por sessão: se a nota de um cartão mudar depois, o mesmo registro é atualizado
+    logged.current = logged.current ?? { id: uid(), createdAt: new Date().toISOString() };
     saveSession({
-      id: uid(), date: today(), topicId: deck.topicId, missionId: null, activityId: null, type: 'flashcards',
+      id: logged.current.id, date: today(), topicId: deck.topicId, missionId: null, activityId: null, type: 'flashcards',
       minutes: isFocusActive() ? null : Math.max(1, Math.round((Date.now() - startedAt.current) / 60000)), questions: stats.reviewed, correct: stats.ok,
-      errorTopics: [], notes: `Baralho: ${deck.name}`, createdAt: new Date().toISOString(),
+      errorTopics: [], notes: `Baralho: ${deck.name}`, createdAt: logged.current.createdAt,
     });
   };
   useEffect(() => {
@@ -380,20 +389,57 @@ function Study({ deckId, onClose }: { deckId: string; onClose: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finished]);
 
+  const flip = () => {
+    if (!card) return;
+    setFlipped((f) => !f);
+    setRevealed(true);
+    play('flip');
+  };
+  const go = (n: number) => {
+    const b2 = Math.max(0, Math.min(history.length, n));
+    if (b2 === back) return;
+    setBack(b2);
+    // ao rever um cartão passado, ele aparece pela pergunta; o atual volta como estava (sem resposta)
+    setFlipped(false);
+    setRevealed(b2 > 0);
+    play('page');
+  };
+
   const answer = (g: Rating) => {
-    if (!card || !flipped) return;
+    if (!card || !revealed) return;
+    if (past) {
+      // trocar a nota de um cartão já respondido (recalcula a partir do estado de antes)
+      if (!canChange || g === past.rating) return go(back - 1);
+      saveCard({ ...card, fsrs: schedule(past.prev, g) });
+      setStats((st) => ({ ...st, ok: st.ok + Number(g >= 2) - Number(past.rating >= 2), again: st.again + Number(g === 1) - Number(past.rating === 1) }));
+      setQueue((q) => {
+        if (past.rating === 1 && g !== 1) {
+          const i = q.lastIndexOf(past.id);
+          return i > 0 ? [...q.slice(0, i), ...q.slice(i + 1)] : q;
+        }
+        if (past.rating !== 1 && g === 1) return [...q, past.id];
+        return q;
+      });
+      setHistory((h) => h.map((x, i) => (i === h.length - back ? { ...x, rating: g } : x)));
+      play(g === 1 ? 'uncheck' : 'check');
+      return go(back - 1);
+    }
     const next = schedule(card.fsrs, g);
     saveCard({ ...card, fsrs: next });
-    setStats((s) => ({ reviewed: s.reviewed + 1, ok: s.ok + (g >= 2 ? 1 : 0), again: s.again + (g === 1 ? 1 : 0) }));
+    setHistory((h) => [...h, { id: card.id, prev: card.fsrs, rating: g }]);
+    setStats((st) => ({ reviewed: st.reviewed + 1, ok: st.ok + (g >= 2 ? 1 : 0), again: st.again + (g === 1 ? 1 : 0) }));
     setQueue((q) => (g === 1 ? [...q.slice(1), q[0]] : q.slice(1)));
     setFlipped(false);
+    setRevealed(false);
     play(g === 1 ? 'uncheck' : 'check');
   };
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { logSession(); onClose(); }
-      else if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); if (!flipped && card) { setFlipped(true); play('flip'); } }
+      else if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); flip(); }
+      else if (e.key === 'ArrowLeft') go(back + 1);
+      else if (e.key === 'ArrowRight') go(back - 1);
       else if (['1', '2', '3', '4'].includes(e.key)) answer(Number(e.key) as Rating);
     };
     window.addEventListener('keydown', k);
@@ -415,34 +461,55 @@ function Study({ deckId, onClose }: { deckId: string; onClose: () => void }) {
           <h2 className="h1">Sessão feita</h2>
           <p>{stats.reviewed} respostas · {stats.reviewed - stats.again} lembradas de primeira ou depois</p>
           {deck?.topicId ? <p className="muted">A sessão entrou no registro de estudos.</p> : <p className="muted">Ligue o baralho a um tema para a sessão contar no jardim.</p>}
-          <button className="btn btn-primary btn-lg" onClick={() => { ui.toast('Até a próxima rodada!', 'diva'); onClose(); }}>Fechar</button>
+          <div className="btn-row">
+            {history.length > 0 && <button className="btn btn-quiet btn-lg" onClick={() => go(1)}><Icon name="chevronL" size={18} /> Rever cartões</button>}
+            <button className="btn btn-primary btn-lg" onClick={() => { ui.toast('Até a próxima rodada!', 'diva'); onClose(); }}>Fechar</button>
+          </div>
         </motion.div>
-      ) : (
+      ) : card ? (
         <>
-          <div className="flip-stage" onClick={() => { if (!flipped) { setFlipped(true); play('flip'); } }}>
+          <div className="study-nav">
+            <button className="icon-btn" onClick={() => go(back + 1)} disabled={back >= history.length} aria-label="Cartão anterior" title="Cartão anterior (←)"><Icon name="chevronL" /></button>
+            <span className={`study-where ${past ? 'is-past' : ''}`}>
+              {past ? `Revendo ${back === 1 ? 'o último cartão' : `${back} cartões atrás`}` : history.length ? 'Cartão atual' : 'Primeiro cartão'}
+            </span>
+            <button className="icon-btn" onClick={() => go(back - 1)} disabled={back === 0} aria-label="Próximo cartão" title="Voltar para frente (→)"><Icon name="chevronR" /></button>
+          </div>
+          <div className="flip-stage" onClick={flip} role="button" aria-label={flipped ? 'Ver a pergunta' : 'Ver a resposta'}>
             <motion.div className="flip" animate={{ rotateY: flipped ? 180 : 0 }} transition={{ type: 'spring', stiffness: 220, damping: 22 }}>
               <div className="flip-face flip-front">
                 <span className="flip-tag">Frente</span>
-                <p>{card!.front}</p>
-                {!flipped && <span className="flip-hint">Clique ou aperte espaço para virar</span>}
+                <p>{card.front}</p>
+                <span className="flip-hint">{revealed ? 'Clique para ver a resposta de novo' : 'Clique ou aperte espaço para virar'}</span>
               </div>
               <div className="flip-face flip-back">
                 <span className="flip-tag">Verso</span>
-                <p>{card!.back}</p>
+                <p>{card.back}</p>
+                <span className="flip-hint">Clique para ver a pergunta</span>
               </div>
             </motion.div>
           </div>
-          <div className={`ratings ${flipped ? 'is-on' : ''}`}>
+          {past && (
+            <p className="study-past-note muted small">
+              {canChange ? 'Você respondeu com a nota marcada. Escolha outra para trocar, ou toque na seta › para seguir.' : 'Este cartão foi respondido de novo depois; aqui é só para rever.'}
+            </p>
+          )}
+          <div className={`ratings ${revealed ? 'is-on' : ''}`}>
             {([1, 2, 3, 4] as Rating[]).map((g) => (
-              <button key={g} className={`rate rate-${g}`} disabled={!flipped} onClick={() => answer(g)}>
+              <button
+                key={g}
+                className={`rate rate-${g} ${past?.rating === g ? 'is-chosen' : ''}`}
+                disabled={!revealed || (!!past && !canChange)}
+                onClick={() => answer(g)}
+              >
                 <span className="rate-l">{RATING_LABEL[g]}</span>
-                <span className="rate-t">{previewLabel(card!.fsrs, g)}</span>
+                <span className="rate-t">{previewLabel(past ? past.prev : card.fsrs, g)}</span>
                 <span className="rate-k" aria-hidden="true">{g}</span>
               </button>
             ))}
           </div>
         </>
-      )}
+      ) : null}
     </motion.div>
   );
 }
