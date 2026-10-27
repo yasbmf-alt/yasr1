@@ -4,7 +4,7 @@ import { useUI, Modal, Field, type TopicTab } from './ui';
 import { ExamHistory, TopicMaps, TopicQuestions, TopicSummary } from './TopicStudy';
 import { topicOccurrences } from '../logic/simErrors';
 import { areaOf, activityLabel, type Priority } from '../types';
-import { STAGE_LABEL, STAGE_NEXT, topicStats } from '../logic/progress';
+import { STAGE_LABEL, topicStats } from '../logic/progress';
 import { fmtLong, fmtMinutes, fmtShort, relDay } from '../logic/dates';
 import { Asset } from '../assets/registry';
 import { SPECIES_BY_AREA, SPECIES_LABEL } from '../assets/art';
@@ -43,7 +43,6 @@ export function TopicSheet() {
     .map((m) => data.chapters.find((c) => c.id === m.chapterId))
     .filter(Boolean)
     .map((c) => `Cap. ${c!.number}`);
-  const toNext = st.stage < 4 ? Math.max(0, STAGE_NEXT[st.stage] - st.points) : 0;
 
   return (
     <Modal open={!!topicId} onClose={close} title={topic.name} wide>
@@ -73,9 +72,9 @@ export function TopicSheet() {
             </div>
             <p className="sheet-stage">
               <strong>{SPECIES_LABEL[species]}</strong> · {STAGE_LABEL[st.stage]}
-              {st.stage > 0 && st.stage < 4 && <> · faltam {toNext} ponto{toNext === 1 ? '' : 's'} para crescer</>}
+              {st.stage > 0 && st.stage < 4 && <> · cresce na {st.reviews === 0 ? '1ª' : '2ª'} revisão</>}
             </p>
-            <p className="field-hint">Cada sessão vale 1 ponto; cada revisão vale 2 (3 com 70% ou mais de acertos).</p>
+            <p className="field-hint">Estudo inicial: broto · 1ª revisão: planta crescendo · 2ª revisão: planta madura.</p>
           </div>
         </div>
 

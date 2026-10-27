@@ -16,6 +16,7 @@ import { Painel } from './pages/Painel';
 import { Quarto } from './pages/Quarto';
 import { Flashcards } from './pages/Flashcards';
 import { Agenda } from './pages/Agenda';
+import { Revisoes } from './pages/Revisoes';
 import { Biblioteca } from './pages/Biblioteca';
 import { setDemo } from './data/repo';
 
@@ -24,6 +25,7 @@ const NAV: { id: Page; label: string; icon: string }[] = [
   { id: 'quarto', label: 'Meu quarto', icon: 'room' },
   { id: 'biblioteca', label: 'Biblioteca', icon: 'biblioteca' },
   { id: 'evolucao', label: 'Jardim', icon: 'evolucao' },
+  { id: 'revisoes', label: 'Revisões', icon: 'revisao' },
   { id: 'agenda', label: 'Agenda', icon: 'agenda' },
   { id: 'painel', label: 'Painel', icon: 'chart' },
   { id: 'simulados', label: 'Simulados', icon: 'simulados' },
@@ -120,6 +122,7 @@ function Main() {
                 {page === 'evolucao' && <Evolucao />}
                 {page === 'biblioteca' && <Biblioteca />}
                 {page === 'agenda' && <Agenda />}
+                {page === 'revisoes' && <Revisoes />}
                 {page === 'simulados' && <Simulados />}
                 {page === 'painel' && <Painel />}
                 {page === 'quarto' && <Quarto />}

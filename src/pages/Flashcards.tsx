@@ -20,12 +20,22 @@ export function Flashcards() {
   const [importing, setImporting] = useState<string | 'any' | null>(null);
   const [newDeck, setNewDeck] = useState(false);
   const deck = data.decks.find((d) => d.id === deckId) ?? null;
+  const ui = useUI();
   const studyDeck = (id: string) => {
     const d = data.decks.find((x) => x.id === id);
     const ids = deckQueue(id, data.cards);
-    if (!d || !ids.length) return;
-    setPlan({ key: `${id}-${Date.now()}`, title: d.name, ids, kind: 'deck' });
+    if (!d) return;
+    // em dia: revisa o baralho inteiro mesmo assim (revisão de tema pela página Revisões)
+    const all = ids.length ? ids : data.cards.filter((c) => c.deckId === id).map((c) => c.id);
+    if (!all.length) return;
+    setPlan({ key: `${id}-${Date.now()}`, title: d.name, ids: all, kind: 'deck' });
   };
+  useEffect(() => {
+    if (!ui.pendingStudy) return;
+    studyDeck(ui.pendingStudy);
+    ui.clearPendingStudy();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ui.pendingStudy]);
 
   return (
     <div className="page page-fc">

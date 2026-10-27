@@ -55,7 +55,78 @@ export function currentChapter(chapters: Chapter[]): Chapter | null {
 
 // ── Temas ──────────────────────────────────────────────────────
 
-const REVIEW_STEPS = [1, 7, 15, 30, 60, 90];
+// ── Revisões do tema ───────────────────────────────────────────
+// Revisão = dia distinto, depois do primeiro estudo, com sessão de flashcards
+// ou registro de revisão. A 1ª revisão é sempre no dia seguinte ao estudo (com
+// flashcards); depois o intervalo cresce conforme o desempenho e o tempo que
+// realmente passou (estabilidade, como no FSRS), e encolhe quando a revisão
+// vai mal.
+
+export interface ReviewEvent {
+  date: string;
+  kinds: ('flashcards' | 'revisao')[];
+  questions: number; // questões de verdade (revisão com questões)
+  correct: number;
+  cards: number; // flashcards respondidos
+  cardsOk: number;
+  perf: number | null; // desempenho usado no agendamento (questões têm prioridade)
+}
+
+const isReviewType = (s: Session) => s.type === 'revisao' || s.type === 'flashcards';
+
+export function reviewEvents(sessions: Session[], firstDate: string | null): ReviewEvent[] {
+  if (!firstDate) return [];
+  const m = new Map<string, ReviewEvent>();
+  for (const s of sessions) {
+    if (!isReviewType(s) || s.date <= firstDate) continue;
+    const e = m.get(s.date) ?? { date: s.date, kinds: [], questions: 0, correct: 0, cards: 0, cardsOk: 0, perf: null };
+    const k = s.type as 'flashcards' | 'revisao';
+    if (!e.kinds.includes(k)) e.kinds.push(k);
+    if (s.type === 'flashcards') {
+      e.cards += s.questions ?? 0;
+      e.cardsOk += s.correct ?? 0;
+    } else if (s.questions) {
+      e.questions += s.questions;
+      e.correct += s.correct ?? 0;
+    }
+    m.set(s.date, e);
+  }
+  const out = [...m.values()].sort((a, b) => a.date.localeCompare(b.date));
+  for (const e of out) e.perf = e.questions ? e.correct / e.questions : e.cards ? e.cardsOk / e.cards : null;
+  return out;
+}
+
+/** fator de crescimento do intervalo pelo desempenho (De novo / Difícil / Bom / Fácil) */
+const growth = (p: number | null) => (p == null ? 3 : p < 0.6 ? 0.5 : p < 0.75 ? 1.5 : p < 0.9 ? 3.5 : 5);
+
+export function scheduleReviews(firstDate: string | null, events: ReviewEvent[], priority: Topic['priority']) {
+  if (!firstDate) return { next: null as string | null, interval: 0, stability: 0 };
+  let last = firstDate;
+  let stability = 1; // dias
+  for (const e of events) {
+    const elapsed = Math.max(1, diffDays(e.date, last));
+    const g = growth(e.perf);
+    if (g < 1) stability = Math.max(1, stability * g); // foi mal: o intervalo encolhe
+    else {
+      // como no FSRS: revisar antes da hora rende pouco; no prazo (ou depois), rende o ganho todo
+      const base = Math.max(stability, elapsed);
+      stability = base + (base * (g - 1)) * Math.min(1, elapsed / stability);
+    }
+    stability = Math.min(365, stability);
+    last = e.date;
+  }
+  const pf = priority === 'alta' ? 0.8 : priority === 'baixa' ? 1.2 : 1;
+  const interval = events.length ? Math.max(1, Math.round(stability * pf)) : 1; // 1ª revisão: dia seguinte
+  return { next: addDays(last, interval), interval, stability };
+}
+
+/** força da memória (0–4): quanto ainda deve lembrar hoje, pela curva do FSRS */
+export function memoryStrength(lastDate: string | null, stability: number): 0 | 1 | 2 | 3 | 4 {
+  if (!lastDate) return 0;
+  const t = Math.max(0, diffDays(today(), lastDate));
+  const r = Math.pow(1 + (19 / 81) * (t / Math.max(1, stability)), -0.5);
+  return r > 0.93 ? 4 : r > 0.85 ? 3 : r > 0.75 ? 2 : 1;
+}
 
 export interface TopicStats {
   sessions: Session[];
@@ -70,6 +141,9 @@ export interface TopicStats {
   suggestedReview: string | null;
   nextReview: string | null;
   overdue: boolean;
+  reviewEvents: ReviewEvent[];
+  strength: 0 | 1 | 2 | 3 | 4;
+  nextReviewType: 'flashcards' | 'misto' | null; // 1ª revisão só com flashcards
   points: number;
   stage: 0 | 1 | 2 | 3 | 4;
 }
@@ -113,22 +187,20 @@ export function topicStats(topic: Topic, allSessions: Session[]): TopicStats {
   const accuracy = questions ? correct / questions : null;
   const lastDate = sessions.at(-1)?.date ?? null;
 
-  let suggestedReview: string | null = null;
-  if (lastDate) {
-    const step = REVIEW_STEPS[Math.min(reviews, REVIEW_STEPS.length - 1)];
-    let factor = 1;
-    if (accuracy != null) factor = accuracy < 0.6 ? 0.5 : accuracy < 0.8 ? 1 : 1.3;
-    if (topic.priority === 'alta') factor *= 0.8;
-    if (topic.priority === 'baixa') factor *= 1.2;
-    suggestedReview = addDays(lastDate, Math.max(1, Math.round(step * factor)));
-  }
-  const nextReview = topic.nextReviewOverride ?? suggestedReview;
+  const firstDate = sessions[0]?.date ?? null;
+  const events = reviewEvents(sessions, firstDate);
+  reviews = events.length;
+  const sched = scheduleReviews(firstDate, events, topic.priority);
+  const suggestedReview = sched.next;
+  // a data escolhida à mão vale até a próxima revisão feita
+  const override = topic.nextReviewOverride && (!events.length || topic.nextReviewOverride > events.at(-1)!.date) ? topic.nextReviewOverride : null;
+  const nextReview = override ?? suggestedReview;
 
+  // jardim: estudo = broto, 1ª revisão = planta crescendo, 2ª revisão = madura
   let stage: TopicStats['stage'] = 0;
-  if (sessions.length) stage = 1;
-  if (points >= 3) stage = 2;
-  if (points >= 6) stage = 3;
-  if (points >= 10 && (accuracy == null || accuracy >= 0.7)) stage = 4;
+  if (sessions.length) stage = 2;
+  if (events.length >= 1) stage = 3;
+  if (events.length >= 2) stage = 4;
 
   return {
     sessions,
@@ -148,11 +220,15 @@ export function topicStats(topic: Topic, allSessions: Session[]): TopicStats {
     overdue: !!nextReview && nextReview < today(),
     points,
     stage,
+    reviewEvents: events,
+    strength: memoryStrength(events.at(-1)?.date ?? firstDate, sched.stability),
+    nextReviewType: firstDate ? (events.length ? 'misto' : 'flashcards') : null,
   };
 }
 
 export const STAGE_LABEL = ['Ainda não plantado', 'Semente', 'Broto', 'Planta', 'Em flor'] as const;
-export const STAGE_NEXT = [1, 3, 6, 10, Infinity];
+export const STAGE_NEXT = [1, 3, 6, 10, Infinity]; // (antigo, por pontos)
+export const STAGE_BY_REVIEWS = ['Ainda não estudado', 'Broto', 'Broto', 'Planta crescendo', 'Planta madura'] as const;
 
 // ── Volume por dia, constância, XP ─────────────────────────────
 

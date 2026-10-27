@@ -10,7 +10,7 @@ import { EventCard } from './EventDecor';
 
 // ── Contexto de interface: celebrações, bolhas e navegação ────
 
-export type Page = 'trilha' | 'quarto' | 'biblioteca' | 'agenda' | 'evolucao' | 'painel' | 'simulados' | 'flashcards' | 'config';
+export type Page = 'trilha' | 'quarto' | 'biblioteca' | 'agenda' | 'evolucao' | 'revisoes' | 'painel' | 'simulados' | 'flashcards' | 'config';
 
 interface Celebration {
   kind: 'mission' | 'chapter';
@@ -39,6 +39,9 @@ interface UI {
   pendingMission: string | null;
   clearPendingMission(): void;
   openBook(topicId: string, maceteId?: string): void;
+  studyDeck(deckId: string): void; // abre os flashcards já estudando este baralho
+  pendingStudy: string | null;
+  clearPendingStudy(): void;
   pendingBook: string | null;
   pendingMacete: string | null; // abrir o livro direto neste macete
   clearPendingBook(): void;
@@ -56,7 +59,7 @@ export const useUI = () => {
   return u;
 };
 
-const PAGES: Page[] = ['trilha', 'quarto', 'biblioteca', 'agenda', 'evolucao', 'painel', 'simulados', 'flashcards', 'config'];
+const PAGES: Page[] = ['trilha', 'quarto', 'biblioteca', 'agenda', 'evolucao', 'revisoes', 'painel', 'simulados', 'flashcards', 'config'];
 const pageFromHash = (): Page => {
   const h = location.hash.replace('#', '') as Page;
   return PAGES.includes(h) ? h : 'trilha';
@@ -71,6 +74,7 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
   const [pendingMission, setPendingMission] = useState<string | null>(null);
   const [pendingBook, setPendingBook] = useState<string | null>(null);
   const [pendingMacete, setPendingMacete] = useState<string | null>(null);
+  const [pendingStudy, setPendingStudy] = useState<string | null>(null);
   const [roomView, setRoomView] = useState<string | null>(null);
   const [queue, setQueue] = useState<Overlay[]>([]);
   const shift = useCallback(() => setQueue((q) => q.slice(1)), []);
@@ -138,6 +142,17 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
     },
     pendingBook,
     pendingMacete,
+    pendingStudy,
+    clearPendingStudy: () => setPendingStudy(null),
+    studyDeck: (id) => {
+      setPendingStudy(id);
+      setPage('flashcards');
+      try {
+        history.replaceState(null, '', '#flashcards');
+      } catch {
+        /* ignore */
+      }
+    },
     clearPendingBook: () => setPendingBook(null),
     roomView,
     setRoomView,
