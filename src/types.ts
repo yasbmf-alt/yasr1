@@ -346,6 +346,11 @@ export interface Simulado {
   createdAt: string;
   map?: ConceptMap; // mapa de correção: simulado → grandes áreas → temas errados
   correctionDoneAt?: string | null; // YYYY-MM-DD em que a correção foi concluída
+  correctionTimer?: CorrectionTimer; // cronômetro em andamento (tempo ainda não registrado)
+}
+export interface CorrectionTimer {
+  runningSince: string | null; // ISO; null = pausado
+  days: Record<string, number>; // YYYY-MM-DD → milissegundos ativos já contados
 }
 
 // ── Flashcards ─────────────────────────────────────────────────
