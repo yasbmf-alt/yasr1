@@ -40,6 +40,7 @@ export function Biblioteca() {
   const [open, setOpen] = useState(false);
   const [drawer, setDrawer] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
+  const [bookMacete, setBookMacete] = useState<string | null>(null);
   const [jumping, setJumping] = useState<string | null>(null);
   const order = data.settings.libraryOrder ?? 'estudo';
   const wardrobeRef = useRef<HTMLDivElement>(null);
@@ -47,6 +48,7 @@ export function Biblioteca() {
   useEffect(() => {
     if (ui.pendingBook) {
       setSelected(ui.pendingBook);
+      setBookMacete(ui.pendingMacete);
       ui.clearPendingBook();
     }
   }, [ui.pendingBook, ui]);
@@ -215,7 +217,7 @@ export function Biblioteca() {
       </div>
 
       <AnimatePresence>
-        {selected && <OpenBook key={selected} topicId={selected} onClose={() => { play('bookClose'); setSelected(null); }} />}
+        {selected && <OpenBook key={selected} topicId={selected} macete={bookMacete} onClose={() => { play('bookClose'); setSelected(null); setBookMacete(null); }} />}
       </AnimatePresence>
     </div>
   );
@@ -357,12 +359,12 @@ function BookCover({ t, big }: { t: Topic; big?: boolean }) {
 
 // ── Livro aberto ──────────────────────────────────────────────
 
-function OpenBook({ topicId, onClose }: { topicId: string; onClose: () => void }) {
+function OpenBook({ topicId, macete, onClose }: { topicId: string; macete?: string | null; onClose: () => void }) {
   const { data, saveTopic } = useStore();
   const ui = useUI();
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
-  const [page, setPage] = useState<'metricas' | 'lembretes' | 'macetes'>('metricas');
+  const [page, setPage] = useState<'metricas' | 'lembretes' | 'macetes'>(macete ? 'macetes' : 'metricas');
   const [turn, setTurn] = useState(0);
   const goPage = (p: 'metricas' | 'lembretes' | 'macetes') => {
     if (p === page) return;
@@ -414,7 +416,7 @@ function OpenBook({ topicId, onClose }: { topicId: string; onClose: () => void }
             )}
           </AnimatePresence>
           {page === 'lembretes' && <motion.div key="l" className="pr-content" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }}><BookNotes topic={t} /></motion.div>}
-          {page === 'macetes' && <motion.div key="m" className="pr-content" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }}><BookMacetes topic={t} /></motion.div>}
+          {page === 'macetes' && <motion.div key="m" className="pr-content" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }}><BookMacetes topic={t} initial={macete} /></motion.div>}
           {page === 'metricas' && <motion.div key="x" className="pr-content" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
             <div className="pr-big">
               <span className="pr-big-v">{st.accuracy == null ? '—' : `${Math.round(st.accuracy * 100)}%`}</span>

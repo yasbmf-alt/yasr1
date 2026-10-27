@@ -81,7 +81,7 @@ export function Macetes() {
                   {m.tags.length > 0 && <p className="small muted">{m.tags.map((t) => `#${t}`).join(' ')}</p>}
                   <div className="btn-row wrap">
                     <button className="btn btn-secondary btn-sm" onClick={() => setEditing(m)}><Icon name="edit" size={14} /> Editar</button>
-                    {m.topicId && <button className="btn btn-quiet btn-sm" onClick={() => ui.openBook(m.topicId!)}>Abrir o livro da matéria</button>}
+                    {m.topicId && <button className="btn btn-quiet btn-sm" onClick={() => ui.openBook(m.topicId!, m.id)}>Abrir o livro da matéria</button>}
                     <button className="btn btn-quiet btn-sm" onClick={() => setSel(null)}>Fechar</button>
                   </div>
                 </>

@@ -120,14 +120,27 @@ export function NoteEditor({ id, onClose }: { id: string; onClose: () => void })
 
 // ── Macetes ───────────────────────────────────────────────────
 
-export function BookMacetes({ topic }: { topic: Topic }) {
+export function BookMacetes({ topic, initial }: { topic: Topic; initial?: string | null }) {
   const { data } = useStore();
   const [editing, setEditing] = useState<Macete | 'new' | null>(null);
+  const [reading, setReading] = useState<string | null>(initial ?? null);
   const list = data.macetes.filter((m) => m.topicId === topic.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const open = reading ? data.macetes.find((m) => m.id === reading) : null;
   return (
     <div className="bm">
       {editing ? (
         <MaceteForm value={editing === 'new' ? null : editing} preset={{ topicId: topic.id, area: topic.area }} onDone={() => setEditing(null)} />
+      ) : open ? (
+        // mesmo conteúdo da seção Macetes: título, texto inteiro e palavras-chave
+        <article className="bm-read">
+          <h3 className="mac-title">{open.title}</h3>
+          <p className="mac-text">{open.text}</p>
+          {open.tags.length > 0 && <p className="small muted">{open.tags.map((t) => `#${t}`).join(' ')}</p>}
+          <div className="btn-row wrap">
+            <button className="btn btn-quiet btn-sm" onClick={() => setReading(null)}><Icon name="chevronL" size={14} /> Todos os macetes</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setEditing(open)}><Icon name="edit" size={14} /> Editar</button>
+          </div>
+        </article>
       ) : (
         <>
           <div className="bn-head">
@@ -137,7 +150,7 @@ export function BookMacetes({ topic }: { topic: Topic }) {
           <ul className="bm-list">
             {list.map((m) => (
               <li key={m.id}>
-                <button onClick={() => setEditing(m)}>
+                <button onClick={() => setReading(m.id)}>
                   <strong>{m.title}</strong>
                   <span>{m.text}</span>
                 </button>

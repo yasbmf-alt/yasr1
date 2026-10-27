@@ -38,8 +38,9 @@ interface UI {
   openMission(id: string): void;
   pendingMission: string | null;
   clearPendingMission(): void;
-  openBook(topicId: string): void;
+  openBook(topicId: string, maceteId?: string): void;
   pendingBook: string | null;
+  pendingMacete: string | null; // abrir o livro direto neste macete
   clearPendingBook(): void;
   roomView: string | null;
   setRoomView(v: string | null): void;
@@ -69,6 +70,7 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
   const [topicFocus, setTopicFocus] = useState<TopicFocus | null>(null);
   const [pendingMission, setPendingMission] = useState<string | null>(null);
   const [pendingBook, setPendingBook] = useState<string | null>(null);
+  const [pendingMacete, setPendingMacete] = useState<string | null>(null);
   const [roomView, setRoomView] = useState<string | null>(null);
   const [queue, setQueue] = useState<Overlay[]>([]);
   const shift = useCallback(() => setQueue((q) => q.slice(1)), []);
@@ -124,8 +126,9 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
     },
     pendingMission,
     clearPendingMission: () => setPendingMission(null),
-    openBook: (id) => {
+    openBook: (id, maceteId) => {
       setPendingBook(id);
+      setPendingMacete(maceteId ?? null);
       setPage('biblioteca');
       try {
         history.replaceState(null, '', '#biblioteca');
@@ -134,6 +137,7 @@ export function UIProvider({ children }: { children: React.ReactNode }) {
       }
     },
     pendingBook,
+    pendingMacete,
     clearPendingBook: () => setPendingBook(null),
     roomView,
     setRoomView,
