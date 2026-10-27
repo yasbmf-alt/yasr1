@@ -49,8 +49,9 @@ export const SOUNDS: { id: EventSound; label: string }[] = [
 const ALL: EventScene[] = ['trilha', 'jardim', 'quarto', 'biblioteca'];
 
 export const DEFAULT_EVENTS: SpecialEvent[] = [
-  { id: 'halloween', name: 'Halloween', kind: 'sazonal', start: '10-24', end: '10-31', enabled: true, title: 'Feliz Halloween!', message: '', theme: 'halloween', scenes: ALL, sound: 'musicbox', style: 'cartao', hiddenGift: true },
-  { id: 'natal', name: 'Temporada de Natal', kind: 'sazonal', start: '11-20', end: '12-25', enabled: true, title: 'A decoração de Natal chegou', message: '', theme: 'natal', scenes: ALL, sound: 'musicbox', style: 'cartao', hiddenGift: true },
+  // Halloween e Natal decoram só a página inicial (a trilha)
+  { id: 'halloween', name: 'Halloween', kind: 'sazonal', start: '10-24', end: '10-31', enabled: true, title: 'Feliz Halloween!', message: '', theme: 'halloween', scenes: ['trilha'], sound: 'musicbox', style: 'cartao', hiddenGift: true },
+  { id: 'natal', name: 'Temporada de Natal', kind: 'sazonal', start: '11-25', end: '12-25', enabled: true, title: 'A decoração de Natal chegou', message: '', theme: 'natal', scenes: ['trilha'], sound: 'musicbox', style: 'cartao', hiddenGift: true },
   { id: 'natal-dia', name: 'Natal', kind: 'dia', start: '12-25', end: '12-25', enabled: true, title: 'Feliz Natal!', message: '', theme: 'natal', scenes: ALL, sound: 'chapter', style: 'cartao' },
   { id: 'namoro', name: 'Aniversário de namoro', kind: 'dia', start: '12-21', end: '12-21', enabled: true, title: 'Feliz aniversário de namoro', message: '', theme: 'praia', scenes: ALL, sound: 'kiss', style: 'carta' },
   { id: 'aniv-ikaro', name: 'Aniversário do Ikaro', kind: 'dia', start: '12-23', end: '12-23', enabled: true, title: 'Hoje é aniversário do Ikaro', message: '', theme: 'aniversario', scenes: ALL, sound: 'chapter', style: 'cartao' },

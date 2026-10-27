@@ -363,7 +363,7 @@ export type SoundName =
   | 'check' | 'uncheck' | 'mission' | 'chapter' | 'pop' | 'grow' | 'flip'
   | 'door' | 'doorClose' | 'drawer' | 'drawerClose' | 'page' | 'bookClose' | 'paper' | 'envelope'
   | 'sticker' | 'note' | 'drop' | 'key' | 'kiss' | 'meow' | 'purr' | 'musicbox' | 'candy'
-  | 'fizzle' | 'ignite';
+  | 'fizzle' | 'ignite' | 'ghost' | 'jingle';
 
 export function play(name: SoundName) {
   if (!enabled || volume <= 0) return;
@@ -394,6 +394,12 @@ export function play(name: SoundName) {
       case 'fizzle': // chama apagando: dois tons baixinhos, sem drama
         tone(440, 0, 0.16, 'sine', 0.035);
         tone(349, 0.13, 0.3, 'sine', 0.03);
+        break;
+      case 'ghost': // fantasminha: "uuuu" baixinho, oscilando
+        [392, 415, 392, 370, 392].forEach((f, i) => tone(f, i * 0.16, 0.3, 'sine', 0.035));
+        break;
+      case 'jingle': // sininhos de Natal
+        [1319, 1568, 1760, 1568, 2093].forEach((f, i) => tone(f, i * 0.09, 0.22, 'triangle', 0.045));
         break;
       case 'ignite': // chama acendendo de novo
         [392, 523, 784].forEach((f, i) => tone(f, i * 0.07, 0.22, 'triangle', 0.05));

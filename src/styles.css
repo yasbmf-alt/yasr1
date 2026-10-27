@@ -2322,3 +2322,74 @@ h5.sum-h { font-size: 14px; }
 .rev-hist li { display: grid; grid-template-columns: 56px minmax(0, 220px) minmax(0, 1fr); gap: 10px; font-size: 13px; }
 @media (max-width: 900px) { .rev-top { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 560px) { .rev-list li { grid-template-columns: 38px minmax(0, 1fr); } .rev-actions { grid-column: 1 / -1; justify-content: flex-start; } .rev-badge { width: 38px; height: 38px; } }
+
+/* ── Temporadas na página inicial ──────────────────────────── */
+.page-trilha { position: relative; }
+.hs { position: absolute; inset: -8px 0 0; pointer-events: none; z-index: 6; overflow: hidden; }
+.hs button { pointer-events: auto; border: 0; background: transparent; padding: 0; cursor: pointer; }
+/* Halloween: roxo, preto e um toque de laranja */
+.page-trilha.season-halloween {
+  --rosa: #e6dbff; --rosa-ink: #4b2a7a; --rosa-medio: #f28c28; --azul: #2a2238; --azul-esc: #1a1426;
+  --manteiga: #ffe1bf; --manteiga-ink: #8a4a10; --lima: #ffd3a1; --lima-ink: #7a3d0a;
+}
+.season-halloween .greet h1 { color: #2a2238; }
+.season-halloween .diva-bubble { background: #e6dbff; color: #4b2a7a; box-shadow: 0 3px 0 #c9b5f2; }
+.season-halloween .ch-tab.is-active { box-shadow: inset 0 0 0 2px #6b4fa0; }
+.season-halloween .scene-classico { background: linear-gradient(#cbbbe8, #e6dcf6 150px, #e6dcf6); --hill-far: #c2b4dd; }
+.season-halloween .station-callout { background: #2a2238; }
+.season-halloween .station-callout::after { border-top-color: #2a2238; }
+.season-halloween .streak-btn { background: #fff7ef; }
+.hs-bat { position: absolute; top: 0; width: 56px; height: 26px; animation: batFly 22s linear infinite; }
+.hs-bat svg { width: 100%; height: 100%; fill: #2a2238; animation: batFlap 0.28s ease-in-out infinite alternate; transform-origin: 50% 40%; }
+.hs-bat.b0 { top: 14px; animation-delay: -3s; }
+.hs-bat.b1 { top: 70px; width: 40px; animation-duration: 27s; animation-delay: -14s; }
+.hs-bat.b2 { top: 190px; width: 34px; animation-duration: 31s; animation-delay: -22s; opacity: 0.8; }
+@keyframes batFly { 0% { left: -60px; transform: translateY(0); } 25% { transform: translateY(14px); } 50% { transform: translateY(-6px); } 75% { transform: translateY(18px); } 100% { left: calc(100% + 60px); transform: translateY(0); } }
+@keyframes batFlap { to { transform: scaleY(0.45); } }
+.hs-ghost { position: absolute; top: 112px; right: 24px; width: 44px; height: 52px; animation: ghostFloat 4.5s ease-in-out infinite; filter: drop-shadow(0 6px 8px rgba(42, 34, 56, 0.25)); }
+.hs-ghost svg { width: 100%; height: 100%; }
+.hs-ghost.is-boo { animation: none; transform: scale(1.25); }
+@keyframes ghostFloat { 0%, 100% { transform: translate(0, 0); opacity: 0.92; } 50% { transform: translate(-8px, -10px); opacity: 0.7; } }
+.hs-fog { position: absolute; left: -10%; right: -10%; bottom: 0; height: 160px; background: radial-gradient(ellipse at 30% 100%, rgba(203, 187, 232, 0.55), transparent 60%), radial-gradient(ellipse at 75% 100%, rgba(203, 187, 232, 0.45), transparent 55%); animation: fogDrift 14s ease-in-out infinite alternate; }
+@keyframes fogDrift { from { transform: translateX(-3%); } to { transform: translateX(3%); } }
+/* Natal: vermelho, verde-floresta e amarelo-manteiga */
+.page-trilha.season-natal {
+  --rosa: #f8d6d8; --rosa-ink: #a3222f; --rosa-medio: #c8344b; --azul: #2f6b45; --azul-esc: #22523a;
+  --lima: #cfe6c4; --lima-ink: #2f6b45;
+}
+.season-natal .diva-bubble { background: #f8d6d8; color: #a3222f; box-shadow: 0 3px 0 #ebb2b8; }
+.season-natal .scene-classico { background: linear-gradient(#e4eef7, #f3f7fb 150px, #f3f7fb); }
+.hs-lights { position: absolute; top: 2px; left: 0; right: 0; height: 26px; display: flex; justify-content: space-around; border-top: 2px solid #2f6b45; border-radius: 0 0 50% 50% / 0 0 14px 14px; }
+.hs-lights i { width: 9px; height: 13px; border-radius: 50% 50% 45% 45%; margin-top: 3px; background: #ffd34d; box-shadow: 0 0 8px #ffd34d; animation: twinkle 2.1s ease-in-out infinite; }
+.hs-lights i:nth-child(3n) { background: #c8344b; box-shadow: 0 0 8px #e5627a; }
+.hs-lights i:nth-child(3n + 1) { background: #3f9a62; box-shadow: 0 0 8px #6ccf91; }
+@keyframes twinkle { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.hs-star { position: absolute; top: 108px; right: 30px; width: 40px; height: 40px; filter: drop-shadow(0 0 8px rgba(255, 211, 77, 0.8)); }
+.hs-star svg { width: 100%; height: 100%; }
+.hs-ornaments i { position: absolute; top: 24px; width: 16px; height: 16px; border-radius: 50%; animation: ornSwing 3.4s ease-in-out infinite; transform-origin: 50% -10px; }
+.hs-ornaments .o1 { left: 22%; background: radial-gradient(circle at 35% 35%, #fff 0 12%, #c8344b 30%); }
+.hs-ornaments .o2 { left: 54%; background: radial-gradient(circle at 35% 35%, #fff 0 12%, #2f6b45 30%); animation-delay: -1.2s; }
+.hs-ornaments .o3 { left: 80%; background: radial-gradient(circle at 35% 35%, #fff 0 12%, #e0a91c 30%); animation-delay: -2.1s; }
+@keyframes ornSwing { 0%, 100% { rotate: -8deg; } 50% { rotate: 8deg; } }
+.reduce-motion .hs *, .reduce-motion .hs { animation: none !important; }
+.reduce-motion .hs-bat { display: none; }
+@media (max-width: 560px) { .hs-ghost, .hs-star { top: 150px; right: 10px; } }
+/* morcegos passam por trás dos textos da página inicial; a névoa fica por cima do mapa */
+.page-trilha .hs { z-index: 1; }
+.page-trilha .greet, .page-trilha .ch-tabs, .page-trilha .board-wrap { position: relative; z-index: 2; }
+.hs-fog { z-index: 3; }
+.hs-halloween .hs-fog { position: fixed; left: auto; right: 0; width: 70vw; bottom: 0; pointer-events: none; }
+.hs-ornaments .o1 { left: 70%; }
+.hs-ornaments .o2 { left: 77%; }
+.hs-ornaments .o3 { left: 86%; }
+.hs-ghost, .hs-star { z-index: 3; }
+.hs-ghost, .hs-star { position: absolute; z-index: 5; }
+.hs-fog { position: fixed !important; pointer-events: none; z-index: 4; }
+.hs-ghost:focus, .hs-star:focus, .hs-bat:focus { outline: none; box-shadow: none; background: transparent; }
+.hs-ghost:focus-visible, .hs-star:focus-visible { outline: 2px solid var(--rosa-medio); border-radius: 12px; }
+/* morcegos voam na faixa livre à direita do título */
+@keyframes batFly { 0% { left: 58%; transform: translateY(0); opacity: 0; } 8% { opacity: 1; } 30% { transform: translateY(14px); } 55% { transform: translateY(-6px); } 80% { transform: translateY(18px); } 92% { opacity: 1; } 100% { left: calc(100% + 60px); transform: translateY(0); opacity: 0; } }
+.hs-bat.b0 { top: 6px; }
+.hs-bat.b1 { top: 74px; }
+.hs-bat.b2 { top: 150px; }
+.hs-ghost, .hs-star { border: 0; background: transparent; padding: 0; cursor: pointer; }

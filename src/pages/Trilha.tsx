@@ -21,6 +21,7 @@ import { buildLandscape, buildScene, PROP_ASPECT, samplePath, SCENE_COLORS, them
 import { Leaf } from '../assets/trailArt';
 import { Candy, TrailCat } from '../components/Secrets';
 import { StreakFlame } from '../components/StreakFlame';
+import { HomeSeason, useHomeSeason } from '../components/HomeSeason';
 
 // Cada capítulo ganha um "mapa" de cor própria, como os andares da referência.
 const THEMES = [
@@ -70,6 +71,7 @@ export function Trilha() {
   }, [chId, chapter]);
 
   const ui = useUI();
+  const season = useHomeSeason();
   useEffect(() => {
     if (!ui.pendingMission) return;
     const m = data.missions.find((x) => x.id === ui.pendingMission);
@@ -81,7 +83,8 @@ export function Trilha() {
   }, [ui.pendingMission, data.missions, ui]);
 
   return (
-    <div className="page page-trilha">
+    <div className={`page page-trilha ${season ? `season-${season}` : ''}`}>
+      <HomeSeason season={season} />
       <Greeting />
       {chapters.length === 0 ? (
         <div className="empty-big">
