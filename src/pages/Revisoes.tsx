@@ -5,6 +5,7 @@ import { Modal, useUI } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { SessionEditor } from '../components/SessionForm';
 import { activityLabel, areaOf, type Topic } from '../types';
+import { StationIcon } from '../assets/art';
 import { topicStats, type TopicStats } from '../logic/progress';
 import { addDays, diffDays, fmtShort, fromKey, MESES_LONGOS, pad, relDay, toKey, today, weekStart } from '../logic/dates';
 import { play } from '../logic/sound';
@@ -110,27 +111,7 @@ export function Revisoes() {
         <MiniCal rows={rows} selected={day} onSelect={(d) => setDay(d === day ? null : d)} />
       </div>
 
-      <section className="card rev-table-card">
-        <h2 className="card-title">Progresso dos temas</h2>
-        {rows.length === 0 ? (
-          <p className="muted">Os temas aparecem aqui depois do primeiro registro de estudo.</p>
-        ) : (
-          <div className="table-scroll">
-            <table className="table rev-table">
-              <thead>
-                <tr>
-                  <th>Tema</th><th>Estudo inicial</th><th className="num">Acerto em questões</th><th>Revisões feitas</th><th>Próxima</th><th>Força</th><th aria-label="Abrir" />
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <TopicRow key={r.t.id} r={r} open={open === r.t.id} onToggle={() => setOpen(open === r.t.id ? null : r.t.id)} />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      <Journey rows={rows} open={open} onToggle={(id) => setOpen(open === id ? null : id)} />
 
       <Modal open={!!logging} onClose={() => setLogging(null)} title="Registrar revisão">
         {logging && (
@@ -141,67 +122,131 @@ export function Revisoes() {
   );
 }
 
-function Strength({ v }: { v: number }) {
+// ── Jornada dos temas ─────────────────────────────────────────
+
+type JFilter = 'todos' | 'hoje' | 'atencao' | 'fortes';
+
+/** estrelas por desempenho: 3 ≥ 90%, 2 ≥ 75%, 1 ≥ 60%, 0 abaixo (null = sem dado) */
+const starsOf = (p: number | null) => (p == null ? null : p >= 0.9 ? 3 : p >= 0.75 ? 2 : p >= 0.6 ? 1 : 0);
+
+function Hearts({ v }: { v: number }) {
   return (
-    <span className={`strength s${v}`} title={`Memória ${STRENGTH[v] || '—'}`} aria-label={`Força da memória: ${STRENGTH[v] || 'sem dado'}`}>
-      {[1, 2, 3, 4].map((k) => <i key={k} className={k <= v ? 'on' : ''} />)}
+    <span className={`hearts h${v}`} title={`Memória ${STRENGTH[v] || '—'}`} aria-label={`Força da memória: ${STRENGTH[v] || 'sem dado'}`}>
+      {[1, 2, 3, 4].map((k) => (
+        <svg key={k} viewBox="0 0 16 14" className={k <= v ? 'on' : ''} aria-hidden="true"><path d="M8 13 C 3 9 0 7 0 4 a4 4 0 0 1 8 -1 a4 4 0 0 1 8 1 c0 3 -3 5 -8 9z" /></svg>
+      ))}
     </span>
   );
 }
 
-function TopicRow({ r, open, onToggle }: { r: Row; open: boolean; onToggle: () => void }) {
+function Journey({ rows, open, onToggle }: { rows: Row[]; open: string | null; onToggle: (id: string) => void }) {
+  const [f, setF] = useState<JFilter>('todos');
+  const t0 = today();
+  const counts = {
+    hoje: rows.filter((r) => r.st.nextReview && r.st.nextReview <= t0).length,
+    atencao: rows.filter((r) => r.st.strength <= 2).length,
+    fortes: rows.filter((r) => r.st.strength >= 4).length,
+  };
+  const list = rows.filter((r) => (f === 'hoje' ? r.st.nextReview && r.st.nextReview <= t0 : f === 'atencao' ? r.st.strength <= 2 : f === 'fortes' ? r.st.strength >= 4 : true));
+  return (
+    <section className="jr">
+      <div className="jr-head">
+        <h2 className="card-title">Jornada dos temas</h2>
+        <div className="chip-row" role="radiogroup" aria-label="Filtrar temas">
+          {([['todos', `Todos · ${rows.length}`], ['hoje', `Para hoje · ${counts.hoje}`], ['atencao', `Precisam de atenção · ${counts.atencao}`], ['fortes', `Fortes · ${counts.fortes}`]] as [JFilter, string][]).map(([id, label]) => (
+            <button key={id} role="radio" aria-checked={f === id} className={`chip-toggle ${f === id ? 'is-on' : ''}`} onClick={() => setF(id)}>{label}</button>
+          ))}
+        </div>
+      </div>
+      {rows.length === 0 ? (
+        <p className="muted">Os temas aparecem aqui depois do primeiro registro de estudo.</p>
+      ) : list.length === 0 ? (
+        <p className="muted">Nenhum tema neste filtro.</p>
+      ) : (
+        <div className="jr-grid">
+          {list.map((r, i) => <JourneyCard key={r.t.id} r={r} i={i} open={open === r.t.id} onToggle={() => onToggle(r.t.id)} />)}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function JourneyCard({ r, i, open, onToggle }: { r: Row; i: number; open: boolean; onToggle: () => void }) {
   const ui = useUI();
   const t0 = today();
   const a = areaOf(r.t.area);
+  const evs = r.st.reviewEvents;
+  const shown = evs.slice(-5);
+  const hidden = evs.length - shown.length;
   const acc = r.st.questions ? Math.round((r.st.correct / r.st.questions) * 100) : null;
   const next = r.st.nextReview;
+  const late = next && next < t0 ? diffDays(t0, next) : 0;
+  const nextTxt = !next ? '—' : next === t0 ? 'hoje' : late ? `atrasada ${late}d` : relDay(next);
   return (
-    <>
-      <tr className={`rev-row ${open ? 'is-open' : ''}`} onClick={onToggle}>
-        <td><span className="review-dot" style={{ background: a.color }} /> <button className="link" onClick={(e) => { e.stopPropagation(); ui.openTopic(r.t.id); }}>{r.t.name}</button></td>
-        <td className="mono">{r.st.firstDate ? fmtShort(r.st.firstDate) : '—'}</td>
-        <td className="num">{acc != null ? `${acc}%` : <span className="muted">—</span>}</td>
-        <td>
-          {r.st.reviewEvents.length ? (
-            <span className="rev-evs">
-              {r.st.reviewEvents.map((e) => (
-                <span key={e.date} className="rev-ev" title={`${fmtShort(e.date)}: ${[e.questions ? `${e.correct}/${e.questions} questões` : '', e.cards ? `${e.cardsOk}/${e.cards} flashcards` : ''].filter(Boolean).join(' · ') || 'sem desempenho anotado'}`}>
-                  {fmtShort(e.date)}
-                  {e.perf != null && <b>{Math.round(e.perf * 100)}%</b>}
-                </span>
-              ))}
+    <motion.article
+      className={`jc ${open ? 'is-open' : ''} ${late ? 'is-late' : next === t0 ? 'is-today' : ''}`}
+      style={{ ['--c' as string]: a.color, ['--i' as string]: a.ink }}
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: Math.min(i, 10) * 0.04 }}
+      layout="position"
+    >
+      <button className="jc-top" onClick={onToggle} aria-expanded={open}>
+        <span className="jc-icon" aria-hidden="true"><StationIcon area={r.t.area} /></span>
+        <span className="jc-title">
+          <strong>{r.t.name}</strong>
+          <span className="jc-level">Nível {evs.length}{acc != null ? ` · ${acc}% nas questões` : ''}</span>
+        </span>
+        <Hearts v={r.st.strength} />
+      </button>
+
+      <div className="jc-track" aria-label="Estudo, revisões e próxima revisão">
+        <span className="jc-step is-start" title={`Estudo inicial em ${r.st.firstDate ? fmtShort(r.st.firstDate) : '—'}`}>
+          <span className="jc-dot">🌱</span>
+          <span className="jc-date">{r.st.firstDate ? fmtShort(r.st.firstDate) : ''}</span>
+        </span>
+        {hidden > 0 && <span className="jc-more">+{hidden}</span>}
+        {shown.map((e, k) => {
+          const st = starsOf(e.perf);
+          const n = evs.length - shown.length + k + 1;
+          return (
+            <span key={e.date} className={`jc-step s${st ?? 'x'}`} title={`${n}ª revisão em ${fmtShort(e.date)}${e.perf != null ? ` · ${Math.round(e.perf * 100)}%` : ''}`}>
+              <span className="jc-line" />
+              <span className="jc-dot">{n}</span>
+              <span className="jc-stars">{st == null ? '·' : st === 0 ? '↺' : '★'.repeat(st)}</span>
+              <span className="jc-date">{fmtShort(e.date)}</span>
             </span>
-          ) : <span className="muted">nenhuma ainda</span>}
-        </td>
-        <td className={`mono ${next && next < t0 ? 'rev-overdue' : next === t0 ? 'rev-today-cell' : ''}`}>{next ? relDay(next) : '—'}</td>
-        <td><Strength v={r.st.strength} /></td>
-        <td className="row-actions"><Icon name={open ? 'chevronD' : 'chevronR'} size={16} /></td>
-      </tr>
+          );
+        })}
+        <span className={`jc-step is-next ${late ? 'late' : next === t0 ? 'now' : ''}`} title={next ? `Próxima revisão: ${fmtShort(next)}` : ''}>
+          <span className="jc-line dashed" />
+          <span className="jc-dot">{evs.length + 1}</span>
+          <span className="jc-date">{nextTxt}</span>
+        </span>
+      </div>
+
       <AnimatePresence initial={false}>
         {open && (
-          <tr className="rev-hist-row">
-            <td colSpan={7}>
-              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="rev-hist">
-                <ul>
-                  {[...r.st.sessions].reverse().map((s) => {
-                    const isRev = (s.type === 'revisao' || s.type === 'flashcards') && r.st.reviewEvents.some((e) => e.date === s.date);
-                    return (
-                      <li key={s.id}>
-                        <span className="mono">{fmtShort(s.date)}</span>
-                        <span>{activityLabel(s.type)}{s.date === r.st.firstDate ? ' · estudo inicial' : isRev ? ' · revisão' : ''}</span>
-                        <span className="muted">
-                          {[s.minutes ? `${s.minutes} min` : null, s.questions ? (s.type === 'flashcards' ? `${s.correct ?? 0}/${s.questions} cartões lembrados` : `${s.correct ?? 0}/${s.questions} questões (${pctTxt(s.correct ?? 0, s.questions)})`) : null].filter(Boolean).join(' · ')}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </motion.div>
-            </td>
-          </tr>
+          <motion.div className="jc-hist" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
+            <ul>
+              {[...r.st.sessions].reverse().map((s) => {
+                const isRev = (s.type === 'revisao' || s.type === 'flashcards') && evs.some((e) => e.date === s.date);
+                return (
+                  <li key={s.id}>
+                    <span className="mono">{fmtShort(s.date)}</span>
+                    <span>{activityLabel(s.type)}{s.date === r.st.firstDate ? ' · estudo inicial' : isRev && s.type !== 'revisao' ? ' · revisão' : ''}</span>
+                    <span className="muted">
+                      {[s.minutes ? `${s.minutes} min` : null, s.questions ? (s.type === 'flashcards' ? `${s.correct ?? 0}/${s.questions} lembrados` : `${s.correct ?? 0}/${s.questions} (${pctTxt(s.correct ?? 0, s.questions)})`) : null].filter(Boolean).join(' · ')}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+            <button className="btn btn-quiet btn-sm" onClick={() => ui.openTopic(r.t.id)}>Abrir ficha do tema</button>
+          </motion.div>
         )}
       </AnimatePresence>
-    </>
+    </motion.article>
   );
 }
 
