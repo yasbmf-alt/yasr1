@@ -194,7 +194,7 @@ export interface Settings {
   gardenDecor: Record<string, DecorPlacement>;
   gardenView: 'canteiros' | 'calendario';
   stickers: Record<string, StickerPlacement>;
-  libraryOrder: 'estudo' | 'area';
+  libraryOrder: 'estudo' | 'area' | 'tipo'; // tipo = Medway × Internato
   celebrationPhrases: string[];
   agendaView: 'semana' | 'mes';
   // 2.0

@@ -2165,12 +2165,6 @@ h5.sum-h { font-size: 14px; }
 .bm-read .mac-text { white-space: pre-wrap; margin: 0; }
 .bm .macete-form { padding-bottom: 6px; }
 
-/* ── Trilha · caminhos Medway e internato ──────────────────── */
-.via-seg { align-self: center; }
-.via-seg button { font-size: 13.5px; }
-.board-wrap.via-internato .board { --path: #FFD3C9; --edge: #F0A897; --dash: #FFF6F2; }
-.board-wrap.via-internato .via-seg button.is-on { color: #a2452f; }
-.board-wrap.via-internato .board-count { color: #a2452f; }
 /* cronômetro da correção */
 .corr-timer { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: var(--surface-2); border-radius: 14px; padding: 10px 14px; }
 .corr-clock { font-family: var(--font-display); font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; min-width: 92px; }

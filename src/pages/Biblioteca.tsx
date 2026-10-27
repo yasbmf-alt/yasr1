@@ -22,11 +22,14 @@ import { searchLibrary } from '../logic/search';
 interface Book {
   t: Topic;
   st: TopicStats;
+  kinds?: ('medway' | 'internato')[]; // de quais missões concluídas o livro veio
 }
 interface Shelf {
   area: Area | null;
+  group?: 'medway' | 'internato';
   books: Book[];
 }
+const GROUP_TAG = { medway: { label: 'Medway', bg: 'var(--azul-claro)', ink: 'var(--azul-ink)' }, internato: { label: 'Internato', bg: '#FFD9CF', ink: '#a2452f' } };
 
 
 const BOOK_W = 66;
@@ -66,7 +69,10 @@ export function Biblioteca() {
           // tema fora das missões entra no primeiro registro de estudo. Simulados: apareceu nos erros de um simulado.
           const ms = data.missions.filter((m) => m.topicId === t.id);
           const inTrail = ms.length ? ms.some((m) => missionProgress(m).complete) : st.sessions.length > 0 || (t.map?.nodes.length ?? 0) > 1;
-          return { t, st, first, inSims: occ.length > 0, inTrail, pending };
+          const done = ms.filter((m) => missionProgress(m).complete);
+          // estudo avulso (sem missão) fica junto com a Medway
+          const kinds = [...new Set(done.length ? done.map((m) => m.kind ?? 'medway') : ['medway' as const])];
+          return { t, st, first, inSims: occ.length > 0, inTrail, pending, kinds };
         })
         .filter((b) => b.inTrail) // erros de simulado ficam na Correção de Simulados, não viram livro
         .sort((a, b) => (a.first ?? '').localeCompare(b.first ?? '') || a.t.name.localeCompare(b.t.name)),
@@ -146,6 +152,7 @@ export function Biblioteca() {
               <div className="seg" role="tablist" aria-label="Organizar livros">
                 <button className={order === 'estudo' ? 'is-on' : ''} onClick={() => saveSettings({ libraryOrder: 'estudo' })}>Ordem de estudo</button>
                 <button className={order === 'area' ? 'is-on' : ''} onClick={() => saveSettings({ libraryOrder: 'area' })}>Especialidade</button>
+                <button className={order === 'tipo' ? 'is-on' : ''} onClick={() => saveSettings({ libraryOrder: 'tipo' })}>Medway / Internato</button>
               </div>
               <button className="btn btn-quiet btn-sm" onClick={toggle}>Fechar armário</button>
             </motion.div>
@@ -221,7 +228,7 @@ function Door({ side, open, onClick }: { side: 'left' | 'right'; open: boolean; 
 // ── Prateleiras e livros ──────────────────────────────────────
 
 function Shelves({ books, order, open, selected, jumping, onPick, special, pendingOnly }: {
-  books: Book[]; order: 'estudo' | 'area'; open: boolean; selected: string | null; jumping: string | null; onPick: (id: string) => void; special: string | null; pendingOnly: boolean;
+  books: Book[]; order: 'estudo' | 'area' | 'tipo'; open: boolean; selected: string | null; jumping: string | null; onPick: (id: string) => void; special: string | null; pendingOnly: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [perShelf, setPerShelf] = useState(8);
@@ -241,6 +248,11 @@ function Shelves({ books, order, open, selected, jumping, onPick, special, pendi
     for (const a of AREAS) {
       const list = books.filter((b) => b.t.area === a.id);
       for (let i = 0; i < list.length; i += perShelf) shelves.push({ area: a.id, books: list.slice(i, i + perShelf) });
+    }
+  } else if (order === 'tipo') {
+    for (const g of ['medway', 'internato'] as const) {
+      const list = books.filter((b) => (b.kinds ?? ['medway']).includes(g));
+      for (let i = 0; i < list.length; i += perShelf) shelves.push({ area: null, group: g, books: list.slice(i, i + perShelf) });
     }
   } else {
     for (let i = 0; i < books.length; i += perShelf) shelves.push({ area: null, books: books.slice(i, i + perShelf) });
@@ -277,6 +289,9 @@ function Shelves({ books, order, open, selected, jumping, onPick, special, pendi
             })}
           </div>
           <div className="shelf-plank">
+            {sh.group && sh.books.length > 0 && (i === 0 || shelves[i - 1].group !== sh.group) && (
+              <span className="shelf-tag" style={{ background: GROUP_TAG[sh.group].bg, color: GROUP_TAG[sh.group].ink }}>{GROUP_TAG[sh.group].label}</span>
+            )}
             {sh.area && sh.books.length > 0 && (i === 0 || shelves[i - 1].area !== sh.area) && (
               <span className="shelf-tag" style={{ background: areaOf(sh.area).color, color: areaOf(sh.area).ink }}>
                 {areaOf(sh.area).short}
