@@ -147,7 +147,7 @@ export function Registros() {
     (a, e) => {
       if (e.kind === 'session') {
         a.min += e.s.minutes ?? 0;
-        if (e.s.questions) {
+        if (e.s.questions && e.s.type !== 'flashcards') {
           a.q += e.s.questions;
           a.c += e.s.correct ?? 0;
         }

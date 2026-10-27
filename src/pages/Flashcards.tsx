@@ -4,27 +4,33 @@ import { useStore } from '../data/store';
 import { Modal, Field, ConfirmButton, LazyInput, useUI } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { AREAS, areaOf, type Area, type Deck, type Flashcard } from '../types';
-import { isDue, newCardState, previewLabel, RATING_LABEL, schedule, type Rating } from '../logic/fsrs';
+import { newCardState, previewLabel, RATING_LABEL, schedule, type Rating } from '../logic/fsrs';
+import { answeredToday, DAILY_GOAL, deckCounts, deckQueue, mistakesQueue, TURBO_SIZE, turboQueue } from '../logic/flashQueue';
+import { StationIcon } from '../assets/art';
 import type { CardState } from '../types';
 import { parseAny, type RawCard } from '../logic/cardImport';
 import { relDay, today, toKey, uid } from '../logic/dates';
 import { play } from '../logic/sound';
 import { isActive as isFocusActive } from '../components/focus';
 
-const NEW_PER_SESSION = 20;
-
 export function Flashcards() {
   const { data } = useStore();
   const [deckId, setDeckId] = useState<string | null>(null);
-  const [studying, setStudying] = useState<string | null>(null);
+  const [plan, setPlan] = useState<StudyPlan | null>(null);
   const [importing, setImporting] = useState<string | 'any' | null>(null);
   const [newDeck, setNewDeck] = useState(false);
   const deck = data.decks.find((d) => d.id === deckId) ?? null;
+  const studyDeck = (id: string) => {
+    const d = data.decks.find((x) => x.id === id);
+    const ids = deckQueue(id, data.cards);
+    if (!d || !ids.length) return;
+    setPlan({ key: `${id}-${Date.now()}`, title: d.name, ids, kind: 'deck' });
+  };
 
   return (
     <div className="page page-fc">
       {deck ? (
-        <DeckView deck={deck} onBack={() => setDeckId(null)} onStudy={() => setStudying(deck.id)} onImport={() => setImporting(deck.id)} />
+        <DeckView deck={deck} onBack={() => setDeckId(null)} onStudy={() => studyDeck(deck.id)} onImport={() => setImporting(deck.id)} />
       ) : (
         <>
           <header className="ag-head">
@@ -34,25 +40,59 @@ export function Flashcards() {
               <button className="btn btn-primary" onClick={() => setNewDeck(true)}><Icon name="plus" size={18} /> Novo baralho</button>
             </div>
           </header>
-          <DeckGrid onOpen={setDeckId} onStudy={setStudying} onImport={() => setImporting('any')} />
+          <FlashHub
+            onTurbo={() => { const ids = turboQueue(data.cards); if (ids.length) setPlan({ key: `turbo-${Date.now()}`, title: 'Turbo', ids, kind: 'turbo' }); }}
+            onMistakes={() => { const ids = mistakesQueue(data.cards); if (ids.length) setPlan({ key: `erros-${Date.now()}`, title: 'Revisar meus erros', ids, kind: 'erros' }); }}
+          />
+          <TokenField onOpen={setDeckId} onStudy={studyDeck} onImport={() => setImporting('any')} />
         </>
       )}
       <ImportModal target={importing} onClose={() => setImporting(null)} onDone={(id) => { setImporting(null); setDeckId(id); }} />
       <DeckForm open={newDeck} onClose={() => setNewDeck(false)} onCreated={(id) => { setNewDeck(false); setDeckId(id); }} />
-      <AnimatePresence>{studying && <Study key={studying} deckId={studying} onClose={() => setStudying(null)} />}</AnimatePresence>
+      <AnimatePresence>{plan && <Study key={plan.key} plan={plan} onClose={() => setPlan(null)} />}</AnimatePresence>
     </div>
   );
 }
 
-function deckCounts(deck: Deck, cards: Flashcard[]) {
-  const mine = cards.filter((c) => c.deckId === deck.id);
-  const now = new Date();
-  const fresh = mine.filter((c) => c.fsrs.phase === 'new').length;
-  const due = mine.filter((c) => c.fsrs.phase !== 'new' && isDue(c.fsrs, now)).length;
-  return { total: mine.length, fresh, due, ready: due + Math.min(NEW_PER_SESSION, fresh) };
+// ── Meta do dia, Turbo e erros ────────────────────────────────
+
+function FlashHub({ onTurbo, onMistakes }: { onTurbo: () => void; onMistakes: () => void }) {
+  const { data } = useStore();
+  const t = today();
+  const fromSessions = data.sessions.filter((s) => s.type === 'flashcards' && s.date === t).reduce((a, s) => a + (s.questions ?? 0), 0);
+  const doneToday = answeredToday(data.cards, fromSessions);
+  const pct = Math.min(1, doneToday / DAILY_GOAL);
+  const turboN = Math.min(TURBO_SIZE, data.cards.filter((c) => c.fsrs.phase !== 'new').length);
+  const errN = mistakesQueue(data.cards).length;
+  if (!data.cards.length) return null;
+  return (
+    <section className="fhub">
+      <div className="fhub-goal" title="Meta do dia: 30 cartões (não é limite)">
+        <svg viewBox="0 0 44 44" className="fhub-ring" aria-hidden="true">
+          <circle cx="22" cy="22" r="18" className="fhub-ring-bg" />
+          <circle cx="22" cy="22" r="18" className="fhub-ring-fg" strokeDasharray={`${pct * 113.1} 113.1`} />
+        </svg>
+        <div>
+          <strong>{doneToday}<span className="muted">/{DAILY_GOAL}</span></strong>
+          <span className="muted small">{doneToday >= DAILY_GOAL ? 'meta do dia batida! pode seguir se quiser' : 'cartões hoje · meta do dia'}</span>
+        </div>
+      </div>
+      <motion.button className="turbo" onClick={onTurbo} disabled={!turboN} whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} title="30 cartões misturados dos temas que você já estudou, priorizando atrasados, errados e difíceis">
+        <span className="turbo-bolt" aria-hidden="true">
+          <svg viewBox="0 0 24 32"><path d="M14 1 L3 18 h8 l-3 13 L21 12 h-8 z" /></svg>
+        </span>
+        <span className="turbo-txt"><strong>Modo Turbo</strong><span>{turboN ? `${turboN} cartões misturados` : 'estude um tema primeiro'}</span></span>
+      </motion.button>
+      <button className="btn btn-secondary fhub-err" onClick={onMistakes} disabled={!errN}>
+        <Icon name="restore" size={16} /> Revisar meus erros{errN ? ` · ${errN}` : ''}
+      </button>
+    </section>
+  );
 }
 
-function DeckGrid({ onOpen, onStudy, onImport }: { onOpen: (id: string) => void; onStudy: (id: string) => void; onImport: () => void }) {
+// ── Fichas dos temas (flutuando) ──────────────────────────────
+
+function TokenField({ onOpen, onStudy, onImport }: { onOpen: (id: string) => void; onStudy: (id: string) => void; onImport: () => void }) {
   const { data } = useStore();
   const decks = [...data.decks].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
   if (!decks.length)
@@ -64,28 +104,56 @@ function DeckGrid({ onOpen, onStudy, onImport }: { onOpen: (id: string) => void;
       </div>
     );
   return (
-    <div className="decks">
+    <div className="tokens">
       {decks.map((d, i) => {
-        const a = areaOf(d.area);
-        const c = deckCounts(d, data.cards);
         const topic = d.topicId ? data.topics.find((t) => t.id === d.topicId) : null;
-        return (
-          <motion.div key={d.id} className="deck" style={{ ['--c' as string]: a.color, ['--i' as string]: a.ink }} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}>
-            <button className="deck-face" onClick={() => onOpen(d.id)}>
-              <span className="deck-stack" aria-hidden="true"><i /><i /><i /></span>
-              <span className="deck-area">{a.short}</span>
-              <strong className="deck-name">{d.name}</strong>
-              {topic && <span className="deck-topic">{topic.name}</span>}
-              <span className="deck-count">{c.total} cartões</span>
-            </button>
-            <div className="deck-foot">
-              <span className="muted">{c.ready ? `${c.ready} para hoje` : 'tudo em dia'}</span>
-              <button className="btn btn-secondary btn-sm" disabled={!c.ready} onClick={() => onStudy(d.id)}>Estudar</button>
-            </div>
-          </motion.div>
-        );
+        const area = topic?.area ?? d.area;
+        return <Token key={d.id} i={i} name={topic?.name ?? d.name} sub={topic && topic.name !== d.name ? d.name : null} area={area} counts={deckCounts(d, data.cards)} onStudy={() => onStudy(d.id)} onOpen={() => onOpen(d.id)} />;
       })}
     </div>
+  );
+}
+
+function Token({ i, name, sub, area, counts, onStudy, onOpen }: {
+  i: number; name: string; sub: string | null; area: Area; counts: ReturnType<typeof deckCounts>; onStudy: () => void; onOpen: () => void;
+}) {
+  const a = areaOf(area);
+  const ref = useRef<HTMLDivElement>(null);
+  const ready = counts.ready > 0;
+  // inclina a ficha na direção do mouse (efeito 3D leve)
+  const tilt = (e: React.MouseEvent) => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    el.style.setProperty('--rx', `${((e.clientY - r.top) / r.height - 0.5) * -16}deg`);
+    el.style.setProperty('--ry', `${((e.clientX - r.left) / r.width - 0.5) * 18}deg`);
+  };
+  const reset = () => {
+    ref.current?.style.setProperty('--rx', '0deg');
+    ref.current?.style.setProperty('--ry', '0deg');
+  };
+  return (
+    <motion.div
+      className={`token-wrap ${ready ? 'is-ready' : 'is-done'}`}
+      style={{ ['--c' as string]: a.color, ['--i' as string]: a.ink, ['--d' as string]: `${(i % 5) * -1.1}s`, ['--dur' as string]: `${5.5 + (i % 4) * 0.7}s` }}
+      initial={{ opacity: 0, scale: 0.6, y: 20 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      transition={{ delay: i * 0.05, type: 'spring', stiffness: 260, damping: 16 }}
+    >
+      <div className="token-float">
+        <div className="token" ref={ref} onMouseMove={tilt} onMouseLeave={reset}>
+          <button className="token-face" onClick={ready ? onStudy : onOpen} aria-label={`${name}: ${ready ? `${counts.ready} cartões para estudar` : 'tudo em dia'}`}>
+            <span className="token-rim" aria-hidden="true" />
+            <span className="token-icon" aria-hidden="true"><StationIcon area={area} /></span>
+            <span className="token-count">{ready ? counts.ready : '✓'}</span>
+          </button>
+          <button className="token-edit" onClick={onOpen} aria-label={`Ver cartões de ${name}`} title="Ver e editar cartões"><Icon name="edit" size={13} /></button>
+        </div>
+        <span className="token-shadow" aria-hidden="true" />
+      </div>
+      <strong className="token-name">{name}</strong>
+      <span className="token-sub">{ready ? `${counts.due ? `${counts.due} para revisar` : ''}${counts.due && counts.fresh ? ' · ' : ''}${counts.fresh ? `${counts.fresh} novos` : ''}` : `${counts.total} cartões · em dia`}{sub ? ` · ${sub}` : ''}</span>
+    </motion.div>
   );
 }
 
@@ -344,47 +412,66 @@ function ImportModal({ target, onClose, onDone }: { target: string | 'any' | nul
 
 // ── Sessão de estudo ──────────────────────────────────────────
 
-function Study({ deckId, onClose }: { deckId: string; onClose: () => void }) {
-  const { data, saveCard, saveSession } = useStore();
+export interface StudyPlan {
+  key: string;
+  title: string;
+  ids: string[]; // fila fixada no início; o que não for respondido continua pendente
+  kind: 'deck' | 'turbo' | 'erros';
+}
+
+function Study({ plan, onClose }: { plan: StudyPlan; onClose: () => void }) {
+  const { data, saveCard, saveSession, snapshot } = useStore();
   const ui = useUI();
-  const deck = data.decks.find((d) => d.id === deckId);
-  // fila fixada no início da sessão; "De novo" devolve o cartão ao fim da fila
-  const [queue, setQueue] = useState<string[]>(() => {
-    const now = new Date();
-    const mine = data.cards.filter((c) => c.deckId === deckId);
-    const due = mine.filter((c) => c.fsrs.phase !== 'new' && isDue(c.fsrs, now)).sort((a, b) => a.fsrs.due.localeCompare(b.fsrs.due));
-    const fresh = mine.filter((c) => c.fsrs.phase === 'new').sort((a, b) => a.createdAt.localeCompare(b.createdAt)).slice(0, NEW_PER_SESSION);
-    return [...due, ...fresh].map((c) => c.id);
-  });
-  const [total] = useState(queue.length);
+  const [queue, setQueue] = useState<string[]>(plan.ids);
+  const [total] = useState(plan.ids.length);
   const [flipped, setFlipped] = useState(false);
   const [revealed, setRevealed] = useState(false); // já viu a resposta: dá para desvirar e ainda responder
-  const [stats, setStats] = useState({ reviewed: 0, ok: 0, again: 0 });
-  // cartões já respondidos nesta sessão, para poder voltar e rever
-  const [history, setHistory] = useState<{ id: string; prev: CardState; rating: Rating }[]>([]);
+  // respostas da sessão (para voltar, trocar a nota e registrar por tema)
+  const [history, setHistory] = useState<{ id: string; prev: CardState; rating: Rating; at: string }[]>([]);
   const [back, setBack] = useState(0); // 0 = cartão atual; 1 = o último respondido; …
   const startedAt = useRef(Date.now());
-  const logged = useRef<{ id: string; createdAt: string } | null>(null);
+  const logged = useRef(new Map<string, { id: string; createdAt: string }>()); // tema → registro desta sessão
   const past = back > 0 ? history[history.length - back] : null;
   const card = data.cards.find((c) => c.id === (past ? past.id : queue[0]));
   const finished = !past && !data.cards.some((c) => c.id === queue[0]);
   // um cartão revisto só pode mudar de nota se não foi respondido de novo depois
   const canChange = !!past && !history.slice(history.length - back + 1).some((h) => h.id === past.id);
+  const reviewed = history.length;
+  const ok = history.filter((h) => h.rating >= 2).length;
+  const again = reviewed - ok;
 
+  /** um registro de flashcards por tema (sessões mistas viram vários), atualizado se algo mudar */
   const logSession = () => {
-    if (stats.reviewed === 0 || !deck?.topicId) return;
-    // um registro por sessão: se a nota de um cartão mudar depois, o mesmo registro é atualizado
-    logged.current = logged.current ?? { id: uid(), createdAt: new Date().toISOString() };
-    saveSession({
-      id: logged.current.id, date: today(), topicId: deck.topicId, missionId: null, activityId: null, type: 'flashcards',
-      minutes: isFocusActive() ? null : Math.max(1, Math.round((Date.now() - startedAt.current) / 60000)), questions: stats.reviewed, correct: stats.ok,
-      errorTopics: [], notes: `Baralho: ${deck.name}`, createdAt: logged.current.createdAt,
-    });
+    if (!history.length) return;
+    const deckOf = new Map(snapshot().cards.map((c) => [c.id, c.deckId]));
+    const topicOf = new Map(snapshot().decks.map((d) => [d.id, d.topicId]));
+    const per = new Map<string, { n: number; ok: number; decks: Set<string> }>();
+    for (const h of history) {
+      const deckId = deckOf.get(h.id);
+      const topic = deckId ? topicOf.get(deckId) : null;
+      if (!topic) continue;
+      const x = per.get(topic) ?? { n: 0, ok: 0, decks: new Set<string>() };
+      x.n++;
+      x.ok += h.rating >= 2 ? 1 : 0;
+      x.decks.add(deckId!);
+      per.set(topic, x);
+    }
+    const minutes = isFocusActive() ? null : Math.max(1, Math.round((Date.now() - startedAt.current) / 60000));
+    for (const [topicId, x] of per) {
+      const ref = logged.current.get(topicId) ?? { id: uid(), createdAt: new Date().toISOString() };
+      logged.current.set(topicId, ref);
+      const names = [...x.decks].map((id) => snapshot().decks.find((d) => d.id === id)?.name).filter(Boolean).join(', ');
+      saveSession({
+        id: ref.id, date: today(), topicId, missionId: null, activityId: null, type: 'flashcards',
+        minutes: minutes == null ? null : Math.max(1, Math.round((minutes * x.n) / history.length)), questions: x.n, correct: x.ok,
+        errorTopics: [], notes: `${plan.kind === 'turbo' ? 'Turbo' : plan.kind === 'erros' ? 'Revisar meus erros' : 'Baralho'}: ${names}`, createdAt: ref.createdAt,
+      });
+    }
   };
   useEffect(() => {
     if (finished) {
       logSession();
-      if (stats.reviewed) play('mission');
+      if (reviewed) play('mission');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finished]);
@@ -399,19 +486,21 @@ function Study({ deckId, onClose }: { deckId: string; onClose: () => void }) {
     const b2 = Math.max(0, Math.min(history.length, n));
     if (b2 === back) return;
     setBack(b2);
-    // ao rever um cartão passado, ele aparece pela pergunta; o atual volta como estava (sem resposta)
     setFlipped(false);
     setRevealed(b2 > 0);
     play('page');
+  };
+  const close = () => {
+    logSession();
+    onClose();
   };
 
   const answer = (g: Rating) => {
     if (!card || !revealed) return;
     if (past) {
-      // trocar a nota de um cartão já respondido (recalcula a partir do estado de antes)
       if (!canChange || g === past.rating) return go(back - 1);
-      saveCard({ ...card, fsrs: schedule(past.prev, g) });
-      setStats((st) => ({ ...st, ok: st.ok + Number(g >= 2) - Number(past.rating >= 2), again: st.again + Number(g === 1) - Number(past.rating === 1) }));
+      // troca a nota: recalcula a partir do estado de antes e corrige a resposta no histórico do cartão
+      saveCard({ ...card, fsrs: schedule(past.prev, g), log: (card.log ?? []).map((r) => (r.at === past.at ? { ...r, g } : r)) });
       setQueue((q) => {
         if (past.rating === 1 && g !== 1) {
           const i = q.lastIndexOf(past.id);
@@ -424,10 +513,9 @@ function Study({ deckId, onClose }: { deckId: string; onClose: () => void }) {
       play(g === 1 ? 'uncheck' : 'check');
       return go(back - 1);
     }
-    const next = schedule(card.fsrs, g);
-    saveCard({ ...card, fsrs: next });
-    setHistory((h) => [...h, { id: card.id, prev: card.fsrs, rating: g }]);
-    setStats((st) => ({ reviewed: st.reviewed + 1, ok: st.ok + (g >= 2 ? 1 : 0), again: st.again + (g === 1 ? 1 : 0) }));
+    const at = new Date().toISOString();
+    saveCard({ ...card, fsrs: schedule(card.fsrs, g), log: [...(card.log ?? []), { at, g }].slice(-40) });
+    setHistory((h) => [...h, { id: card.id, prev: card.fsrs, rating: g, at }]);
     setQueue((q) => (g === 1 ? [...q.slice(1), q[0]] : q.slice(1)));
     setFlipped(false);
     setRevealed(false);
@@ -436,7 +524,7 @@ function Study({ deckId, onClose }: { deckId: string; onClose: () => void }) {
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { logSession(); onClose(); }
+      if (e.key === 'Escape') close();
       else if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); flip(); }
       else if (e.key === 'ArrowLeft') go(back + 1);
       else if (e.key === 'ArrowRight') go(back - 1);
@@ -447,20 +535,22 @@ function Study({ deckId, onClose }: { deckId: string; onClose: () => void }) {
   });
 
   const done = total - queue.length;
+  const left = queue.filter((id, i) => queue.indexOf(id) === i).length;
+  const deckName = card ? data.decks.find((d) => d.id === card.deckId)?.name : null;
   return (
-    <motion.div className="study" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} role="dialog" aria-label={`Estudar ${deck?.name ?? ''}`}>
+    <motion.div className={`study study-${plan.kind}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} role="dialog" aria-label={`Estudar ${plan.title}`}>
       <div className="study-top">
-        <span className="study-deck">{deck?.name}</span>
+        <span className="study-deck">{plan.kind === 'turbo' && <span className="study-bolt" aria-hidden="true">⚡</span>}{plan.title}</span>
         <span className="study-bar"><span style={{ width: `${total ? (done / total) * 100 : 100}%` }} /></span>
         <span className="muted mono">{Math.min(done, total)}/{total}</span>
-        <button className="icon-btn" onClick={() => { logSession(); onClose(); }} aria-label="Sair"><Icon name="close" /></button>
+        <button className="icon-btn" onClick={close} aria-label="Sair"><Icon name="close" /></button>
       </div>
 
       {finished ? (
         <motion.div className="study-end" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
-          <h2 className="h1">Sessão feita</h2>
-          <p>{stats.reviewed} respostas · {stats.reviewed - stats.again} lembradas de primeira ou depois</p>
-          {deck?.topicId ? <p className="muted">A sessão entrou no registro de estudos.</p> : <p className="muted">Ligue o baralho a um tema para a sessão contar no jardim.</p>}
+          <h2 className="h1">{plan.kind === 'turbo' ? 'Turbo feito!' : 'Sessão feita'}</h2>
+          <p>{reviewed} respostas · {ok} lembradas{again ? ` · ${again} para rever` : ''}</p>
+          <p className="muted">Os cartões respondidos entraram no registro de estudos de cada tema.</p>
           <div className="btn-row">
             {history.length > 0 && <button className="btn btn-quiet btn-lg" onClick={() => go(1)}><Icon name="chevronL" size={18} /> Rever cartões</button>}
             <button className="btn btn-primary btn-lg" onClick={() => { ui.toast('Até a próxima rodada!', 'diva'); onClose(); }}>Fechar</button>
@@ -471,14 +561,14 @@ function Study({ deckId, onClose }: { deckId: string; onClose: () => void }) {
           <div className="study-nav">
             <button className="icon-btn" onClick={() => go(back + 1)} disabled={back >= history.length} aria-label="Cartão anterior" title="Cartão anterior (←)"><Icon name="chevronL" /></button>
             <span className={`study-where ${past ? 'is-past' : ''}`}>
-              {past ? `Revendo ${back === 1 ? 'o último cartão' : `${back} cartões atrás`}` : history.length ? 'Cartão atual' : 'Primeiro cartão'}
+              {past ? `Revendo ${back === 1 ? 'o último cartão' : `${back} cartões atrás`}` : `${left} ${left === 1 ? 'cartão restante' : 'cartões restantes'}`}
             </span>
             <button className="icon-btn" onClick={() => go(back - 1)} disabled={back === 0} aria-label="Próximo cartão" title="Voltar para frente (→)"><Icon name="chevronR" /></button>
           </div>
           <div className="flip-stage" onClick={flip} role="button" aria-label={flipped ? 'Ver a pergunta' : 'Ver a resposta'}>
             <motion.div className="flip" animate={{ rotateY: flipped ? 180 : 0 }} transition={{ type: 'spring', stiffness: 220, damping: 22 }}>
               <div className="flip-face flip-front">
-                <span className="flip-tag">Frente</span>
+                <span className="flip-tag">Frente{plan.kind !== 'deck' && deckName ? ` · ${deckName}` : ''}</span>
                 <p>{card.front}</p>
                 <span className="flip-hint">{revealed ? 'Clique para ver a resposta de novo' : 'Clique ou aperte espaço para virar'}</span>
               </div>
@@ -489,10 +579,12 @@ function Study({ deckId, onClose }: { deckId: string; onClose: () => void }) {
               </div>
             </motion.div>
           </div>
-          {past && (
+          {past ? (
             <p className="study-past-note muted small">
               {canChange ? 'Você respondeu com a nota marcada. Escolha outra para trocar, ou toque na seta › para seguir.' : 'Este cartão foi respondido de novo depois; aqui é só para rever.'}
             </p>
+          ) : (
+            <p className="study-past-note muted small">{revealed ? 'Como foi?' : 'Pense na resposta e vire o cartão.'} Se parar no meio, o resto fica guardado para depois.</p>
           )}
           <div className={`ratings ${revealed ? 'is-on' : ''}`}>
             {([1, 2, 3, 4] as Rating[]).map((g) => (

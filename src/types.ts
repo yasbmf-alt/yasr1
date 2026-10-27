@@ -379,6 +379,11 @@ export interface Flashcard {
   tags: string[];
   fsrs: CardState;
   createdAt: string;
+  log?: CardReview[]; // últimas respostas (para estatísticas, Turbo e "Revisar meus erros")
+}
+export interface CardReview {
+  at: string; // ISO
+  g: 1 | 2 | 3 | 4; // De novo, Difícil, Bom, Fácil
 }
 
 export interface DataSnapshot {

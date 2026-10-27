@@ -86,7 +86,8 @@ export function topicStats(topic: Topic, allSessions: Session[]): TopicStats {
   const errs = new Map<string, number>();
   for (const s of sessions) {
     minutes += s.minutes ?? 0;
-    if (s.questions) {
+    // acerto de questões nunca mistura flashcards (cartões lembrados não são questões)
+    if (s.questions && s.type !== 'flashcards') {
       questions += s.questions;
       correct += s.correct ?? 0;
     }
