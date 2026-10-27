@@ -7,21 +7,24 @@ import { Asset } from '../assets/registry';
 import { SPECIES_BY_AREA } from '../assets/art';
 import { Garden } from './Garden';
 import { Registros } from './Registros';
+import { FlashStats } from '../components/FlashStats';
 import { areaOf } from '../types';
 import { groupPct, groupStudy } from '../logic/studyGroups';
 import { dayVolumes, dominantArea, intensity, weeklyMinutes } from '../logic/progress';
 import { DIAS_CURTOS, fmtMinutes, fmtShort, fromKey, MESES_LONGOS, pad, toKey, today } from '../logic/dates';
 
+type JardimTab = 'calendario' | 'registros' | 'flash';
+
 export function Evolucao() {
   const [day, setDay] = useState<string>(today());
-  const [tab, setTab] = useState<'calendario' | 'registros'>(() => {
+  const [tab, setTab] = useState<JardimTab>(() => {
     try {
-      return (localStorage.getItem('yasr1-jardim-tab') as 'calendario' | 'registros') || 'calendario';
+      return (localStorage.getItem('yasr1-jardim-tab') as JardimTab) || 'calendario';
     } catch {
       return 'calendario';
     }
   });
-  const pickTab = (t: 'calendario' | 'registros') => {
+  const pickTab = (t: JardimTab) => {
     setTab(t);
     try {
       localStorage.setItem('yasr1-jardim-tab', t);
@@ -39,6 +42,7 @@ export function Evolucao() {
       <div className="seg seg-tabs" role="tablist" aria-label="Detalhes">
         <button role="tab" aria-selected={tab === 'calendario'} className={tab === 'calendario' ? 'is-on' : ''} onClick={() => pickTab('calendario')}>Calendário</button>
         <button role="tab" aria-selected={tab === 'registros'} className={tab === 'registros' ? 'is-on' : ''} onClick={() => pickTab('registros')}>Registros</button>
+        <button role="tab" aria-selected={tab === 'flash'} className={tab === 'flash' ? 'is-on' : ''} onClick={() => pickTab('flash')}>Flashcards</button>
       </div>
       <AnimatePresence mode="wait">
         <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
@@ -50,6 +54,8 @@ export function Evolucao() {
                 <WeeklyHours />
               </div>
             </div>
+          ) : tab === 'flash' ? (
+            <FlashStats />
           ) : (
             <Registros />
           )}

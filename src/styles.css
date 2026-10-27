@@ -2244,3 +2244,24 @@ h5.sum-h { font-size: 14px; }
   .token { width: 96px; height: 96px; }
   .token-icon { width: 46px; height: 46px; }
 }
+
+/* ── Estatísticas de flashcards ────────────────────────────── */
+.fst { display: flex; flex-direction: column; gap: 14px; }
+.fst-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.fst-weeks { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; align-items: end; height: 150px; }
+.fst-week { display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; }
+.fst-p { font-size: 11px; font-weight: 800; color: var(--rosa-ink); min-height: 14px; }
+.fst-bar { flex: 1; width: 70%; display: flex; align-items: flex-end; background: var(--surface-2); border-radius: 8px; overflow: hidden; }
+.fst-bar span { width: 100%; background: linear-gradient(var(--rosa-medio), #f8b2d4); border-radius: 8px 8px 0 0; min-height: 2px; }
+.fst-w { font-size: 10.5px; color: var(--muted); }
+.fst-topics, .fst-missed, .fst-hist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.fst-topics li { display: grid; grid-template-columns: 10px minmax(0, 1.2fr) minmax(0, 1fr) 40px auto; gap: 8px; align-items: center; font-size: 13.5px; }
+.fst-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.fst-track { height: 8px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.fst-track span { display: block; height: 100%; background: var(--rosa-medio); border-radius: 999px; }
+.fst-val { font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; }
+.fst-hard { margin: 10px 0 0; font-size: 13.5px; }
+.fst-missed li { display: flex; flex-direction: column; background: var(--surface-2); border-radius: 10px; padding: 7px 10px; }
+.fst-front { font-weight: 600; font-size: 13.5px; }
+.fst-hist li { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 13.5px; }
+@media (max-width: 760px) { .fst-grid { grid-template-columns: minmax(0, 1fr); } }
