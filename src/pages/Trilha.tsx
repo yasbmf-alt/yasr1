@@ -40,6 +40,22 @@ export function Trilha() {
   const [openMission, setOpenMission] = useState<string | null>(null);
   const [editCh, setEditCh] = useState<Chapter | 'new' | null>(null);
   const [newMission, setNewMission] = useState(false);
+  // dois caminhos separados em cada capítulo: missões Medway e missões do internato
+  const [via, setViaState] = useState<Mission['kind']>(() => {
+    try {
+      return localStorage.getItem('yasr1-trilha-via') === 'internato' ? 'internato' : 'medway';
+    } catch {
+      return 'medway';
+    }
+  });
+  const setVia = (v: Mission['kind']) => {
+    setViaState(v);
+    try {
+      localStorage.setItem('yasr1-trilha-via', v);
+    } catch {
+      /* ignore */
+    }
+  };
   const chapter = chapters.find((c) => c.id === chId) ?? currentChapter(chapters) ?? null;
   // direção da transição entre capítulos (avança → entra pela direita)
   const dir = useRef(1);
@@ -93,6 +109,8 @@ export function Trilha() {
               >
                 <Board
                   chapter={chapter}
+                  via={via}
+                  onVia={setVia}
                   onOpen={(id) => { play('pop'); setOpenMission(id); }}
                   onEdit={() => setEditCh(chapter)}
                   onNewMission={() => setNewMission(true)}
@@ -104,7 +122,7 @@ export function Trilha() {
       )}
       <MissionPanel missionId={openMission} onClose={() => setOpenMission(null)} />
       <ChapterEditor value={editCh} onClose={() => setEditCh(null)} onSaved={(id) => setChId(id)} />
-      {chapter && <NewMission open={newMission} chapter={chapter} onClose={() => setNewMission(false)} onCreated={(id) => setOpenMission(id)} />}
+      {chapter && <NewMission open={newMission} chapter={chapter} defaultKind={via} onClose={() => setNewMission(false)} onCreated={(id) => setOpenMission(id)} />}
     </div>
   );
 }
@@ -236,14 +254,22 @@ function ChapterTabs({ chapters, active, onPick, onNew }: { chapters: Chapter[];
 
 const xAt = sceneXAt;
 
-function Board({ chapter, onOpen, onEdit, onNewMission }: { chapter: Chapter; onOpen: (id: string) => void; onEdit: () => void; onNewMission: () => void }) {
+function Board({ chapter, via, onVia, onOpen, onEdit, onNewMission }: {
+  chapter: Chapter; via: Mission['kind']; onVia: (v: Mission['kind']) => void; onOpen: (id: string) => void; onEdit: () => void; onNewMission: () => void;
+}) {
   const { data, saveNote } = useStore();
   const ui = useUI();
   const ambient = useAmbient();
   const boardRef = useRef<HTMLDivElement>(null);
   const [openNote, setOpenNote] = useState<string | null>(null);
-  const ms = chapterMissions(chapter.id, data.missions);
-  const prog = chapterProgress(chapter, data.missions);
+  const all = chapterMissions(chapter.id, data.missions);
+  const kindOf = (m: Mission) => m.kind ?? 'medway';
+  const ms = all.filter((m) => kindOf(m) === via);
+  const viaCount = { medway: all.filter((m) => kindOf(m) === 'medway').length, internato: all.filter((m) => kindOf(m) === 'internato').length };
+  // progresso, caminho e baú são de cada caminho, sem misturar Medway e internato
+  const doneN = ms.filter((m) => missionProgress(m).complete).length;
+  const prog = { missions: ms.length, done: doneN, complete: ms.length > 0 && doneN === ms.length };
+  const chapterDone = chapterProgress(chapter, data.missions).complete;
   const th = chapterTheme(chapter.number);
   const theme = themeFor(chapter.number);
   const sc = SCENE_COLORS[theme];
@@ -321,14 +347,18 @@ function Board({ chapter, onOpen, onEdit, onNewMission }: { chapter: Chapter; on
 
   return (
     <section
-      className={`board-wrap scene-${theme}`}
+      className={`board-wrap scene-${theme} via-${via}`}
       style={{ ['--map' as string]: sc.bg, ['--path' as string]: sc.path, ['--edge' as string]: sc.edge, ['--hill' as string]: sc.hill, ['--hill2' as string]: sc.hill2, ['--dash' as string]: sc.dash, ['--tab' as string]: th.tab }}
     >
       <div className="board-head">
         <div className="board-titles">
           <p className="eyebrow">Capítulo {chapter.number} · {fmtRange(chapter.startDate, chapter.endDate)}</p>
           <h2 className="board-title">{chapter.title}</h2>
-          <span className="board-count">{prog.done} de {prog.missions} missões</span>
+          <span className="board-count">{prog.done} de {prog.missions} missões {via === 'internato' ? 'do internato' : 'Medway'}</span>
+        </div>
+        <div className="seg via-seg" role="tablist" aria-label="Caminho">
+          <button role="tab" aria-selected={via === 'medway'} className={via === 'medway' ? 'is-on' : ''} onClick={() => onVia('medway')}>Medway{viaCount.medway ? ` · ${viaCount.medway}` : ''}</button>
+          <button role="tab" aria-selected={via === 'internato'} className={via === 'internato' ? 'is-on' : ''} onClick={() => onVia('internato')}>Internato{viaCount.internato ? ` · ${viaCount.internato}` : ''}</button>
         </div>
         <div className="btn-row">
           <button className="btn btn-quiet btn-sm" onClick={onEdit}><Icon name="edit" size={16} /> Editar</button>
@@ -478,11 +508,15 @@ function Board({ chapter, onOpen, onEdit, onNewMission }: { chapter: Chapter; on
               void chestCtl.start({ scale: [1, 1.25, 0.95, 1.08], y: ['-50%', '-62%', '-50%', '-50%'], transition: { duration: 0.5 } });
               burst(el, 'brilho', 16);
               setTimeout(() => burst(el, 'confete', 14), 180);
-              setTimeout(() => ui.celebrate({ kind: 'chapter', title: `${chapter.title} concluído`, extras: ['Uma flor rara nasceu no seu jardim'] }), 520);
+              setTimeout(() => ui.celebrate(
+                chapterDone
+                  ? { kind: 'chapter', title: `${chapter.title} concluído`, extras: ['Uma flor rara nasceu no seu jardim'] }
+                  : { kind: 'mission', title: `Caminho ${via === 'internato' ? 'do internato' : 'Medway'} de ${chapter.title} concluído`, extras: [] },
+              ), 520);
             } else {
               play('drop');
               void chestCtl.start({ rotate: [0, -8, 8, -5, 5, 0], transition: { duration: 0.45 } });
-              ui.toast('O baú abre quando todas as missões deste capítulo estiverem feitas.');
+              ui.toast(`O baú abre quando todas as missões ${via === 'internato' ? 'do internato' : 'Medway'} deste capítulo estiverem feitas.`);
             }
           }}
           aria-label={prog.complete ? 'Baú do capítulo aberto' : 'Baú do capítulo, fechado'}
@@ -492,7 +526,7 @@ function Board({ chapter, onOpen, onEdit, onNewMission }: { chapter: Chapter; on
 
         {n === 0 && (
           <div className="board-empty">
-            <p>Nenhuma missão neste capítulo.</p>
+            <p>{via === 'internato' ? 'Nenhuma missão do internato neste capítulo.' : 'Nenhuma missão Medway neste capítulo.'}</p>
             <button className="btn btn-primary btn-sm" onClick={onNewMission}><Icon name="plus" size={16} /> Adicionar missão</button>
           </div>
         )}

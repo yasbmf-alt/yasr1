@@ -80,15 +80,15 @@ const DEFAULT_ACTS: { type: ActivityType; label: string }[] = [
   { type: 'flashcards', label: 'Flashcards' },
 ];
 
-export function NewMission({ open, chapter, onClose, onCreated }: { open: boolean; chapter: Chapter; onClose: () => void; onCreated: (id: string) => void }) {
+export function NewMission({ open, chapter, defaultKind = 'medway', onClose, onCreated }: { open: boolean; chapter: Chapter; defaultKind?: Mission['kind']; onClose: () => void; onCreated: (id: string) => void }) {
   const { data, saveMission, saveTopic } = useStore();
   const [topicId, setTopicId] = useState('');
   const [pending, setPending] = useState<Topic | null>(null);
   const [label, setLabel] = useState('');
-  const [kind, setKind] = useState<Mission['kind']>('medway');
+  const [kind, setKind] = useState<Mission['kind']>(defaultKind);
   const [acts, setActs] = useState<ActivityType[]>(DEFAULT_ACTS.map((a) => a.type));
   useEffect(() => {
-    if (open) { setTopicId(''); setPending(null); setLabel(''); setKind('medway'); setActs(DEFAULT_ACTS.map((a) => a.type)); }
+    if (open) { setTopicId(''); setPending(null); setLabel(''); setKind(defaultKind); setActs(DEFAULT_ACTS.map((a) => a.type)); }
   }, [open]);
   const topicName = data.topics.find((t) => t.id === topicId)?.name ?? pending?.name ?? '';
 

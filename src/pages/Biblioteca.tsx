@@ -28,9 +28,6 @@ interface Shelf {
   books: Book[];
 }
 
-// duas estantes: temas estudados na trilha e temas que vieram dos simulados
-type LibShelf = 'trilha' | 'simulados';
-const LIB_SHELF_KEY = 'yasr1-lib-estante';
 
 const BOOK_W = 66;
 const BOOK_GAP = 12;
@@ -53,21 +50,6 @@ export function Biblioteca() {
     }
   }, [ui.pendingBook, ui]);
 
-  const [shelf, setShelfState] = useState<LibShelf>(() => {
-    try {
-      return localStorage.getItem(LIB_SHELF_KEY) === 'simulados' ? 'simulados' : 'trilha';
-    } catch {
-      return 'trilha';
-    }
-  });
-  const setShelf = (f: LibShelf) => {
-    setShelfState(f);
-    try {
-      localStorage.setItem(LIB_SHELF_KEY, f);
-    } catch {
-      /* ignore */
-    }
-  };
   const [pendingOnly, setPendingOnly] = useState(false);
   const allBooks = useMemo(
     () =>
@@ -86,13 +68,12 @@ export function Biblioteca() {
           const inTrail = ms.length ? ms.some((m) => missionProgress(m).complete) : st.sessions.length > 0 || (t.map?.nodes.length ?? 0) > 1;
           return { t, st, first, inSims: occ.length > 0, inTrail, pending };
         })
-        .filter((b) => b.inTrail || b.inSims)
+        .filter((b) => b.inTrail) // erros de simulado ficam na Correção de Simulados, não viram livro
         .sort((a, b) => (a.first ?? '').localeCompare(b.first ?? '') || a.t.name.localeCompare(b.t.name)),
     [data.topics, data.sessions, data.simulados, data.missions],
   );
-  const onShelf = allBooks.filter((b) => (shelf === 'simulados' ? b.inSims : b.inTrail));
-  const books = pendingOnly ? onShelf.filter((b) => b.pending) : onShelf;
-  const counts = { trilha: allBooks.filter((b) => b.inTrail).length, simulados: allBooks.filter((b) => b.inSims).length, pendentes: onShelf.filter((b) => b.pending).length };
+  const books = pendingOnly ? allBooks.filter((b) => b.pending) : allBooks;
+  const counts = { pendentes: allBooks.filter((b) => b.pending).length };
   const [q, setQ] = useState('');
   const hits = useMemo(() => searchLibrary(data, q), [data, q]);
 
@@ -159,10 +140,6 @@ export function Biblioteca() {
         <AnimatePresence>
           {open && (
             <motion.div className="lib-controls" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-              <div className="seg" role="tablist" aria-label="Estante">
-                <button className={shelf === 'trilha' ? 'is-on' : ''} onClick={() => setShelf('trilha')}>Temas da trilha{counts.trilha ? ` · ${counts.trilha}` : ''}</button>
-                <button className={shelf === 'simulados' ? 'is-on' : ''} onClick={() => setShelf('simulados')}>Temas dos simulados{counts.simulados ? ` · ${counts.simulados}` : ''}</button>
-              </div>
               <button className={`lib-pend ${pendingOnly ? 'is-on' : ''}`} aria-pressed={pendingOnly} onClick={() => setPendingOnly(!pendingOnly)}>
                 Pendentes de revisão{counts.pendentes ? ` · ${counts.pendentes}` : ''}
               </button>
@@ -195,7 +172,7 @@ export function Biblioteca() {
           <div className="w-body">
             <div className="w-interior">
               <span className="w-interior-bg" aria-hidden="true"><Asset slot="library.interior" /></span>
-              <Shelves books={books} order={order} open={open} selected={selected} jumping={jumping} onPick={pick} special={specialBook} shelf={shelf} pendingOnly={pendingOnly} />
+              <Shelves books={books} order={order} open={open} selected={selected} jumping={jumping} onPick={pick} special={specialBook} pendingOnly={pendingOnly} />
             </div>
             <Door side="left" open={open} onClick={toggle} />
             <Door side="right" open={open} onClick={toggle} />
@@ -243,8 +220,8 @@ function Door({ side, open, onClick }: { side: 'left' | 'right'; open: boolean; 
 
 // ── Prateleiras e livros ──────────────────────────────────────
 
-function Shelves({ books, order, open, selected, jumping, onPick, special, shelf, pendingOnly }: {
-  books: Book[]; order: 'estudo' | 'area'; open: boolean; selected: string | null; jumping: string | null; onPick: (id: string) => void; special: string | null; shelf: LibShelf; pendingOnly: boolean;
+function Shelves({ books, order, open, selected, jumping, onPick, special, pendingOnly }: {
+  books: Book[]; order: 'estudo' | 'area'; open: boolean; selected: string | null; jumping: string | null; onPick: (id: string) => void; special: string | null; pendingOnly: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [perShelf, setPerShelf] = useState(8);
@@ -276,10 +253,8 @@ function Shelves({ books, order, open, selected, jumping, onPick, special, shelf
       {books.length === 0 && open && (
         <motion.p className="shelves-empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}>
           {pendingOnly
-            ? 'Nada pendente de revisão nesta estante. Tudo em dia!'
-            : shelf === 'simulados'
-              ? 'Nenhum tema dos simulados ainda. Detalhe os erros de um simulado para eles aparecerem aqui.'
-              : 'Cada tema de missão vira um livro aqui quando você conclui a missão dele.'}
+            ? 'Nada pendente de revisão. Tudo em dia!'
+            : 'Cada tema de missão vira um livro aqui quando você conclui a missão dele.'}
         </motion.p>
       )}
       {shelves.map((sh, i) => (
