@@ -19,6 +19,7 @@ import { Agenda } from './pages/Agenda';
 import { Revisoes } from './pages/Revisoes';
 import { Biblioteca } from './pages/Biblioteca';
 import { setDemo } from './data/repo';
+import { useActiveEvents } from './components/EventDecor';
 
 const NAV: { id: Page; label: string; icon: string }[] = [
   { id: 'trilha', label: 'Minha Trilha', icon: 'trilha' },
@@ -95,6 +96,14 @@ function Main() {
   React.useEffect(() => {
     document.documentElement.classList.toggle('reduce-motion', rm === 'on' || (rm === 'system' && matchMedia('(prefers-reduced-motion: reduce)').matches));
   }, [rm]);
+  // Halloween e Natal trocam a paleta do app inteiro enquanto durarem (some sozinho depois)
+  const ev = useActiveEvents();
+  const season = ev.seasonal?.theme === 'halloween' ? 'halloween' : ev.seasonal?.theme === 'natal' ? 'natal' : null;
+  React.useEffect(() => {
+    const html = document.documentElement;
+    html.classList.toggle('pal-halloween', season === 'halloween');
+    html.classList.toggle('pal-natal', season === 'natal');
+  }, [season]);
 
   return (
     <MotionConfig reducedMotion={rm === 'on' ? 'always' : rm === 'off' ? 'never' : 'user'}>

@@ -2322,10 +2322,6 @@ h5.sum-h { font-size: 14px; }
 .hs { position: absolute; inset: -8px 0 0; pointer-events: none; z-index: 6; overflow: hidden; }
 .hs button { pointer-events: auto; border: 0; background: transparent; padding: 0; cursor: pointer; }
 /* Halloween: roxo, preto e um toque de laranja */
-.page-trilha.season-halloween {
-  --rosa: #e6dbff; --rosa-ink: #4b2a7a; --rosa-medio: #f28c28; --azul: #2a2238; --azul-esc: #1a1426;
-  --manteiga: #ffe1bf; --manteiga-ink: #8a4a10; --lima: #ffd3a1; --lima-ink: #7a3d0a;
-}
 .season-halloween .greet h1 { color: #2a2238; }
 .season-halloween .diva-bubble { background: #e6dbff; color: #4b2a7a; box-shadow: 0 3px 0 #c9b5f2; }
 .season-halloween .ch-tab.is-active { box-shadow: inset 0 0 0 2px #6b4fa0; }
@@ -2347,10 +2343,6 @@ h5.sum-h { font-size: 14px; }
 .hs-fog { position: absolute; left: -10%; right: -10%; bottom: 0; height: 160px; background: radial-gradient(ellipse at 30% 100%, rgba(203, 187, 232, 0.55), transparent 60%), radial-gradient(ellipse at 75% 100%, rgba(203, 187, 232, 0.45), transparent 55%); animation: fogDrift 14s ease-in-out infinite alternate; }
 @keyframes fogDrift { from { transform: translateX(-3%); } to { transform: translateX(3%); } }
 /* Natal: vermelho, verde-floresta e amarelo-manteiga */
-.page-trilha.season-natal {
-  --rosa: #f8d6d8; --rosa-ink: #a3222f; --rosa-medio: #c8344b; --azul: #2f6b45; --azul-esc: #22523a;
-  --lima: #cfe6c4; --lima-ink: #2f6b45;
-}
 .season-natal .diva-bubble { background: #f8d6d8; color: #a3222f; box-shadow: 0 3px 0 #ebb2b8; }
 .season-natal .scene-classico { background: linear-gradient(#e4eef7, #f3f7fb 150px, #f3f7fb); }
 .hs-lights { position: absolute; top: 2px; left: 0; right: 0; height: 26px; display: flex; justify-content: space-around; border-top: 2px solid #2f6b45; border-radius: 0 0 50% 50% / 0 0 14px 14px; }
@@ -2387,3 +2379,29 @@ h5.sum-h { font-size: 14px; }
 .hs-bat.b1 { top: 74px; }
 .hs-bat.b2 { top: 150px; }
 .hs-ghost, .hs-star { border: 0; background: transparent; padding: 0; cursor: pointer; }
+
+/* ── Paleta sazonal (app inteiro) ──────────────────────────── */
+/* Halloween: o azul-marinho vira roxo-escuro, o rosa vira laranja */
+:root.pal-halloween {
+  --azul: #3b2266; --azul-esc: #2a1749; --azul-ink: #3b2266; --azul-claro: #e4d8fb;
+  --rosa: #ffdcc2; --rosa-ink: #8a3d0a; --rosa-medio: #f28c28;
+  --lilas: #e3d3ff; --lilas-ink: #4b2a7a; --pessego: #ffbb8f; --pessego-ink: #8a3d0a;
+  --lima: #ffcf8f; --lima-ink: #7a3d0a;
+  --bg: #f9f5fd; --surface-2: #f3ecfb; --line: #e8ddf4; --fg: #22182f; --muted: #6c6280;
+  --shadow: 0 1px 0 rgba(59, 34, 102, 0.05), 0 10px 28px -16px rgba(59, 34, 102, 0.35);
+}
+:root.pal-halloween .sidebar { background: linear-gradient(180deg, #3b2266, #24143f); }
+:root.pal-halloween .logo-r1 { background: #f28c28; color: #fff; }
+:root.pal-halloween .turbo { background: linear-gradient(135deg, #3b2266, #f28c28); box-shadow: 0 4px 0 #24143f, 0 10px 24px -10px rgba(242, 140, 40, 0.6); }
+/* Natal: vermelho, verde-floresta e amarelo-manteiga */
+:root.pal-natal {
+  --azul: #1f5a3a; --azul-esc: #164530; --azul-ink: #1f5a3a; --azul-claro: #d5eadb;
+  --rosa: #f8d6d8; --rosa-ink: #a3222f; --rosa-medio: #c8344b;
+  --lilas: #f3e3c3; --lilas-ink: #7a5310; --pessego: #f6b7b0; --pessego-ink: #a3222f;
+  --lima: #cfe6c4; --lima-ink: #2f6b45; --manteiga: #fff3b0;
+  --bg: #fbf8f2; --surface-2: #f6efe7; --line: #ece2d8; --fg: #1f2a22;
+  --shadow: 0 1px 0 rgba(31, 90, 58, 0.05), 0 10px 28px -16px rgba(31, 90, 58, 0.3);
+}
+:root.pal-natal .sidebar { background: linear-gradient(180deg, #1f5a3a, #143d27); }
+:root.pal-natal .logo-r1 { background: #c8344b; color: #fff; }
+:root.pal-natal .turbo { background: linear-gradient(135deg, #1f5a3a, #c8344b); box-shadow: 0 4px 0 #143d27, 0 10px 24px -10px rgba(200, 52, 75, 0.55); }
