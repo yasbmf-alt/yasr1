@@ -2239,26 +2239,6 @@ h5.sum-h { font-size: 14px; }
   .token-icon { width: 46px; height: 46px; }
 }
 
-/* ── Estatísticas de flashcards ────────────────────────────── */
-.fst { display: flex; flex-direction: column; gap: 14px; }
-.fst-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.fst-weeks { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; align-items: end; height: 150px; }
-.fst-week { display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; }
-.fst-p { font-size: 11px; font-weight: 800; color: var(--rosa-ink); min-height: 14px; }
-.fst-bar { flex: 1; width: 70%; display: flex; align-items: flex-end; background: var(--surface-2); border-radius: 8px; overflow: hidden; }
-.fst-bar span { width: 100%; background: linear-gradient(var(--rosa-medio), #f8b2d4); border-radius: 8px 8px 0 0; min-height: 2px; }
-.fst-w { font-size: 10.5px; color: var(--muted); }
-.fst-topics, .fst-missed, .fst-hist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
-.fst-topics li { display: grid; grid-template-columns: 10px minmax(0, 1.2fr) minmax(0, 1fr) 40px auto; gap: 8px; align-items: center; font-size: 13.5px; }
-.fst-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-.fst-track { height: 8px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
-.fst-track span { display: block; height: 100%; background: var(--rosa-medio); border-radius: 999px; }
-.fst-val { font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; }
-.fst-hard { margin: 10px 0 0; font-size: 13.5px; }
-.fst-missed li { display: flex; flex-direction: column; background: var(--surface-2); border-radius: 10px; padding: 7px 10px; }
-.fst-front { font-weight: 600; font-size: 13.5px; }
-.fst-hist li { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 13.5px; }
-@media (max-width: 760px) { .fst-grid { grid-template-columns: minmax(0, 1fr); } }
 
 /* ── Revisões ──────────────────────────────────────────────── */
 .page-rev { display: flex; flex-direction: column; gap: 16px; }
@@ -2455,3 +2435,49 @@ h5.sum-h { font-size: 14px; }
 .reduce-motion .jc-step.is-next .jc-dot, .reduce-motion .hearts svg { animation: none !important; }
 @media (max-width: 560px) { .jr-grid { grid-template-columns: minmax(0, 1fr); } }
 .jr-grid { align-items: start; }
+
+/* ── Estatísticas de flashcards ────────────────────────────── */
+.fs2 { display: flex; flex-direction: column; gap: 14px; }
+.fs2-hero { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.fs2-tile { background: var(--surface); border-radius: 20px; padding: 14px 16px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 4px; }
+.fs2-tile.t-today { background: linear-gradient(140deg, var(--rosa), var(--surface) 75%); }
+.fs2-k { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.fs2-v { font-family: var(--font-display); font-size: 32px; font-weight: 800; line-height: 1; }
+.fs2-v small { font-size: 15px; color: var(--muted); font-weight: 700; }
+.fs2-s { font-size: 13px; color: var(--muted); }
+.fs2-s b.up { color: var(--ok); } .fs2-s b.down { color: #b4436c; }
+.fs2-bar { height: 8px; background: rgba(255, 255, 255, 0.7); border-radius: 999px; overflow: hidden; }
+.fs2-bar span { display: block; height: 100%; background: var(--rosa-medio); border-radius: 999px; }
+.fs2-row { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 14px; }
+.fs2-card .card-title { margin-top: 0; }
+.fs2-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.fs2-fc { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; height: 150px; align-items: end; }
+.fs2-fc-day { display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; }
+.fs2-fc-n { font-weight: 800; font-size: 14px; font-variant-numeric: tabular-nums; }
+.fs2-fc-bar { flex: 1; width: 64%; display: flex; align-items: flex-end; background: var(--surface-2); border-radius: 10px; overflow: hidden; }
+.fs2-fc-bar span { display: block; width: 100%; background: var(--azul-claro); border-radius: 10px 10px 0 0; min-height: 3px; }
+.fs2-fc-day.is-today .fs2-fc-bar span { background: var(--rosa-medio); }
+.fs2-fc-d { font-size: 11.5px; font-weight: 700; color: var(--muted); text-transform: lowercase; }
+.fs2-mat { display: flex; height: 22px; border-radius: 999px; overflow: hidden; background: var(--surface-2); margin: 6px 0 12px; }
+.fs2-mat span { height: 100%; }
+.m-maduros { background: #6e8f3a; } .m-jovens { background: #b7d27e; } .m-aprendendo { background: #ffd27a; } .m-novos { background: #d9d2e0; }
+.fs2-mat-leg { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
+.fs2-mat-leg i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; vertical-align: -1px; margin-right: 4px; }
+.fs2-report { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.fs2-rc { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; background: var(--surface-2); border-radius: 16px; padding: 10px 12px; box-shadow: inset 4px 0 0 var(--c); }
+.fs2-rc-icon { width: 40px; height: 40px; border-radius: 12px; background: var(--c); padding: 7px; }
+.fs2-rc-icon svg { width: 100%; height: 100%; display: block; }
+.fs2-rc-main { display: flex; flex-direction: column; min-width: 0; }
+.fs2-rc-main strong { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fs2-grade { display: flex; flex-direction: column; align-items: center; min-width: 52px; }
+.fs2-grade span { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; font-family: var(--font-display); font-weight: 800; font-size: 22px; background: #e7e2ec; color: var(--muted); transform: rotate(-4deg); box-shadow: 0 3px 0 rgba(29, 37, 65, 0.12); }
+.fs2-grade small { font-size: 11px; font-weight: 700; color: var(--muted); margin-top: 2px; }
+.g-A .fs2-grade span { background: #8db255; color: #fff; }
+.g-B .fs2-grade span { background: #cfe6a4; color: #3f5a14; }
+.g-C .fs2-grade span { background: #ffe1a6; color: #7a5310; }
+.g-D .fs2-grade span { background: #ffd0d4; color: #8f2c36; }
+.fs2-prob { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.fs2-prob li { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 0 10px; background: var(--surface-2); border-radius: 12px; padding: 8px 12px; }
+.fs2-prob-n { grid-row: span 2; align-self: center; font-family: var(--font-display); font-weight: 800; font-size: 18px; color: #b4436c; }
+.fs2-prob-q { font-weight: 600; font-size: 14px; }
+@media (max-width: 900px) { .fs2-hero { grid-template-columns: repeat(2, minmax(0, 1fr)); } .fs2-row { grid-template-columns: minmax(0, 1fr); } }

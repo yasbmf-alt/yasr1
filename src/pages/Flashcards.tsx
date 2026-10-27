@@ -32,7 +32,10 @@ export function Flashcards() {
   };
   useEffect(() => {
     if (!ui.pendingStudy) return;
-    studyDeck(ui.pendingStudy);
+    if (ui.pendingStudy === '__erros__') {
+      const ids = mistakesQueue(data.cards);
+      if (ids.length) setPlan({ key: `erros-${Date.now()}`, title: 'Revisar meus erros', ids, kind: 'erros' });
+    } else studyDeck(ui.pendingStudy);
     ui.clearPendingStudy();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ui.pendingStudy]);
