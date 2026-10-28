@@ -14,6 +14,7 @@ import { areaWrong, isMistake, topicOccurrences } from '../logic/simErrors';
 import { AREA_CHART } from './Simulados';
 
 const KEY_SIM = 'yasr1-corr-sim';
+const KEY_WIDE = 'yasr1-corr-wide';
 const remember = (k: string, v: string) => {
   try {
     localStorage.setItem(k, v);
@@ -71,6 +72,14 @@ export function Correcao({ onEdit }: { onEdit: (s: Simulado) => void }) {
   const [key, setKey] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [view, setView] = useState<'mapa' | 'resumo'>('mapa');
+  // tela ampla: esconde o menu do app e a lista de temas (sem ir para tela cheia)
+  const [wide, setWide] = useState(() => recall(KEY_WIDE) === '1');
+  const [navOpen, setNavOpen] = useState(false);
+  useEffect(() => {
+    document.documentElement.classList.toggle('corr-wide', wide);
+    remember(KEY_WIDE, wide ? '1' : '0');
+    return () => document.documentElement.classList.remove('corr-wide');
+  }, [wide]);
 
   // o mapa do simulado nasce (e ganha os temas novos) sozinho
   const errSig = JSON.stringify((sim?.errors ?? []).map((g) => [g.id, g.area, g.topicId]));
@@ -132,7 +141,7 @@ export function Correcao({ onEdit }: { onEdit: (s: Simulado) => void }) {
       <CorrectionLog sim={sim} />
 
       <div className="corr-body">
-        <nav className="corr-nav" aria-label="Grandes áreas e temas">
+        <nav className={`corr-nav ${navOpen ? 'is-open' : ''}`} aria-label="Grandes áreas e temas">
           {BIG_AREAS.map((a) => {
             const sc = sim.areas?.[a];
             const w = areaWrong(sim, a);
@@ -152,7 +161,7 @@ export function Correcao({ onEdit }: { onEdit: (s: Simulado) => void }) {
                   <div className="corr-topics">
                     {list.length === 0 && <p className="muted small corr-empty">Nenhum tema anotado nesta área.</p>}
                     {list.map((e) => (
-                      <button key={e.key} className={`corr-topic ${e.key === entry?.key ? 'is-on' : ''}`} onClick={() => { setKey(e.key); setTick((t) => t + 1); }}>
+                      <button key={e.key} className={`corr-topic ${e.key === entry?.key ? 'is-on' : ''}`} onClick={() => { setKey(e.key); setTick((t) => t + 1); setNavOpen(false); }}>
                         <span className={`corr-dot st-${e.status}`} title={CORRECTION_STATUS.find((x) => x.id === e.status)?.label} />
                         <span className="corr-topic-name">{e.name}</span>
                         <span className="corr-topic-n">{e.mistakes ? `${e.mistakes} erro${e.mistakes > 1 ? 's' : ''}` : 'revisar'}</span>
@@ -175,6 +184,15 @@ export function Correcao({ onEdit }: { onEdit: (s: Simulado) => void }) {
           )}
           {entry && <TopicFacts entry={entry} sim={sim} onStatus={(st) => setStatus(entry, st)} />}
           <div className="corr-viewbar">
+            {wide && (
+              <button className={`btn btn-sm ${navOpen ? 'btn-secondary' : 'btn-quiet'}`} onClick={() => setNavOpen(!navOpen)} aria-expanded={navOpen}>
+                <Icon name="list" size={15} /> Temas{entry ? `: ${entry.name}` : ''}
+              </button>
+            )}
+            <span className="corr-viewbar-gap" />
+            <button className="btn btn-quiet btn-sm" onClick={() => { setWide(!wide); setNavOpen(false); }} title={wide ? 'Voltar ao layout normal' : 'Esconde o menu e a lista de temas para sobrar espaço'}>
+              <Icon name={wide ? 'close' : 'grid'} size={15} /> {wide ? 'Sair da tela ampla' : 'Tela ampla'}
+            </button>
             <div className="seg" role="tablist" aria-label="Ver como">
               <button role="tab" aria-selected={view === 'mapa'} className={view === 'mapa' ? 'is-on' : ''} onClick={() => setView('mapa')}>Mapa</button>
               <button role="tab" aria-selected={view === 'resumo'} className={view === 'resumo' ? 'is-on' : ''} onClick={() => setView('resumo')}>Resumo</button>
@@ -185,7 +203,7 @@ export function Correcao({ onEdit }: { onEdit: (s: Simulado) => void }) {
               sim={sim}
               focusNodeId={tick ? focusId : null} // ao abrir, mostra o mapa inteiro
               focusTick={tick}
-              height="min(680px, 74vh)"
+              height={wide ? 'calc(100vh - 92px)' : 'min(680px, 74vh)'}
               onSelect={(n) => {
                 if (!n || !sim.map) return;
                 if (n.ref) {

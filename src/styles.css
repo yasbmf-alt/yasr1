@@ -2654,3 +2654,18 @@ h5.sum-h { font-size: 14px; }
 .party-k { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--rosa-ink); }
 .party-big { font-family: var(--font-display); font-size: 54px; line-height: 1; color: var(--rosa-ink); }
 .party-card p { margin: 4px 0 8px; font-weight: 600; }
+
+/* ── Correção: tela ampla ──────────────────────────────────── */
+.corr-viewbar { align-items: center; gap: 8px; flex-wrap: wrap; }
+.corr-viewbar-gap { flex: 1; }
+html.corr-wide .app { grid-template-columns: minmax(0, 1fr); }
+html.corr-wide .sidebar, html.corr-wide .page-sim > .ag-head, html.corr-wide .page-sim > .seg-tabs, html.corr-wide .corr-sims { display: none; }
+html.corr-wide .page-sim { gap: 10px; }
+html.corr-wide .corr-body { grid-template-columns: minmax(0, 1fr); }
+html.corr-wide .corr-nav { display: none; }
+html.corr-wide .corr-nav.is-open { display: flex; position: fixed; left: 16px; top: 16px; bottom: 16px; width: 270px; overflow: auto; z-index: 80; box-shadow: 0 24px 50px -20px rgba(29, 37, 65, .5); }
+html.corr-wide .corr-log { position: fixed; left: 16px; bottom: 16px; z-index: 70; padding: 6px; border-radius: 999px; box-shadow: 0 14px 30px -14px rgba(29, 37, 65, .45); }
+html.corr-wide .corr-log > :not(.corr-timer) { display: none; }
+html.corr-wide .corr-log .corr-timer { padding: 4px 6px 4px 14px; gap: 10px; border-radius: 999px; }
+html.corr-wide .corr-log .corr-clock { font-size: 20px; }
+html.corr-wide .corr-log .corr-timer-state { display: none; }
