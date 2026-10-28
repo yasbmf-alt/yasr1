@@ -1,3 +1,4 @@
+import { GoalParty } from './components/GoalParty';
 import { EventWatcher, PreviewBar } from './components/EventDecor';
 import { BackupReminder } from './components/BackupReminder';
 import { platformKind } from './platform/platform';
@@ -108,6 +109,7 @@ function Main() {
   return (
     <MotionConfig reducedMotion={rm === 'on' ? 'always' : rm === 'off' ? 'never' : 'user'}>
       <div className="app">
+        <GoalParty />
         <Sidebar />
         <main className="main">
           <Banners />

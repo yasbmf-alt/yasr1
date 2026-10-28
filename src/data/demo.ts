@@ -148,6 +148,24 @@ export function makeDemo(): DataSnapshot {
     sim(4, 'Simulado exemplo 4', addDays(t, -14), [[15, 20], [14, 20], [13, 20], [14, 20], [16, 20]]),
     sim(5, 'Simulado exemplo 5', addDays(t, -7), [[16, 20], [13, 20], [15, 20], [15, 20], [17, 20]]),
   ];
+  // mapa da correção já começado no último simulado (aparece também na gaveta de erros)
+  simulados[4].errors![0].items = [
+    { id: 'mi1', question: '42', reason: 'conceito', gap: 'Colecistite aguda grave (Tokyo III) com disfunção orgânica: drenagem antes da cirurgia.' },
+    { id: 'mi2', question: '57', reason: 'conceito', gap: '' },
+    { id: 'mi3', question: '63', reason: 'raciocinio', gap: 'Murphy ultrassonográfico conta como sinal local.' },
+  ];
+  simulados[4].map = {
+    rootId: 'dmr',
+    updatedAt: new Date().toISOString(),
+    nodes: [
+      { id: 'dmr', parentId: null, title: 'Simulado exemplo 5', x: 0, y: 0, color: 'azul' },
+      { id: 'dma', parentId: 'dmr', title: 'Cirurgia', x: 260, y: 0, area: 'cirurgia' },
+      { id: 'dmt', parentId: 'dma', title: 'Exemplo · Colecistite', x: 560, y: 0, ref: 'd2', explanation: 'Errei por confundir a gravidade: a conduta muda conforme o grau de Tokyo.' },
+      { id: 'dm1', parentId: 'dmt', title: 'Tokyo I (leve)', x: 860, y: -60, list: ['Colecistectomia precoce (até 72 h)'] },
+      { id: 'dm2', parentId: 'dmt', title: 'Tokyo II (moderada)', x: 860, y: 0, list: ['Colecistectomia precoce se centro experiente', 'Senão, antibiótico e cirurgia tardia'] },
+      { id: 'dm3', parentId: 'dmt', title: 'Tokyo III (grave)', x: 860, y: 60, notes: 'Disfunção orgânica → drenagem (colecistostomia) primeiro!' },
+    ],
+  };
   const decks: Deck[] = [{ id: 'dd1', name: 'Exemplo · Asma', area: 'clinica', topicId: 'd1', createdAt: new Date().toISOString() }];
   const cards: Flashcard[] = [
     ['Exemplo: frente do cartão 1', 'Exemplo: verso do cartão 1'],

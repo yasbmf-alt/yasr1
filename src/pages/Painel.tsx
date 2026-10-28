@@ -17,6 +17,11 @@ import { addDays, DIAS_CURTOS, fmtShort, fromKey, today } from '../logic/dates';
 
 const AREA_HEX: Record<string, string> = { ...Object.fromEntries(Object.entries(AREA_CHART).map(([k, v]) => [k, v.color])), geral: '#B79A86' };
 const TYPE_COLORS = ['#4F79C2', '#D9578F', '#8E6AD8', '#E09A2E', '#6E8F3A', '#B79A86', '#5AA9A6', '#2E4A7F'];
+const ALL_TYPES = [...ACTIVITY_TYPES, CORRECTION_TYPE].map((x) => x.id as string);
+// tons mais claros das mesmas cores para o líquido do pote
+const JAR_COLORS = ['#8FB0E8', '#F29BC2', '#BBA2F0', '#F5C26E', '#A9C873', '#D6BCA9', '#8FD3CF', '#7D97C9'];
+const typeColor = (k: string) => JAR_COLORS[Math.max(0, ALL_TYPES.indexOf(k)) % JAR_COLORS.length];
+const SIM_COLOR = '#F7A58C';
 const isQ = (s: Session) => !!s.questions && s.type !== 'flashcards';
 const pctOf = (c: number, q: number) => (q ? Math.round((c / q) * 100) : null);
 const sumMin = (list: Session[]) => list.reduce((a, s) => a + (s.minutes ?? 0), 0);
@@ -36,6 +41,10 @@ export function Painel() {
   const byType = new Map<string, number>();
   for (const s of todayS) if (s.minutes) byType.set(s.type, (byType.get(s.type) ?? 0) + s.minutes);
   const simToday = data.simulados.reduce((a, s) => a + (s.date === t0 ? s.minutes ?? 0 : 0), 0);
+  // camadas do pote: cada atividade com a sua cor, na ordem em que aconteceu
+  const order = [...todayS].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).map((s) => s.type as string);
+  const layers = [...new Set(order)].map((k) => ({ color: typeColor(k), minutes: byType.get(k) ?? 0 })).filter((l) => l.minutes);
+  if (simToday) layers.push({ color: SIM_COLOR, minutes: simToday });
   const byTopic = new Map<string, number>();
   for (const s of todayS) if (s.minutes && s.topicId) byTopic.set(s.topicId, (byTopic.get(s.topicId) ?? 0) + s.minutes);
   const topToday = [...byTopic.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
@@ -113,7 +122,10 @@ export function Painel() {
 
       {/* hoje */}
       <section className="pn-today">
-        <HoursJar minutes={todayMin} goal={goal} size={150} />
+        <div className="pn-jar" title="Seu pote de horas: enche conforme você estuda hoje, e cada cor é uma atividade">
+          <HoursJar minutes={todayMin} goal={goal} size={150} layers={layers} />
+          <span className="pn-jar-cap">{Math.min(100, Math.round((todayMin / goal) * 100))}% da meta</span>
+        </div>
         <div className="pn-today-main">
           <span className="pn-k">Hoje você estudou</span>
           <motion.span className="pn-big" key={todayMin} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>{fmtHM(todayMin)}</motion.span>
@@ -127,8 +139,8 @@ export function Painel() {
           </span>
           {byType.size > 0 || simToday > 0 ? (
             <div className="pn-chips">
-              {[...byType.entries()].sort((a, b) => b[1] - a[1]).map(([k, m]) => <span key={k} className="pn-chip">{activityLabel(k as Session['type'])} <b>{fmtHM(m)}</b></span>)}
-              {simToday > 0 && <span className="pn-chip">Simulado <b>{fmtHM(simToday)}</b></span>}
+              {[...byType.entries()].sort((a, b) => b[1] - a[1]).map(([k, m]) => <span key={k} className="pn-chip"><i style={{ background: typeColor(k) }} />{activityLabel(k as Session['type'])} <b>{fmtHM(m)}</b></span>)}
+              {simToday > 0 && <span className="pn-chip"><i style={{ background: SIM_COLOR }} />Simulado <b>{fmtHM(simToday)}</b></span>}
             </div>
           ) : <p className="muted pn-none">Nenhum tempo registrado hoje ainda. Bora começar? 🌷</p>}
           {topToday.length > 0 && (

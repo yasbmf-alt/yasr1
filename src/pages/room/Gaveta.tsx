@@ -3,8 +3,10 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useStore } from '../../data/store';
 import { ConfirmButton, Field, useUI } from '../../components/ui';
 import { Icon } from '../../components/Icon';
-import { AREAS, REASONS, SUBTEMAS, areaOf, subtemaLabel, type Area, type ErrNote, type ErrorReason, type Subtema } from '../../types';
+import { AREAS, SUBTEMAS, areaOf, subtemaLabel, type Area, type ErrNote, type ErrorReason, type Subtema } from '../../types';
 import { errorRecords } from '../../logic/analytics';
+import { refOf } from '../../logic/conceptMap';
+import { summarize } from '../../logic/summary';
 import { fmtShort, uid } from '../../logic/dates';
 import { play } from '../../logic/sound';
 
@@ -20,6 +22,8 @@ interface SubjectAgg {
   obs: { date: string; text: string; source: string }[];
   manual: ErrNote[];
   last: string;
+  // o que foi escrito na correção dos simulados (ramo do tema no mapa + lacunas)
+  notes: { key: string; simId: string; simName: string; date: string; nodeId: string | null; gaps: string[] }[];
 }
 
 function useDrawer() {
@@ -30,7 +34,7 @@ function useDrawer() {
     const get = (area: Area, key: string, name: string, topicId: string | null) => {
       const m = byArea.get(area) ?? new Map<string, SubjectAgg>();
       byArea.set(area, m);
-      const a: SubjectAgg = m.get(key) ?? { key, name, topicId, count: 0, subtemas: new Map(), reasons: new Map(), obs: [], manual: [], last: '' };
+      const a: SubjectAgg = m.get(key) ?? { key, name, topicId, count: 0, subtemas: new Map(), reasons: new Map(), obs: [], manual: [], last: '', notes: [] };
       m.set(key, a);
       return a;
     };
@@ -40,7 +44,18 @@ function useDrawer() {
       a.count += r.count;
       if (r.subtema) a.subtemas.set(r.subtema, (a.subtemas.get(r.subtema) ?? 0) + r.count);
       for (const x of r.reasons) a.reasons.set(x, (a.reasons.get(x) ?? 0) + r.count);
-      if (r.note.trim()) a.obs.push({ date: r.date, text: r.note.trim(), source: r.source === 'simulado' ? 'simulado' : 'questões' });
+      if (r.source === 'simulado') {
+        const sim = data.simulados.find((x) => x.id === r.sourceId);
+        const g = sim?.errors?.find((x) => x.id === r.key.slice(r.sourceId.length + 1));
+        if (sim && g) {
+          const nodeId = sim.map?.nodes.find((n) => n.ref === refOf(g))?.id ?? null;
+          const key = `${sim.id}:${nodeId ?? g.id}`;
+          const n = a.notes.find((x) => x.key === key) ?? { key, simId: sim.id, simName: sim.name, date: sim.date, nodeId, gaps: [] };
+          if (!a.notes.includes(n)) a.notes.push(n);
+          for (const it of g.items ?? []) if (it.gap?.trim()) n.gaps.push(it.gap.trim());
+          if (g.note.trim()) n.gaps.push(g.note.trim());
+        } else if (r.note.trim()) a.obs.push({ date: r.date, text: r.note.trim(), source: 'simulado' });
+      } else if (r.note.trim()) a.obs.push({ date: r.date, text: r.note.trim(), source: 'questões' });
       if (r.date > a.last) a.last = r.date;
     }
     for (const n of data.errnotes) {
@@ -114,7 +129,7 @@ export function Gaveta() {
 
       <div className="drawer-actions">
         <button className="btn btn-note btn-sm" onClick={() => { setAdding(true); setArea(area ?? 'clinica'); }}><Icon name="plus" size={14} /> Observação</button>
-        <span className="muted small">Os erros entram aqui sozinhos quando você classifica questões ou simulados.</span>
+        <span className="muted small">O que você escreve na correção dos simulados (mapa e resumo) fica guardado aqui, por tema.</span>
       </div>
 
       <AnimatePresence mode="wait">
@@ -128,16 +143,11 @@ export function Gaveta() {
   );
 }
 
-function top<K>(m: Map<K, number>) {
-  return [...m.entries()].sort((a, b) => b[1] - a[1]);
-}
-
 function AreaDetail({ area, subs, onAdd }: { area: Area; subs: SubjectAgg[]; onAdd: () => void }) {
-  const { deleteErrNote } = useStore();
+  const { data, deleteErrNote } = useStore();
   const ui = useUI();
-  const [open, setOpen] = useState<string | null>(null);
   const a = areaOf(area);
-  const sorted = [...subs].sort((x, y) => y.count - x.count || y.last.localeCompare(x.last));
+  const sorted = [...subs].sort((x, y) => y.last.localeCompare(x.last) || y.count - x.count);
   return (
     <>
       <div className="dd-head">
@@ -147,48 +157,84 @@ function AreaDetail({ area, subs, onAdd }: { area: Area; subs: SubjectAgg[]; onA
       {!sorted.length ? (
         <p className="muted">Nenhum erro registrado nesta área ainda.</p>
       ) : (
-        <ul className="dd-list">
-          {sorted.map((s) => {
-            const rs = top(s.reasons);
-            const isOpen = open === s.key;
+        <div className="dd-cards">
+          {sorted.map((s, i) => {
+            const written = s.notes
+              .sort((x, y) => y.date.localeCompare(x.date))
+              .map((n) => {
+                const sim = data.simulados.find((x) => x.id === n.simId);
+                // o 1º bloco é o próprio tema: o título dele já está no cartão
+                const blocks = n.nodeId ? summarize(sim?.map, n.nodeId) : [];
+                const own = blocks[0];
+                const rest = blocks.slice(1);
+                const has = rest.length || own?.explanation || own?.list.length || own?.notes || n.gaps.length;
+                return { n, own, rest, has, sim };
+              })
+              .filter((x) => x.has);
+            const empty = !written.length && !s.manual.length && !s.obs.length;
             return (
-              <li key={s.key} className={isOpen ? 'is-open' : ''}>
-                <button className="dd-row" onClick={() => setOpen(isOpen ? null : s.key)} aria-expanded={isOpen}>
-                  <span className="dd-name">{s.name}</span>
-                  <span className="dd-subs">
-                    {top(s.subtemas).slice(0, 3).map(([k, n]) => <span key={k} className="chip-mini is-on">{subtemaLabel(k)} · {n}</span>)}
-                  </span>
-                  <span className="dd-count">{s.count || ''}</span>
-                </button>
-                <AnimatePresence initial={false}>
-                  {isOpen && (
-                    <motion.div className="dd-more" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
-                      {rs.length > 0 && (
-                        <p className="dd-reasons">Motivos recorrentes: {rs.map(([k, n]) => `${REASONS.find((r) => r.id === k)?.label} (${n})`).join(' · ')}</p>
-                      )}
-                      {s.subtemas.size > 3 && <p className="small muted">Outros subtemas: {top(s.subtemas).slice(3).map(([k, n]) => `${subtemaLabel(k)} (${n})`).join(', ')}</p>}
-                      {(s.obs.length > 0 || s.manual.length > 0) ? (
-                        <ul className="obs">
-                          {s.manual.map((n) => (
-                            <li key={n.id} className="obs-manual">
-                              <span>{n.subtema ? <b>{subtemaLabel(n.subtema)}: </b> : null}{n.text}</span>
-                              <span className="muted small">{fmtShort(n.createdAt.slice(0, 10))}</span>
-                              <ConfirmButton className="icon-btn icon-btn-sm" label={<Icon name="trash" size={14} />} question="Apagar?" confirmLabel="Apagar" onConfirm={() => deleteErrNote(n.id)} />
-                            </li>
-                          ))}
-                          {s.obs.sort((x, y) => y.date.localeCompare(x.date)).map((o, i) => (
-                            <li key={i}><span>{o.text}</span><span className="muted small">{fmtShort(o.date)} · {o.source}</span></li>
-                          ))}
-                        </ul>
-                      ) : <p className="small muted">Sem observações.</p>}
-                      {s.topicId && <button className="link small" onClick={() => ui.openTopic(s.topicId)}>Ver ficha da matéria</button>}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </li>
+              <motion.article key={s.key} className="dd-card" style={{ ['--tint' as string]: NOTE_TINTS[i % NOTE_TINTS.length] }} initial={{ opacity: 0, y: 8, rotate: i % 2 ? 0.6 : -0.6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 8) * 0.04 }}>
+                <header className="dd-card-head">
+                  <strong>{s.name}</strong>
+                  {s.count > 0 && <span className="dd-count">{s.count} erro{s.count > 1 ? 's' : ''}</span>}
+                </header>
+                {written.map(({ n, own, rest, sim }) => (
+                  <section key={n.key} className="dd-written">
+                    <span className="dd-from">{n.simName} · {fmtShort(n.date)}</span>
+                    {own?.explanation && own.explanation.split('\n').map((l, k) => <p key={k}>{l}</p>)}
+                    {own && own.list.length > 0 && <ul>{own.list.map((l, k) => <li key={k}>{l}</li>)}</ul>}
+                    {own?.notes && <blockquote>{own.notes}</blockquote>}
+                    {rest.map((b) => (
+                      <div key={b.nodeId} className={`dd-b d${Math.min(b.depth, 3)}`}>
+                        <b>{b.title}</b>
+                        {b.explanation && b.explanation.split('\n').map((l, k) => <p key={k}>{l}</p>)}
+                        {b.list.length > 0 && <ul>{b.list.map((l, k) => <li key={k}>{l}</li>)}</ul>}
+                        {b.notes && <blockquote>{b.notes}</blockquote>}
+                      </div>
+                    ))}
+                    {n.gaps.length > 0 && (
+                      <ul className="dd-gaps" aria-label="O que eu precisava saber">
+                        {n.gaps.map((g, k) => <li key={k}>{g}</li>)}
+                      </ul>
+                    )}
+                    {sim && (
+                      <button
+                        className="link small"
+                        onClick={() => {
+                          try {
+                            localStorage.setItem('yasr1-corr-sim', sim.id);
+                            localStorage.setItem('yasr1-sim-tab', 'corr');
+                          } catch {
+                            /* ignore */
+                          }
+                          ui.go('simulados');
+                        }}
+                      >
+                        Abrir a correção
+                      </button>
+                    )}
+                  </section>
+                ))}
+                {(s.manual.length > 0 || s.obs.length > 0) && (
+                  <ul className="obs">
+                    {s.manual.map((n) => (
+                      <li key={n.id} className="obs-manual">
+                        <span>{n.subtema ? <b>{subtemaLabel(n.subtema)}: </b> : null}{n.text}</span>
+                        <span className="muted small">{fmtShort(n.createdAt.slice(0, 10))}</span>
+                        <ConfirmButton className="icon-btn icon-btn-sm" label={<Icon name="trash" size={14} />} question="Apagar?" confirmLabel="Apagar" onConfirm={() => deleteErrNote(n.id)} />
+                      </li>
+                    ))}
+                    {s.obs.sort((x, y) => y.date.localeCompare(x.date)).map((o, k) => (
+                      <li key={k}><span>{o.text}</span><span className="muted small">{fmtShort(o.date)} · {o.source}</span></li>
+                    ))}
+                  </ul>
+                )}
+                {empty && <p className="small muted">Nada escrito ainda. O que você anotar no mapa da correção aparece aqui.</p>}
+                {s.topicId && <button className="link small" onClick={() => ui.openTopic(s.topicId!)}>Ver ficha do tema</button>}
+              </motion.article>
             );
           })}
-        </ul>
+        </div>
       )}
     </>
   );
