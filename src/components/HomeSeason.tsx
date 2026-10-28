@@ -32,7 +32,7 @@ function Halloween() {
   const [boo, setBoo] = useState(false);
   return (
     <>
-    <div className="hs hs-halloween" aria-hidden="true">
+    <div className="season-fx hs-halloween" aria-hidden="true">
       {ambient && [0, 1, 2].map((i) => (
         <button
           key={i}
@@ -72,7 +72,7 @@ function Natal() {
   const ui = useUI();
   return (
     <>
-    <div className="hs hs-natal" aria-hidden="true">
+    <div className="season-fx hs-natal" aria-hidden="true">
       <span className="hs-ornaments">
         <i className="o1" /><i className="o2" /><i className="o3" />
       </span>

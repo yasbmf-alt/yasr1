@@ -68,7 +68,10 @@ export function Biblioteca() {
           // trilha: tema de missão só entra quando uma missão dele é concluída (missão só programada não conta);
           // tema fora das missões entra no primeiro registro de estudo. Simulados: apareceu nos erros de um simulado.
           const ms = data.missions.filter((m) => m.topicId === t.id);
-          const inTrail = ms.length ? ms.some((m) => missionProgress(m).complete) : st.sessions.length > 0 || (t.map?.nodes.length ?? 0) > 1;
+          // sem missão: só vira livro com estudo de verdade registrado (aula, questões, leitura…). Mapa,
+          // flashcards ou correção de simulado sozinhos não criam livro (ex.: tema que só apareceu num simulado).
+          const studied = st.sessions.some((x) => x.type !== 'flashcards' && x.type !== 'correcao');
+          const inTrail = ms.length ? ms.some((m) => missionProgress(m).complete) : studied;
           const done = ms.filter((m) => missionProgress(m).complete);
           // estudo avulso (sem missão) fica junto com a Medway
           const kinds = [...new Set(done.length ? done.map((m) => m.kind ?? 'medway') : ['medway' as const])];
