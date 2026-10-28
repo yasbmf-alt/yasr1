@@ -114,6 +114,7 @@ export interface Topic {
 
 // ── Mapa conceitual ────────────────────────────────────────────
 export type MapColor = 'azul' | 'rosa' | 'lilas' | 'lima' | 'manteiga' | 'pessego' | 'neutro';
+export type MapShape = 'balao' | 'nuvem' | 'pilula' | 'caixa';
 export interface MapLink { label: string; url: string }
 export interface MapNode {
   id: string;
@@ -128,6 +129,10 @@ export interface MapNode {
   list?: string[];
   links?: MapLink[];
   images?: string[]; // ids de arquivo
+  shape?: MapShape; // formato do balão (padrão: balão arredondado)
+  bold?: boolean;
+  width?: number; // largura fixa em px (sem = automática)
+  showList?: boolean; // tópicos da lista aparecem dentro do balão
   // nós criados pelo app no mapa do simulado
   area?: BigArea; // nó da grande área
   ref?: string; // nó do tema: id do tema (ou "g:<id do grupo>" quando o erro não tem tema)

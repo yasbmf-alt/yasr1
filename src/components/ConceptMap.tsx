@@ -4,7 +4,7 @@ import { useStore } from '../data/store';
 import { AssetImg } from '../assets/registry';
 import { uploadImage } from './upload';
 import { useUI } from './ui';
-import type { ConceptMap, MapColor, MapNode, Simulado } from '../types';
+import type { ConceptMap, MapColor, MapNode, MapShape, Simulado } from '../types';
 import { MAP_COLORS, childSpot, childrenOf, colorOf, descendants, emptyMap, newNode, tidy, visibleNodes, NODE_H, NODE_W, type Size } from '../logic/conceptMap';
 
 type View = { x: number; y: number; z: number };
@@ -19,6 +19,14 @@ const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
  * Mapa conceitual num quadro infinito (o mapa vem por parâmetro).
  * O mapa do simulado aparece igual na Correção e na Biblioteca.
  */
+const SHAPES: { id: MapShape; label: string; icon: string }[] = [
+  { id: 'balao', label: 'Balão', icon: '▢' },
+  { id: 'nuvem', label: 'Nuvem', icon: '☁' },
+  { id: 'pilula', label: 'Pílula', icon: '⬭' },
+  { id: 'caixa', label: 'Caixa', icon: '▭' },
+];
+const nextShape = (s: MapShape | undefined) => SHAPES[(SHAPES.findIndex((x) => x.id === (s ?? 'balao')) + 1) % SHAPES.length];
+
 export function ConceptMapEditor({ mapKey, map, makeMap, onSave, focusNodeId, focusTick, onSelect, height }: {
   mapKey: string; // identidade do mapa (troca = carrega outro)
   map: ConceptMap | undefined;
@@ -39,6 +47,7 @@ export function ConceptMapEditor({ mapKey, map, makeMap, onSave, focusNodeId, fo
   const [sel, setSel] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [panel, setPanel] = useState(false);
+  const [addingItem, setAddingItem] = useState<string | null>(null); // nó recebendo um tópico novo
   const [, setSizeVer] = useState(0);
   const [hist, setHist] = useState({ past: 0, future: 0 });
   const [full, setFull] = useState(false);
@@ -378,6 +387,26 @@ export function ConceptMapEditor({ mapKey, map, makeMap, onSave, focusNodeId, fo
     const v = viewRef.current;
     return { x: (cx - r.left - v.x) / v.z, y: (cy - r.top - v.y) / v.z };
   };
+  // alça no canto do nó: arrasta para mudar a largura (duplo clique volta ao automático)
+  const startResize = (id: string, e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const el = els.current.get(id);
+    if (!el) return;
+    const w0 = el.offsetWidth;
+    const sx = e.clientX;
+    pushHistory();
+    const move = (ev: PointerEvent) => {
+      const w = Math.round(Math.min(640, Math.max(80, w0 + (ev.clientX - sx) / viewRef.current.z)));
+      patch(id, { width: w }, false);
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
   const onPointerDown = (e: React.PointerEvent) => {
     const t = e.target as HTMLElement;
     if (t.closest('.cm-ui, input, textarea, button, select, a')) return;
@@ -551,8 +580,8 @@ export function ConceptMapEditor({ mapKey, map, makeMap, onSave, focusNodeId, fo
                   if (el) els.current.set(n.id, el);
                   else els.current.delete(n.id);
                 }}
-                className={`cm-node ${isRoot ? 'is-root' : ''} ${sel === n.id ? 'is-sel' : ''}`}
-                style={{ left: n.x, top: n.y, background: isRoot ? undefined : c.bg, borderColor: isRoot ? undefined : c.line }}
+                className={`cm-node shape-${n.shape ?? 'balao'} ${n.bold ? 'is-bold' : ''} ${n.width ? 'has-width' : ''} ${isRoot ? 'is-root' : ''} ${sel === n.id ? 'is-sel' : ''}`}
+                style={{ left: n.x, top: n.y, background: isRoot ? undefined : c.bg, borderColor: isRoot ? undefined : c.line, width: n.width }}
               >
                 {editing === n.id ? (
                   <InlineTitle
@@ -566,7 +595,48 @@ export function ConceptMapEditor({ mapKey, map, makeMap, onSave, focusNodeId, fo
                 ) : (
                   <span className={`cm-title ${n.title ? '' : 'is-empty'}`}>{n.title || 'Sem título'}</span>
                 )}
+                {n.showList && !!n.list?.length && (
+                  <ul className="cm-list">
+                    {n.list.map((it, i) => <li key={i}>{it}</li>)}
+                  </ul>
+                )}
+                {addingItem === n.id && (
+                  <input
+                    className="cm-item-input"
+                    autoFocus
+                    placeholder="Novo tópico… (Enter)"
+                    aria-label="Novo tópico"
+                    onKeyDown={(e) => {
+                      const v = e.currentTarget.value.trim();
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (v) patch(n.id, { list: [...(nodesRef.current.find((x) => x.id === n.id)?.list ?? []), v], showList: true });
+                        e.currentTarget.value = '';
+                        if (!v) setAddingItem(null);
+                      } else if (e.key === 'Escape') {
+                        e.stopPropagation();
+                        setAddingItem(null);
+                      }
+                    }}
+                    onBlur={(e) => {
+                      const v = e.currentTarget.value.trim();
+                      if (v) patch(n.id, { list: [...(nodesRef.current.find((x) => x.id === n.id)?.list ?? []), v], showList: true });
+                      setAddingItem(null);
+                    }}
+                  />
+                )}
                 <NodeBadges n={n} />
+                {sel === n.id && (
+                  <span
+                    className="cm-resize"
+                    title="Arraste para mudar a largura (duplo clique: automática)"
+                    onPointerDown={(e) => startResize(n.id, e)}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      patch(n.id, { width: undefined });
+                    }}
+                  />
+                )}
                 {kids > 0 && (
                   <button
                     type="button"
@@ -588,6 +658,13 @@ export function ConceptMapEditor({ mapKey, map, makeMap, onSave, focusNodeId, fo
             <button type="button" onClick={() => addChild(selNode.id)} title="Novo ramo (Tab)"><Icon name="plus" size={14} /> Ramo</button>
             {selNode.parentId && <button type="button" onClick={() => addSibling(selNode.id)} title="Novo nó ao lado (Enter)"><Icon name="plus" size={14} /> Irmão</button>}
             <button type="button" onClick={() => startEdit(selNode.id)} title="Renomear (F2)"><Icon name="edit" size={14} /></button>
+            <span className="cm-nb-sep" />
+            <button type="button" className={`cm-nb-b ${selNode.bold ? 'is-on' : ''}`} aria-pressed={!!selNode.bold} onClick={() => patch(selNode.id, { bold: !selNode.bold })} title="Negrito">B</button>
+            <button type="button" onClick={() => patch(selNode.id, { shape: nextShape(selNode.shape).id })} title={`Formato: ${SHAPES.find((x) => x.id === (selNode.shape ?? 'balao'))?.label} (clique para trocar)`}>
+              <span className="cm-nb-shape">{SHAPES.find((x) => x.id === (selNode.shape ?? 'balao'))?.icon}</span>
+            </button>
+            <button type="button" onClick={() => setAddingItem(selNode.id)} title="Adicionar tópico dentro do balão">• Tópico</button>
+            <span className="cm-nb-sep" />
             <button type="button" onClick={() => setPanel(true)} title="Detalhes: notas, lista, links, imagens"><Icon name="note" size={14} /> Detalhes</button>
             {!fixed(selNode) && <button type="button" onClick={() => remove(selNode.id)} title="Apagar (Delete)" aria-label="Apagar nó"><Icon name="trash" size={14} /></button>}
           </div>
@@ -683,7 +760,7 @@ function NodeBadges({ n }: { n: MapNode }) {
   const b: string[] = [];
   if (n.explanation?.trim()) b.push('explicação');
   if (n.notes?.trim()) b.push('nota');
-  if (n.list?.length) b.push(`lista ${n.list.length}`);
+  if (n.list?.length && !n.showList) b.push(`${n.list.length} tópico${n.list.length > 1 ? 's' : ''}`);
   if (n.links?.length) b.push(`${n.links.length} link${n.links.length > 1 ? 's' : ''}`);
   if (n.images?.length) b.push(`${n.images.length} imagem${n.images.length > 1 ? 'ns' : ''}`);
   if (!b.length) return null;
@@ -696,6 +773,11 @@ function NodePanel({ node, isRoot, nodes, onClose, onFocusField, onChange, onCha
 }) {
   const [busy, setBusy] = useState(false);
   const [listText, setListText] = useState((node.list ?? []).join('\n'));
+  // tópicos adicionados direto no balão aparecem aqui também
+  const listSig = (node.list ?? []).join('\n');
+  useEffect(() => {
+    setListText((t) => (t.split('\n').map((x) => x.trim()).filter(Boolean).join('\n') === listSig ? t : listSig));
+  }, [listSig]);
   const fileRef = useRef<HTMLInputElement>(null);
   const banned = useMemo(() => new Set([node.id, ...descendants(nodes, node.id)]), [nodes, node.id]);
   const parents = nodes.filter((n) => !banned.has(n.id));
@@ -716,7 +798,7 @@ function NodePanel({ node, isRoot, nodes, onClose, onFocusField, onChange, onCha
         <textarea rows={4} value={node.explanation ?? ''} onChange={(e) => onChange({ explanation: e.target.value })} placeholder="Com as suas palavras" {...f} />
       </label>
       <label className="cm-f">
-        <span>Lista <em>(um item por linha)</em></span>
+        <span>Tópicos <em>(um por linha; aparecem dentro do balão)</em></span>
         <textarea
           rows={3}
           value={listText}
@@ -726,6 +808,11 @@ function NodePanel({ node, isRoot, nodes, onClose, onFocusField, onChange, onCha
           }}
           {...f}
         />
+        {!!node.list?.length && (
+          <span className="cm-check">
+            <input type="checkbox" checked={!!node.showList} onChange={(e) => onChangeHistory({ showList: e.target.checked })} /> Mostrar os tópicos dentro do balão
+          </span>
+        )}
       </label>
       <label className="cm-f">
         <span>Notas</span>
@@ -770,6 +857,21 @@ function NodePanel({ node, isRoot, nodes, onClose, onFocusField, onChange, onCha
             setBusy(false);
           }}
         />
+      </div>
+      <div className="cm-f">
+        <span>Formato</span>
+        <div className="cm-shapes" role="radiogroup" aria-label="Formato do balão">
+          {SHAPES.map((sh) => (
+            <button key={sh.id} type="button" role="radio" aria-checked={(node.shape ?? 'balao') === sh.id} className={`chip-mini ${(node.shape ?? 'balao') === sh.id ? 'is-on' : ''}`} onClick={() => onChangeHistory({ shape: sh.id })}>
+              {sh.icon} {sh.label}
+            </button>
+          ))}
+        </div>
+        <label className="cm-check"><input type="checkbox" checked={!!node.bold} onChange={(e) => onChangeHistory({ bold: e.target.checked })} /> Título em negrito</label>
+        <span className="cm-width">
+          Largura: {node.width ? `${node.width}px` : 'automática'}
+          {node.width ? <button type="button" className="link small" onClick={() => onChangeHistory({ width: undefined })}>voltar ao automático</button> : <em> (arraste a alça no canto do balão)</em>}
+        </span>
       </div>
       <div className="cm-f">
         <span>Cor</span>

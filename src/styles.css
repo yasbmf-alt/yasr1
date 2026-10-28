@@ -2669,3 +2669,29 @@ html.corr-wide .corr-log > :not(.corr-timer) { display: none; }
 html.corr-wide .corr-log .corr-timer { padding: 4px 6px 4px 14px; gap: 10px; border-radius: 999px; }
 html.corr-wide .corr-log .corr-clock { font-size: 20px; }
 html.corr-wide .corr-log .corr-timer-state { display: none; }
+
+/* ── Mapa: formatos, negrito, tópicos e largura ────────────── */
+.cm-node.has-width { max-width: none; }
+.cm-node.is-bold .cm-title { font-weight: 800; }
+.cm-node.shape-pilula { border-radius: 999px; padding-inline: 20px; }
+.cm-node.shape-caixa { border-radius: 4px; }
+.cm-node.shape-nuvem { border-radius: 48% 52% 46% 54% / 62% 58% 42% 38%; padding: 14px 24px 12px; border-width: 2px; margin-top: 0; }
+.cm-node.shape-nuvem::before, .cm-node.shape-nuvem::after {
+  content: ''; position: absolute; z-index: -1; background: inherit; border: inherit; border-radius: 50%;
+}
+.cm-node.shape-nuvem::before { width: 30%; aspect-ratio: 1; max-width: 58px; left: 16%; top: -16px; }
+.cm-node.shape-nuvem::after { width: 22%; aspect-ratio: 1; max-width: 42px; right: 20%; top: -10px; }
+.cm-node.is-root.shape-nuvem::before, .cm-node.is-root.shape-nuvem::after { background: var(--azul); }
+.cm-list { margin: 4px 0 0; padding-left: 16px; font-size: 12.5px; font-weight: 500; line-height: 1.35; }
+.cm-node.is-root .cm-list { color: #e6ecfa; }
+.cm-list li { margin: 1px 0; overflow-wrap: anywhere; }
+.cm-item-input { margin-top: 4px; border: 0; border-bottom: 1.5px dashed var(--line); background: transparent; font: inherit; font-size: 12.5px; font-weight: 500; color: inherit; padding: 2px 0; outline: none; min-width: 140px; }
+.cm-resize { position: absolute; right: -7px; bottom: -7px; width: 14px; height: 14px; border-radius: 5px; background: #fff; border: 2px solid var(--rosa-medio); cursor: ew-resize; touch-action: none; }
+.cm-resize:hover { transform: scale(1.2); }
+.cm-nb-sep { width: 1px; align-self: stretch; margin: 3px 2px; background: var(--line); }
+.cm-nb-b { font-weight: 900; min-width: 28px; }
+.cm-nb-b.is-on { background: var(--rosa); color: var(--rosa-ink); }
+.cm-nb-shape { font-size: 15px; line-height: 1; }
+.cm-shapes { display: flex; flex-wrap: wrap; gap: 4px; }
+.cm-check { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; margin-top: 6px; }
+.cm-width { font-size: 12.5px; color: var(--muted); display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; margin-top: 4px; }
