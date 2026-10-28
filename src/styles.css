@@ -992,7 +992,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--r
   overflow-y: auto;
 }
 .study-top { width: min(760px, 100%); display: flex; align-items: center; gap: 12px; }
-.study-deck { font-family: var(--font-display); font-weight: 800; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
+.study-title { font-family: var(--font-display); font-weight: 800; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
 .study-bar { flex: 1; height: 10px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
 .study-bar span { display: block; height: 100%; background: var(--rosa-medio); border-radius: 99px; transition: width 0.3s; }
 .flip-stage { width: min(660px, 100%); height: min(380px, 52vh); perspective: 1600px; cursor: pointer; margin-top: 2vh; }
@@ -2695,3 +2695,10 @@ html.corr-wide .corr-log .corr-timer-state { display: none; }
 .cm-shapes { display: flex; flex-wrap: wrap; gap: 4px; }
 .cm-check { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; margin-top: 6px; }
 .cm-width { font-size: 12.5px; color: var(--muted); display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; margin-top: 4px; }
+@media (min-width: 1100px) and (min-height: 760px) {
+  .study { justify-content: center; }
+  .study-top { width: min(860px, 100%); }
+  .flip-stage { width: min(780px, 100%); height: min(440px, 52vh); }
+  .ratings { width: min(780px, 100%); }
+  .flip-face p { font-size: 26px; }
+}

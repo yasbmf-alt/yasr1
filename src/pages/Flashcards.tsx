@@ -553,7 +553,7 @@ function Study({ plan, onClose }: { plan: StudyPlan; onClose: () => void }) {
   return (
     <motion.div className={`study study-${plan.kind}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} role="dialog" aria-label={`Estudar ${plan.title}`}>
       <div className="study-top">
-        <span className="study-deck">{plan.kind === 'turbo' && <span className="study-bolt" aria-hidden="true">⚡</span>}{plan.title}</span>
+        <span className="study-title">{plan.kind === 'turbo' && <span className="study-bolt" aria-hidden="true">⚡</span>}{plan.title}</span>
         <span className="study-bar"><span style={{ width: `${total ? (done / total) * 100 : 100}%` }} /></span>
         <span className="muted mono">{Math.min(done, total)}/{total}</span>
         <button className="icon-btn" onClick={close} aria-label="Sair"><Icon name="close" /></button>
