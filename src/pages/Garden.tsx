@@ -224,10 +224,12 @@ export function Garden() {
 function PlantPop({ topicId, slot, onClose, onOpen }: { topicId: string; slot?: { x: number; bottom: number; scale: number }; onClose: () => void; onOpen: (id: string) => void }) {
   const { data } = useStore();
   const t = data.topics.find((x) => x.id === topicId) as Topic | undefined;
+  const [seed] = useState(Math.random);
   if (!t || !slot) return null;
   const st: TopicStats = topicStats(t, data.sessions);
   const a = areaOf(t.area);
   const left = slot.x > 70;
+  const say = plantSay(st, seed);
   return (
     <motion.div
       className="g-pop"
@@ -244,6 +246,7 @@ function PlantPop({ topicId, slot, onClose, onOpen }: { topicId: string; slot?: 
       role="dialog"
       aria-label={t.name}
     >
+      <motion.span className="g-pop-say" initial={{ scale: 0.6, rotate: -6 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 500, damping: 14, delay: 0.08 }}>“{say}”</motion.span>
       <span className="g-pop-chip" style={{ background: a.color, color: a.ink }}>{a.short}</span>
       <strong className="g-pop-name">{t.name}</strong>
       <span className="g-pop-meta">
@@ -259,7 +262,18 @@ function PlantPop({ topicId, slot, onClose, onOpen }: { topicId: string; slot?: 
   );
 }
 
-/** balanço de "cutucada" numa planta (só visual) */
+
+/** recadinho que a plantinha fala quando é cutucada */
+function plantSay(st: TopicStats, seed: number) {
+  const pick = (l: string[]) => l[Math.floor(seed * l.length)];
+  if (st.overdue) return pick(['Tô com sede… bora uma revisão? 💧', 'Psiu! Já passou da minha hora de revisar.', 'Me rega? Prometo florir 🌸']);
+  if (st.stage === 4) return pick(['Olha eu florida! Obrigada por cuidar de mim 🌷', 'Tô linda, né? Continua assim!', 'Você sabe muito de mim já ✨']);
+  if (st.stage === 3) return pick(['Crescendo firme! Mais uma revisão e eu floresço.', 'Tô quase lá 🌿', 'Sinto que tô ficando forte!']);
+  if (st.accuracy != null && st.accuracy < 0.6) return pick(['Ainda me confundo às vezes… revisa comigo?', 'Que tal uns flashcards de mim?']);
+  return pick(['Oi! Acabei de brotar 🌱', 'Cuida de mim que eu cresço!', 'Hehe, cócegas!', 'Uma revisão e eu ganho folhinhas novas.']);
+}
+
+/** pulinho de "cutucada" numa planta (só visual) */
 function poke(el: Element) {
   el.classList.remove('is-poked');
   void (el as HTMLElement).offsetWidth;

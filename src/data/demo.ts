@@ -106,7 +106,7 @@ export function makeDemo(): DataSnapshot {
   for (let k = 0; k < 9; k++) {
     sessions.push({
       id: `sx${k}`,
-      date: addDays(t, -k * 2 - 1),
+      date: addDays(t, -k * 2),
       topicId: ['d1', 'd2', 'd3'][k % 3],
       missionId: null,
       activityId: null,

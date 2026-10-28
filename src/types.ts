@@ -217,6 +217,7 @@ export interface Settings {
   lastBackupAt?: string; // ISO do último backup baixado
   backupReminder?: boolean; // lembrete semanal de backup (padrão: ligado)
   streakBreakSeen?: string; // último dia da sequência perdida cuja animação triste já foi mostrada
+  dailyGoalMinutes?: number; // meta de estudo por dia (padrão: 4h)
 }
 
 export interface RewardImage {

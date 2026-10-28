@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useStore } from '../data/store';
 import { useUI } from '../components/ui';
 import { Icon } from '../components/Icon';
+import { DEFAULT_GOAL, DayHours, dayStudyMinutes } from '../components/HoursJar';
 import { Asset } from '../assets/registry';
 import { SPECIES_BY_AREA } from '../assets/art';
 import { Garden } from './Garden';
@@ -169,7 +170,7 @@ function DayDetail({ day }: { day: string }) {
   const d = fromKey(day);
   return (
     <section className="card day-card">
-      <h3 className="card-title">{DIAS_CURTOS[d.getDay()]}, {d.getDate()} de {MESES_LONGOS[d.getMonth()]}</h3>
+      <h3 className="card-title day-card-title">{DIAS_CURTOS[d.getDay()]}, {d.getDate()} de {MESES_LONGOS[d.getMonth()]}<DayHours minutes={dayStudyMinutes(data.sessions, data.simulados, day)} goal={data.settings.dailyGoalMinutes ?? DEFAULT_GOAL} /></h3>
       {list.length === 0 ? (
         <p className="muted">Nenhum registro neste dia.</p>
       ) : (

@@ -1,429 +1,265 @@
 import React, { useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useStore } from '../data/store';
 import { useUI } from '../components/ui';
 import { Icon } from '../components/Icon';
-import { ColumnChart, LineChart, PctBars, PeriodFilter, Stat, StackBar, usePeriod } from '../components/charts';
-import { RankBars } from './Diagnostico';
+import { StackBar } from '../components/charts';
+import { DEFAULT_GOAL, HoursJar, dayStudyMinutes, fmtHM } from '../components/HoursJar';
+import { StationIcon } from '../assets/art';
 import { AREA_CHART } from './Simulados';
-import { ACTIVITY_TYPES, AREAS, BIG_AREAS, CORRECTION_TYPE, type DataSnapshot } from '../types';
-import { areaQA, diagnose, errorRecords, inPeriod, reasonRanking, subtemaRanking, topicQA, totals } from '../logic/analytics';
-import { addDays, DIAS_CURTOS, fmtMinutes, fmtShort, fromKey, today, weekStart } from '../logic/dates';
-import { duration, occurrences } from '../logic/agenda';
+import { ACTIVITY_TYPES, BIG_AREAS, CORRECTION_TYPE, activityLabel, areaOf, type BigArea, type Session } from '../types';
+import { streakInfo } from '../logic/progress';
+import { addDays, DIAS_CURTOS, fmtShort, fromKey, today } from '../logic/dates';
 
-type Tab = 'geral' | 'desempenho' | 'constancia' | 'simulados';
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'geral', label: 'Visão geral' },
-  { id: 'desempenho', label: 'Desempenho' },
-  { id: 'constancia', label: 'Constância' },
-  { id: 'simulados', label: 'Simulados' },
-];
-const pct = (v: number | null) => (v == null ? '—' : `${Math.round(v * 100)}%`);
-const hours = (m: number) => (m >= 60 ? `${(m / 60).toFixed(1).replace('.', ',')}h` : `${Math.round(m)}min`);
+// Painel numa página só: hoje (horas no pote), a semana, os últimos 14 dias,
+// acerto em questões (nunca mistura flashcards), onde investir e para onde
+// foi o tempo. Tudo recalculado dos registros.
+
 const AREA_HEX: Record<string, string> = { ...Object.fromEntries(Object.entries(AREA_CHART).map(([k, v]) => [k, v.color])), geral: '#B79A86' };
+const TYPE_COLORS = ['#4F79C2', '#D9578F', '#8E6AD8', '#E09A2E', '#6E8F3A', '#B79A86', '#5AA9A6', '#2E4A7F'];
+const isQ = (s: Session) => !!s.questions && s.type !== 'flashcards';
+const pctOf = (c: number, q: number) => (q ? Math.round((c / q) * 100) : null);
+const sumMin = (list: Session[]) => list.reduce((a, s) => a + (s.minutes ?? 0), 0);
 
 export function Painel() {
-  const [tab, setTab] = useState<Tab>(() => {
-    try {
-      return (localStorage.getItem('yasr1-painel-tab') as Tab) || 'geral';
-    } catch {
-      return 'geral';
-    }
+  const { data, saveSettings } = useStore();
+  const ui = useUI();
+  const t0 = today();
+  const goal = data.settings.dailyGoalMinutes ?? DEFAULT_GOAL;
+  const [hover, setHover] = useState<string | null>(null);
+  const tmap = useMemo(() => new Map(data.topics.map((t) => [t.id, t])), [data.topics]);
+  const inRange = (s: Session, from: string, to: string) => s.date >= from && s.date <= to;
+
+  // hoje
+  const todayS = data.sessions.filter((s) => s.date === t0);
+  const todayMin = dayStudyMinutes(data.sessions, data.simulados, t0);
+  const byType = new Map<string, number>();
+  for (const s of todayS) if (s.minutes) byType.set(s.type, (byType.get(s.type) ?? 0) + s.minutes);
+  const simToday = data.simulados.reduce((a, s) => a + (s.date === t0 ? s.minutes ?? 0 : 0), 0);
+  const byTopic = new Map<string, number>();
+  for (const s of todayS) if (s.minutes && s.topicId) byTopic.set(s.topicId, (byTopic.get(s.topicId) ?? 0) + s.minutes);
+  const topToday = [...byTopic.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+  // semana (7 dias) × 7 dias anteriores
+  const w0 = addDays(t0, -6);
+  const wk = data.sessions.filter((s) => inRange(s, w0, t0));
+  const pw = data.sessions.filter((s) => inRange(s, addDays(t0, -13), addDays(t0, -7)));
+  const wkMin = sumMin(wk);
+  const pwMin = sumMin(pw);
+  const wkQ = wk.filter(isQ).reduce((a, s) => ({ q: a.q + s.questions!, c: a.c + (s.correct ?? 0) }), { q: 0, c: 0 });
+  const st = streakInfo(data.sessions);
+  const daysHit = Array.from({ length: 7 }, (_, i) => addDays(t0, -i)).filter((d) => dayStudyMinutes(data.sessions, data.simulados, d) >= goal).length;
+
+  // últimos 14 dias
+  const days14 = Array.from({ length: 14 }, (_, i) => {
+    const d = addDays(t0, i - 13);
+    return { d, m: dayStudyMinutes(data.sessions, data.simulados, d) };
   });
-  const [days, setDays] = usePeriod('painel', 30);
-  const pick = (t: Tab) => {
-    setTab(t);
-    try {
-      localStorage.setItem('yasr1-painel-tab', t);
-    } catch {
-      /* ignore */
+  const max14 = Math.max(goal, ...days14.map((x) => x.m), 60);
+
+  // acerto em questões por grande área: 30 dias × 30 anteriores
+  const areaAcc = (from: string, to: string) => {
+    const m = new Map<BigArea, { q: number; c: number }>(BIG_AREAS.map((a) => [a, { q: 0, c: 0 }]));
+    for (const s of data.sessions) {
+      if (!isQ(s) || !inRange(s, from, to)) continue;
+      const a = tmap.get(s.topicId)?.area;
+      if (!a || a === 'geral') continue;
+      const x = m.get(a as BigArea)!;
+      x.q += s.questions!;
+      x.c += s.correct ?? 0;
     }
+    return m;
   };
+  const acc30 = areaAcc(addDays(t0, -29), t0);
+  const accPrev = areaAcc(addDays(t0, -59), addDays(t0, -30));
+  const all30 = [...acc30.values()].reduce((a, x) => ({ q: a.q + x.q, c: a.c + x.c }), { q: 0, c: 0 });
+  const allPrev = [...accPrev.values()].reduce((a, x) => ({ q: a.q + x.q, c: a.c + x.c }), { q: 0, c: 0 });
+  const accNow = pctOf(all30.c, all30.q);
+  const accDelta = accNow != null && allPrev.q ? accNow - pctOf(allPrev.c, allPrev.q)! : null;
+
+  // onde investir: menor acerto (≥ 10 questões em 30 dias) e temas parados há mais tempo
+  const topicAcc = new Map<string, { q: number; c: number }>();
+  for (const s of data.sessions) {
+    if (!isQ(s) || !inRange(s, addDays(t0, -29), t0)) continue;
+    const x = topicAcc.get(s.topicId) ?? { q: 0, c: 0 };
+    x.q += s.questions!;
+    x.c += s.correct ?? 0;
+    topicAcc.set(s.topicId, x);
+  }
+  const weak = [...topicAcc.entries()].filter(([, x]) => x.q >= 10).map(([id, x]) => ({ t: tmap.get(id), p: pctOf(x.c, x.q)!, q: x.q })).filter((x) => x.t && x.p < 75).sort((a, b) => a.p - b.p).slice(0, 4);
+
+  // para onde foi o tempo (30 dias)
+  const m30 = data.sessions.filter((s) => inRange(s, addDays(t0, -29), t0) && s.minutes);
+  const tArea = new Map<string, number>();
+  const tType = new Map<string, number>();
+  for (const s of m30) {
+    const a = s.type === 'correcao' ? 'geral' : tmap.get(s.topicId)?.area ?? 'geral';
+    tArea.set(a, (tArea.get(a) ?? 0) + s.minutes!);
+    tType.set(s.type, (tType.get(s.type) ?? 0) + s.minutes!);
+  }
+
+  // simulados
+  const sims = [...data.simulados].filter((s) => s.total && s.correct != null).sort((a, b) => a.date.localeCompare(b.date)).slice(-5);
+  const lastSim = sims.at(-1);
+  const simDelta = sims.length > 1 ? Math.round(((sims.at(-1)!.correct! / sims.at(-1)!.total!) - (sims.at(-2)!.correct! / sims.at(-2)!.total!)) * 100) : null;
+
+  const setGoal = (m: number) => saveSettings({ dailyGoalMinutes: Math.max(30, Math.min(16 * 60, m)) });
+
   return (
-    <div className="page page-painel">
+    <div className="page pn">
       <header className="ag-head">
         <h1 className="h1">Painel</h1>
-        <PeriodFilter value={days} onChange={setDays} />
       </header>
-      <div className="seg seg-tabs" role="tablist" aria-label="Seções do painel">
-        {TABS.map((t) => (
-          <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'is-on' : ''} onClick={() => pick(t.id)}>{t.label}</button>
-        ))}
-      </div>
-      <AnimatePresence mode="wait">
-        <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }} className="painel-body">
-          {tab === 'geral' && <Geral days={days as number} />}
-          {tab === 'desempenho' && <Desempenho days={days as number} />}
-          {tab === 'constancia' && <Constancia days={days as number} />}
-          {tab === 'simulados' && <SimTab days={days as number} />}
-        </motion.div>
-      </AnimatePresence>
-    </div>
-  );
-}
 
-// ── Cartinha de incentivo quando o período está difícil ──────
-
-const ENCOURAGE = [
-  'Semana difícil não define a residente que você vai ser. Errar agora é exatamente o que faz a prova ficar mais fácil depois.',
-  'Esses números só mostram onde dá pra crescer. Você está aprendendo justamente onde mais errou, e isso é estudar de verdade.',
-  'Respira, diva. Aproveitamento sobe com revisão, e revisão você sabe fazer muito bem.',
-  'Todo mundo que passou teve semanas assim. O que conta é continuar, no seu ritmo.',
-];
-
-function Cartinha({ acc, q, days }: { acc: number | null; q: number; days: number }) {
-  const key = `yasr1-cartinha-${days}-${today()}`;
-  const [hidden, setHidden] = useState(() => {
-    try {
-      return localStorage.getItem(key) === '1';
-    } catch {
-      return false;
-    }
-  });
-  if (acc == null || q < 20 || acc >= 0.55 || hidden) return null;
-  const msg = ENCOURAGE[Math.floor(q) % ENCOURAGE.length];
-  return (
-    <motion.div className="cartinha" initial={{ opacity: 0, y: 10, rotate: -1.5 }} animate={{ opacity: 1, y: 0, rotate: -1 }}>
-      <span className="cartinha-seal" aria-hidden="true">♥</span>
-      <p className="cartinha-to">Pra Yas,</p>
-      <p>{msg}</p>
-      <button className="btn btn-quiet btn-sm" onClick={() => { setHidden(true); try { localStorage.setItem(key, '1'); } catch { /* */ } }}>Guardar cartinha</button>
-    </motion.div>
-  );
-}
-
-// ── Visão geral ───────────────────────────────────────────────
-
-function dailySeries(d: DataSnapshot, days: number) {
-  const t = today();
-  const start = addDays(t, -(days - 1));
-  const map = new Map<string, number>();
-  for (const s of d.sessions) if (s.date >= start && s.date <= t) map.set(s.date, (map.get(s.date) ?? 0) + (s.minutes ?? 0));
-  for (const sim of d.simulados) if (sim.date >= start && sim.date <= t && sim.minutes) map.set(sim.date, (map.get(sim.date) ?? 0) + sim.minutes);
-  return Array.from({ length: days }, (_, i) => {
-    const k = addDays(start, i);
-    return { k, m: map.get(k) ?? 0 };
-  });
-}
-
-function weeklyAcc(d: DataSnapshot, days: number) {
-  const start = weekStart(addDays(today(), -(days - 1)));
-  const weeks: { w: string; q: number; c: number }[] = [];
-  for (let w = start; w <= today(); w = addDays(w, 7)) weeks.push({ w, q: 0, c: 0 });
-  const idx = new Map(weeks.map((x, i) => [x.w, i]));
-  for (const s of d.sessions) {
-    if (!s.questions || s.type === 'flashcards' || !inPeriod(s.date, days)) continue;
-    const i = idx.get(weekStart(s.date));
-    if (i == null) continue;
-    weeks[i].q += s.questions;
-    weeks[i].c += s.correct ?? 0;
-  }
-  for (const sim of d.simulados) {
-    if (!sim.total || !inPeriod(sim.date, days)) continue;
-    const i = idx.get(weekStart(sim.date));
-    if (i == null) continue;
-    weeks[i].q += sim.total;
-    weeks[i].c += sim.correct ?? 0;
-  }
-  return weeks.filter((w) => w.q > 0);
-}
-
-function Geral({ days }: { days: number }) {
-  const { data } = useStore();
-  const t = totals(data, days);
-  const daily = dailySeries(data, days);
-  const wk = weeklyAcc(data, days);
-  const simMin = data.simulados.filter((s) => inPeriod(s.date, days)).reduce((a, s) => a + (s.minutes ?? 0), 0);
-  return (
-    <>
-      <Cartinha acc={t.accuracy} q={t.q + t.sq} days={days} />
-      <div className="sim-kpis">
-        <Stat value={t.minutes + simMin ? fmtMinutes(t.minutes + simMin) : '—'} label="horas estudadas" />
-        <Stat value={String(t.q + t.sq)} label="questões resolvidas" sub={t.sq ? `${t.sq} em simulados` : undefined} />
-        <Stat value={pct(t.accuracy)} label="aproveitamento geral" />
-        <Stat value={`${t.days}`} label={`dias com estudo em ${days}`} />
-      </div>
-      <div className="painel-grid">
-        <section className="card chart-card">
-          <h2 className="card-title">Horas por dia</h2>
-          <p className="chart-sub">Tempo registrado em sessões e simulados, dia a dia.</p>
-          {daily.some((x) => x.m > 0) ? (
-            <ColumnChart
-              bars={daily.map((x) => ({ x: days <= 15 ? DIAS_CURTOS[fromKey(x.k).getDay()] : fmtShort(x.k), y: x.m, tip: `${fmtShort(x.k)} · ${x.m ? fmtMinutes(x.m) : 'sem registro'}`, highlight: x.k === today() }))}
-              yFormat={hours}
-              label="Horas estudadas por dia"
-              showValues={days <= 15}
-            />
-          ) : <Empty text="Nenhum tempo registrado neste período." />}
-        </section>
-        <section className="card chart-card">
-          <h2 className="card-title">Evolução do aproveitamento</h2>
-          <p className="chart-sub">Percentual de acertos por semana (questões e simulados).</p>
-          {wk.length >= 2 ? (
-            <LineChart points={wk.map((w) => ({ x: fmtShort(w.w), y: w.c / w.q, tip: `semana de ${fmtShort(w.w)} · ${Math.round((w.c / w.q) * 100)}% em ${w.q} questões` }))} yFormat={(v) => `${Math.round(v * 100)}%`} yMin={0} yMax={1} label="Aproveitamento semanal" />
-          ) : <Empty text="Precisa de questões em pelo menos duas semanas do período." />}
-        </section>
-      </div>
-    </>
-  );
-}
-
-function Empty({ text }: { text: string }) {
-  return <p className="chart-empty">{text}</p>;
-}
-
-// ── Desempenho ────────────────────────────────────────────────
-
-function Desempenho({ days }: { days: number }) {
-  const { data } = useStore();
-  const ui = useUI();
-  const aq = areaQA(data, days);
-  const tq = topicQA(data, days);
-  const recs = errorRecords(data).filter((r) => inPeriod(r.date, days));
-  const dg = useMemo(() => diagnose(data, days), [data, days]);
-  const t = totals(data, days);
-  const topics = [...tq.entries()]
-    .map(([id, x]) => ({ id, t: data.topics.find((y) => y.id === id), q: x.q, acc: x.q ? x.c / x.q : 0 }))
-    .filter((x) => x.t)
-    .sort((a, b) => a.acc - b.acc);
-  const [all, setAll] = useState(false);
-  const withHistory = data.topics.filter((tp) => data.sessions.some((s) => s.topicId === tp.id && s.questions && s.type !== 'flashcards'));
-  const [topicId, setTopicId] = useState<string>(() => withHistory[0]?.id ?? '');
-  const series = data.sessions
-    .filter((s) => s.topicId === topicId && s.questions && s.type !== 'flashcards')
-    .sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
-
-  return (
-    <>
-      <Cartinha acc={t.accuracy} q={t.q + t.sq} days={days} />
-      <div className="painel-grid">
-        <section className="card chart-card">
-          <h2 className="card-title">Acertos por grande área</h2>
-          <p className="chart-sub">Questões das sessões (pela área do tema) somadas aos simulados.</p>
-          <PctBars
-            rows={BIG_AREAS.map((a) => {
-              const x = aq.get(a)!;
-              return { id: a, label: AREA_CHART[a].short, value: x.q ? x.c / x.q : null, n: x.q, color: AREA_CHART[a].color, sub: x.q ? `${x.q} q` : undefined };
-            })}
-            empty="Sem questões neste período."
-          />
-        </section>
-        <section className="card chart-card">
-          <h2 className="card-title">Pontos de atenção</h2>
-          {dg.alerts.length ? (
-            <ul className="alerts">{dg.alerts.map((a) => <li key={a}>{a}</li>)}</ul>
-          ) : <Empty text="Nenhum ponto de atenção com os dados deste período." />}
-          {dg.notes.slice(0, 1).map((n) => <p key={n} className="diag-note">{n}</p>)}
-        </section>
-        <section className="card chart-card">
-          <h2 className="card-title">Acertos por matéria</h2>
-          <p className="chart-sub">Da menor para a maior taxa de acerto.</p>
-          {topics.length ? (
-            <>
-              <ul className="weak">
-                {(all ? topics : topics.slice(0, 8)).map((x) => (
-                  <li key={x.id}>
-                    <button onClick={() => ui.openTopic(x.id)}>
-                      <i style={{ background: AREA_HEX[x.t!.area] }} />
-                      <span className="weak-name">{x.t!.name}</span>
-                      <span className="muted small">{x.q} q</span>
-                      <span className="mini-meter"><span style={{ width: `${x.acc * 100}%`, background: AREA_HEX[x.t!.area] }} /></span>
-                      <strong>{Math.round(x.acc * 100)}%</strong>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              {topics.length > 8 && <button className="btn btn-quiet btn-sm" onClick={() => setAll(!all)}>{all ? 'Mostrar menos' : `Ver todas (${topics.length})`}</button>}
-            </>
-          ) : <Empty text="Sem questões registradas por matéria neste período." />}
-        </section>
-        <section className="card chart-card">
-          <h2 className="card-title">Erros por subtema</h2>
-          <p className="chart-sub">Somente erros classificados ao registrar questões ou simulados.</p>
-          <RankBars items={subtemaRanking(recs)} color="#D9578F" empty="Nenhum erro classificado neste período." />
-        </section>
-        <section className="card chart-card span-2">
-          <div className="cmp-head">
-            <div>
-              <h2 className="card-title">Evolução por assunto</h2>
-              <p className="chart-sub">Acerto em cada sessão de questões do tema escolhido (todo o histórico).</p>
+      {/* hoje */}
+      <section className="pn-today">
+        <HoursJar minutes={todayMin} goal={goal} size={150} />
+        <div className="pn-today-main">
+          <span className="pn-k">Hoje você estudou</span>
+          <motion.span className="pn-big" key={todayMin} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>{fmtHM(todayMin)}</motion.span>
+          <span className="pn-goal">
+            {todayMin >= goal ? 'meta do dia batida! 🎉' : `faltam ${fmtHM(goal - todayMin)} para a meta de`}
+            <span className="pn-goal-ctl">
+              <button className="icon-btn icon-btn-sm" onClick={() => setGoal(goal - 30)} aria-label="Diminuir meta">−</button>
+              <b>{fmtHM(goal)}</b>
+              <button className="icon-btn icon-btn-sm" onClick={() => setGoal(goal + 30)} aria-label="Aumentar meta">+</button>
+            </span>
+          </span>
+          {byType.size > 0 || simToday > 0 ? (
+            <div className="pn-chips">
+              {[...byType.entries()].sort((a, b) => b[1] - a[1]).map(([k, m]) => <span key={k} className="pn-chip">{activityLabel(k as Session['type'])} <b>{fmtHM(m)}</b></span>)}
+              {simToday > 0 && <span className="pn-chip">Simulado <b>{fmtHM(simToday)}</b></span>}
             </div>
-            <select id="evo-topic" value={topicId} onChange={(e) => setTopicId(e.target.value)} aria-label="Assunto" className="select-inline">
-              {withHistory.length === 0 && <option value="">Sem assuntos com questões</option>}
-              {withHistory.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')).map((tp) => <option key={tp.id} value={tp.id}>{tp.name}</option>)}
-            </select>
-          </div>
-          {series.length >= 2 ? (
-            <LineChart
-              points={series.map((s) => ({ x: fmtShort(s.date), y: (s.correct ?? 0) / (s.questions as number), tip: `${fmtShort(s.date)} · ${s.correct ?? 0}/${s.questions} (${Math.round(((s.correct ?? 0) / (s.questions as number)) * 100)}%)` }))}
-              yFormat={(v) => `${Math.round(v * 100)}%`}
-              yMin={0}
-              yMax={1}
-              label="Evolução por assunto"
-              color="#8E6AD8"
-              wide
-            />
-          ) : <Empty text={topicId ? 'Esse assunto precisa de pelo menos duas sessões de questões.' : 'Registre questões para acompanhar a evolução de cada assunto.'} />}
-        </section>
-      </div>
-    </>
-  );
-}
-
-// ── Constância ────────────────────────────────────────────────
-
-const PLANNED_TYPES = new Set(['estudo', 'missao', 'internato', 'simulado']);
-
-function Constancia({ days }: { days: number }) {
-  const { data } = useStore();
-  const nWeeks = Math.max(4, Math.ceil(days / 7));
-  const start = addDays(weekStart(today()), -7 * (nWeeks - 1));
-  const weeks = Array.from({ length: nWeeks }, (_, i) => ({ w: addDays(start, 7 * i), done: 0, plan: 0 }));
-  const wi = new Map(weeks.map((x, i) => [x.w, i]));
-  for (const s of data.sessions) {
-    const i = wi.get(weekStart(s.date));
-    if (i != null) weeks[i].done += s.minutes ?? 0;
-  }
-  for (const sim of data.simulados) {
-    const i = wi.get(weekStart(sim.date));
-    if (i != null) weeks[i].done += sim.minutes ?? 0;
-  }
-  for (const o of occurrences(data.events.filter((e) => PLANNED_TYPES.has(e.type)), start, addDays(start, nWeeks * 7 - 1))) {
-    const i = wi.get(weekStart(o.date));
-    if (i != null) weeks[i].plan += duration(o.ev);
-  }
-  const hasPlan = weeks.some((w) => w.plan > 0);
-  const t = today();
-  const studied = new Set([...data.sessions.map((s) => s.date), ...data.simulados.map((s) => s.date)]);
-  const strip = Array.from({ length: days }, (_, i) => addDays(t, -(days - 1) + i));
-  const count = strip.filter((d) => studied.has(d)).length;
-
-  const byArea = new Map<string, number>();
-  const byType = new Map<string, number>();
-  const tmap = new Map(data.topics.map((x) => [x.id, x]));
-  for (const s of data.sessions) {
-    if (!inPeriod(s.date, days) || !s.minutes) continue;
-    const a = tmap.get(s.topicId)?.area ?? 'geral';
-    byArea.set(a, (byArea.get(a) ?? 0) + s.minutes);
-    byType.set(s.type, (byType.get(s.type) ?? 0) + s.minutes);
-  }
-  const simMin = data.simulados.filter((s) => inPeriod(s.date, days)).reduce((a, s) => a + (s.minutes ?? 0), 0);
-  if (simMin) byType.set('simulado', simMin);
-  const TYPE_COLORS = ['#4F79C2', '#D9578F', '#8E6AD8', '#E09A2E', '#6E8F3A', '#B79A86', '#5AA9A6', '#2E4A7F'];
-
-  return (
-    <div className="painel-grid">
-      <section className="card chart-card">
-        <h2 className="card-title">Horas por semana</h2>
-        <p className="chart-sub">Últimas {nWeeks} semanas. A semana atual aparece destacada.</p>
-        {weeks.some((w) => w.done > 0) ? (
-          <ColumnChart bars={weeks.map((w, i) => ({ x: fmtShort(w.w), y: w.done, tip: `semana de ${fmtShort(w.w)} · ${w.done ? fmtMinutes(w.done) : 'sem registro'}`, highlight: i === weeks.length - 1 }))} yFormat={hours} label="Horas por semana" />
-        ) : <Empty text="Nenhum tempo registrado nessas semanas." />}
-      </section>
-      <section className="card chart-card">
-        <h2 className="card-title">Dias estudados</h2>
-        <p className="chart-sub">{count} de {days} dias com algum registro.</p>
-        <div className={`day-strip d${days}`} role="img" aria-label={`${count} de ${days} dias com estudo`}>
-          {strip.map((d) => (
-            <span key={d} className={`ds ${studied.has(d) ? 'on' : ''} ${d === t ? 'today' : ''}`} title={`${fmtShort(d)}${studied.has(d) ? ' · estudou' : ''}`} />
-          ))}
+          ) : <p className="muted pn-none">Nenhum tempo registrado hoje ainda. Bora começar? 🌷</p>}
+          {topToday.length > 0 && (
+            <p className="pn-topics">Hoje: {topToday.map(([id, m]) => `${tmap.get(id)?.name ?? 'tema'} (${fmtHM(m)})`).join(' · ')}</p>
+          )}
         </div>
       </section>
-      <section className="card chart-card">
-        <h2 className="card-title">Distribuição do tempo por área</h2>
-        {byArea.size ? (
-          <StackBar parts={AREAS.map((a) => ({ id: a.id, label: a.short, value: byArea.get(a.id) ?? 0, color: AREA_HEX[a.id] }))} format={fmtMinutes} />
-        ) : <Empty text="Sem tempo registrado neste período." />}
-      </section>
-      <section className="card chart-card">
-        <h2 className="card-title">Distribuição do tempo por atividade</h2>
-        {byType.size ? (
-          <StackBar
-            parts={[...ACTIVITY_TYPES.map((x) => ({ id: x.id as string, label: x.label })), { id: CORRECTION_TYPE.id as string, label: CORRECTION_TYPE.label }, { id: 'simulado', label: 'Simulados' }].map((x, i) => ({ id: x.id, label: x.label, value: byType.get(x.id) ?? 0, color: TYPE_COLORS[i % TYPE_COLORS.length] }))}
-            format={fmtMinutes}
-          />
-        ) : <Empty text="Sem tempo registrado neste período." />}
-      </section>
-      <section className="card chart-card span-2">
-        <h2 className="card-title">Planejado × realizado</h2>
-        <p className="chart-sub">Horas de estudo marcadas na agenda (blocos de estudo, missões e simulados) comparadas às horas registradas.</p>
-        {hasPlan ? (
-          <div className="pvr">
-            {weeks.map((w) => {
-              const max = Math.max(...weeks.map((x) => Math.max(x.plan, x.done)), 1);
+
+      {/* semana */}
+      <div className="fs2-hero">
+        <div className="fs2-tile">
+          <span className="fs2-k">Últimos 7 dias</span>
+          <span className="fs2-v">{fmtHM(wkMin)}</span>
+          <span className="fs2-s">{pwMin ? <b className={wkMin >= pwMin ? 'up' : 'down'}>{wkMin >= pwMin ? '▲' : '▼'} {fmtHM(Math.abs(wkMin - pwMin))}</b> : null} {pwMin ? 'vs semana anterior' : 'de estudo'}</span>
+        </div>
+        <div className="fs2-tile">
+          <span className="fs2-k">Média por dia</span>
+          <span className="fs2-v">{fmtHM(Math.round(wkMin / 7))}</span>
+          <span className="fs2-s">meta batida em {daysHit} de 7 dias</span>
+        </div>
+        <div className="fs2-tile">
+          <span className="fs2-k">Questões (7 dias)</span>
+          <span className="fs2-v">{wkQ.q}</span>
+          <span className="fs2-s">{wkQ.q ? `${pctOf(wkQ.c, wkQ.q)}% de acerto` : 'nenhuma ainda'}</span>
+        </div>
+        <div className="fs2-tile">
+          <span className="fs2-k">Dias seguidos</span>
+          <span className="fs2-v">{st.current}<small> {st.current === 1 ? 'dia' : 'dias'}</small></span>
+          <span className="fs2-s">melhor sequência: {st.best}</span>
+        </div>
+      </div>
+
+      <div className="pn-row">
+        {/* 14 dias */}
+        <section className="card pn-card">
+          <h3 className="card-title">Horas por dia · últimos 14 dias</h3>
+          <div className="pn-days" onMouseLeave={() => setHover(null)}>
+            <span className="pn-goal-line" style={{ bottom: `calc(${(goal / max14) * 100}% * 0.78 + 34px)` }}><i>meta {fmtHM(goal)}</i></span>
+            {days14.map((x) => (
+              <div key={x.d} className={`pn-day ${x.d === t0 ? 'is-today' : ''} ${x.m >= goal ? 'is-hit' : ''}`} onMouseEnter={() => setHover(x.d)}>
+                <span className="pn-day-v">{hover === x.d || x.d === t0 ? (x.m ? fmtHM(x.m) : '0') : ''}</span>
+                <span className="pn-day-bar"><motion.span initial={{ height: 0 }} animate={{ height: `${(x.m / max14) * 100}%` }} transition={{ type: 'spring', stiffness: 120, damping: 18 }} /></span>
+                <span className="pn-day-d">{x.d === t0 ? 'hoje' : `${DIAS_CURTOS[fromKey(x.d).getDay()].slice(0, 1)}${fromKey(x.d).getDate()}`}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* acerto em questões */}
+        <section className="card pn-card">
+          <div className="pn-head">
+            <h3 className="card-title">Acerto em questões · 30 dias</h3>
+            <span className="pn-acc">{accNow != null ? `${accNow}%` : '—'}{accDelta != null && <b className={accDelta >= 0 ? 'up' : 'down'}>{accDelta >= 0 ? '▲' : '▼'}{Math.abs(accDelta)}</b>}</span>
+          </div>
+          <ul className="pn-areas">
+            {BIG_AREAS.map((a) => {
+              const x = acc30.get(a)!;
+              const p = pctOf(x.c, x.q);
               return (
-                <div key={w.w} className="pvr-col" title={`semana de ${fmtShort(w.w)} · planejado ${fmtMinutes(w.plan || null)} · realizado ${fmtMinutes(w.done || null)}`}>
-                  <div className="pvr-bars">
-                    <motion.span className="pvr-plan" initial={{ height: 0 }} animate={{ height: `${(w.plan / max) * 100}%` }} />
-                    <motion.span className="pvr-done" initial={{ height: 0 }} animate={{ height: `${(w.done / max) * 100}%` }} />
-                  </div>
-                  <span className="axis-label">{fmtShort(w.w)}</span>
-                </div>
+                <li key={a}>
+                  <span className="pn-area-n"><i style={{ background: AREA_CHART[a].color }} />{AREA_CHART[a].short}</span>
+                  <span className="fst-track"><motion.span style={{ background: AREA_CHART[a].color }} initial={{ width: 0 }} animate={{ width: `${p ?? 0}%` }} /></span>
+                  <span className="fst-val">{p != null ? `${p}%` : '—'}</span>
+                  <span className="muted small">{x.q ? `${x.q} q.` : ''}</span>
+                </li>
               );
             })}
+          </ul>
+          <p className="field-hint">Só questões (sem flashcards). ▲▼ compara com os 30 dias anteriores.</p>
+        </section>
+      </div>
+
+      <div className="pn-row">
+        {/* onde investir */}
+        <section className="card pn-card">
+          <h3 className="card-title">Onde investir agora</h3>
+          {weak.length ? (
+            <ul className="pn-weak">
+              {weak.map((w) => {
+                const a = areaOf(w.t!.area);
+                return (
+                  <li key={w.t!.id} style={{ ['--c' as string]: a.color }}>
+                    <span className="pn-weak-icon" aria-hidden="true"><StationIcon area={w.t!.area} /></span>
+                    <span className="pn-weak-main"><strong>{w.t!.name}</strong><span className="muted small">{w.q} questões em 30 dias</span></span>
+                    <span className={`pn-weak-p ${w.p < 60 ? 'low' : ''}`}>{w.p}%</span>
+                    <button className="btn btn-quiet btn-sm" onClick={() => ui.openTopic(w.t!.id)}>Abrir</button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : <p className="muted">Nenhum tema abaixo de 75% de acerto (com 10+ questões) nos últimos 30 dias. 👏</p>}
+          <button className="link small pn-link" onClick={() => ui.go('revisoes')}>Ver revisões de hoje →</button>
+        </section>
+
+        {/* simulados */}
+        <section className="card pn-card">
+          <h3 className="card-title">Simulados</h3>
+          {lastSim ? (
+            <>
+              <div className="pn-sim">
+                <span className="pn-big pn-big-sm">{Math.round((lastSim.correct! / lastSim.total!) * 100)}%</span>
+                <span className="muted small">no último ({lastSim.name}, {fmtShort(lastSim.date)}){simDelta != null && <b className={simDelta >= 0 ? 'up' : 'down'}> {simDelta >= 0 ? '▲' : '▼'} {Math.abs(simDelta)} p.p.</b>}</span>
+              </div>
+              <div className="pn-spark">
+                {sims.map((s) => {
+                  const p = s.correct! / s.total!;
+                  return <span key={s.id} title={`${s.name}: ${Math.round(p * 100)}%`}><motion.i initial={{ height: 0 }} animate={{ height: `${Math.max(8, (p - 0.4) / 0.6) * 100}%` }} /><em>{Math.round(p * 100)}</em></span>;
+                })}
+              </div>
+            </>
+          ) : <p className="muted">Nenhum simulado com nota ainda.</p>}
+          <button className="link small pn-link" onClick={() => ui.go('simulados')}>Abrir simulados →</button>
+        </section>
+      </div>
+
+      {/* tempo */}
+      <section className="card pn-card">
+        <h3 className="card-title">Para onde foi o tempo · 30 dias</h3>
+        <div className="pn-time">
+          <div>
+            <span className="fs2-k">Por área</span>
+            <StackBar parts={[...tArea.entries()].map(([k, v]) => ({ id: k, label: areaOf(k as never).short, value: v, color: AREA_HEX[k] ?? '#B79A86' }))} format={fmtHM} />
           </div>
-        ) : <Empty text="Aparece quando houver blocos de estudo ou missões marcados na agenda." />}
-        {hasPlan && <p className="legend-row"><i className="lg-plan" /> planejado <i className="lg-done" /> realizado</p>}
+          <div>
+            <span className="fs2-k">Por atividade</span>
+            <StackBar parts={[...ACTIVITY_TYPES, CORRECTION_TYPE].map((x, i) => ({ id: x.id as string, label: x.label, value: tType.get(x.id) ?? 0, color: TYPE_COLORS[i % TYPE_COLORS.length] }))} format={fmtHM} />
+          </div>
+        </div>
+        {!m30.length && <p className="muted">Sem tempo registrado nos últimos 30 dias.</p>}
       </section>
+      <button className="btn btn-quiet btn-sm pn-more" onClick={() => ui.go('evolucao')}><Icon name="calendar" size={15} /> Ver calendário e registros no Jardim</button>
     </div>
   );
 }
-
-// ── Simulados ─────────────────────────────────────────────────
-
-function SimTab({ days }: { days: number }) {
-  const { data } = useStore();
-  const list = data.simulados.filter((s) => inPeriod(s.date, days)).sort((a, b) => a.date.localeCompare(b.date));
-  const withPct = list.filter((s) => s.total && s.correct != null);
-  const withTime = list.filter((s) => s.total && s.minutes);
-  const aq = areaQA(data, days, 'simulados');
-  const recs = errorRecords(data).filter((r) => r.source === 'simulado' && inPeriod(r.date, days));
-  const areaErr = BIG_AREAS.map((a) => {
-    const x = aq.get(a)!;
-    return { id: a, label: AREA_CHART[a].short, count: x.q - x.c, share: 0 };
-  }).filter((x) => x.count > 0).sort((a, b) => b.count - a.count);
-  const totErr = areaErr.reduce((s, x) => s + x.count, 0);
-  areaErr.forEach((x) => (x.share = totErr ? x.count / totErr : 0));
-  if (!list.length)
-    return <div className="card"><Empty text="Nenhum simulado registrado neste período. Os simulados entram em Simulados → Registrar simulado." /></div>;
-  return (
-    <div className="painel-grid">
-      <section className="card chart-card">
-        <h2 className="card-title">Histórico de notas</h2>
-        <p className="chart-sub">Percentual de acertos de cada simulado.</p>
-        {withPct.length ? (
-          <LineChart points={withPct.map((s) => ({ x: fmtShort(s.date), y: (s.correct as number) / (s.total as number), tip: `${s.name} · ${s.correct}/${s.total}` }))} yFormat={(v) => `${Math.round(v * 100)}%`} yMin={0} yMax={1} label="Notas dos simulados" />
-        ) : <Empty text="Informe total e acertos para ver as notas." />}
-      </section>
-      <section className="card chart-card">
-        <h2 className="card-title">Aproveitamento por grande área</h2>
-        <p className="chart-sub">Soma de todas as provas do período.</p>
-        <PctBars rows={BIG_AREAS.map((a) => { const x = aq.get(a)!; return { id: a, label: AREA_CHART[a].short, value: x.q ? x.c / x.q : null, n: x.q, color: AREA_CHART[a].color }; })} empty="Preencha os acertos por área no registro do simulado." />
-      </section>
-      <section className="card chart-card">
-        <h2 className="card-title">Tempo por questão</h2>
-        <p className="chart-sub">Minutos por questão em cada prova, quando o tempo foi registrado.</p>
-        {withTime.length ? (
-          <ColumnChart bars={withTime.map((s) => ({ x: fmtShort(s.date), y: (s.minutes as number) / (s.total as number), tip: `${s.name} · ${((s.minutes as number) / (s.total as number)).toFixed(1).replace('.', ',')} min por questão` }))} yFormat={(v) => `${v.toFixed(1).replace('.', ',')}`} label="Minutos por questão" color="#CFE4FF" accent="#4F79C2" />
-        ) : <Empty text="Registre o tempo gasto nos simulados para ver este gráfico." />}
-      </section>
-      <section className="card chart-card">
-        <h2 className="card-title">Evolução do tempo de prova</h2>
-        <p className="chart-sub">Duração total de cada simulado.</p>
-        {withTime.length >= 2 ? (
-          <LineChart points={withTime.map((s) => ({ x: fmtShort(s.date), y: s.minutes as number, tip: `${s.name} · ${fmtMinutes(s.minutes)}` }))} yFormat={(v) => fmtMinutes(Math.round(v))} label="Duração dos simulados" color="#4F79C2" />
-        ) : <Empty text="Precisa do tempo de pelo menos dois simulados." />}
-      </section>
-      <section className="card chart-card">
-        <h2 className="card-title">Grande área com mais erros</h2>
-        <RankBars items={areaErr} colorOf={(id) => AREA_CHART[id as keyof typeof AREA_CHART]?.color} empty="Preencha os acertos por área para ver onde estão os erros." />
-      </section>
-      <section className="card chart-card">
-        <h2 className="card-title">Tipo de erro mais cometido</h2>
-        <RankBars items={reasonRanking(recs)} colorOf={(id) => ({ conceito: '#8E6AD8', desatencao: '#E09A2E', interpretacao: '#4F79C2', esquecimento: '#D9578F' } as Record<string, string>)[id]} empty="Classifique os erros dos simulados para ver os motivos." note="Um erro pode ter mais de um motivo." />
-      </section>
-    </div>
-  );
-}
-
-export { Icon };

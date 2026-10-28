@@ -5,6 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useStore } from '../data/store';
 import { useUI, Modal, ConfirmButton } from '../components/ui';
 import { Icon } from '../components/Icon';
+import { DEFAULT_GOAL, DayHours, dayStudyMinutes } from '../components/HoursJar';
 import { SessionEditor } from '../components/SessionForm';
 import { SimuladoForm, AREA_CHART } from './Simulados';
 import { play } from '../logic/sound';
@@ -307,7 +308,7 @@ export function Registros() {
           <AnimatePresence initial={false}>
             {groups.map((g) => (
               <motion.div key={g.date} className="reg-day" layout={!reduce} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-                <h3 className="reg-day-title">{dayLabel(g.date)}</h3>
+                <h3 className="reg-day-title">{dayLabel(g.date)}<DayHours minutes={dayStudyMinutes(data.sessions, data.simulados, g.date)} goal={data.settings.dailyGoalMinutes ?? DEFAULT_GOAL} /></h3>
                 <AnimatePresence initial={false}>
                   {dayRows(g.items).map((r) =>
                     r.kind === 'group' ? (
