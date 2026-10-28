@@ -63,17 +63,6 @@ export function FlashStats() {
     const startD = i === 0 ? -Infinity : fromKey(day).getTime();
     return { day, n: studied.filter((c) => { const t = new Date(c.fsrs.due).getTime(); return t >= startD && t < end; }).length };
   });
-  const maxF = Math.max(5, ...forecast.map((f) => f.n));
-
-  // maturidade
-  const ivl = (c: Flashcard) => (c.fsrs.lastReview ? (new Date(c.fsrs.due).getTime() - new Date(c.fsrs.lastReview).getTime()) / DAY : 0);
-  const mat = {
-    novos: cards.filter((c) => c.fsrs.phase === 'new').length,
-    aprendendo: cards.filter((c) => c.fsrs.phase === 'learning' || c.fsrs.phase === 'relearning').length,
-    jovens: cards.filter((c) => c.fsrs.phase === 'review' && ivl(c) < 21).length,
-    maduros: cards.filter((c) => c.fsrs.phase === 'review' && ivl(c) >= 21).length,
-  };
-  const matTotal = Math.max(1, cards.length);
 
   // boletim por baralho/tema
   const report = data.decks.map((d) => {
@@ -100,6 +89,23 @@ export function FlashStats() {
     .sort((a, b) => b.n - a.n)
     .slice(0, 5);
   const dname = (id: string) => data.decks.find((d) => d.id === id)?.name ?? '';
+
+  // programação: vencidos hoje, quantos novos faltam para a meta e os próximos cartões
+  const dueNow = forecast[0].n;
+  const toGoal = DAILY_GOAL - todayA.n - dueNow;
+  const newDeck = data.decks.map((d) => ({ d, n: cards.filter((c) => c.deckId === d.id && c.fsrs.phase === 'new').length })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n)[0];
+  const newPick = newDeck ? (data.topics.find((t) => t.id === newDeck.d.topicId)?.name ?? newDeck.d.name) : null;
+  const upcoming = [...studied].sort((a, b) => a.fsrs.due.localeCompare(b.fsrs.due)).slice(0, 8);
+  const whenTxt = (c: Flashcard) => {
+    const t = new Date(c.fsrs.due).getTime();
+    if (t <= now) return 'agora';
+    const k = toKey(new Date(t));
+    return k === t0 ? 'hoje' : k === addDays(t0, 1) ? 'amanhã' : fmtShort(k);
+  };
+  // errei × difícil: respostas 1 e 2 registradas em cada cartão
+  const byRating = (g: 1 | 2) => cards.map((c) => ({ c, n: (c.log ?? []).filter((r) => r.g === g).length })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n);
+  const againList = byRating(1);
+  const hardList = byRating(2);
 
   if (!cards.length)
     return (
@@ -136,38 +142,64 @@ export function FlashStats() {
         <div className="fs2-tile">
           <span className="fs2-k">Amanhã</span>
           <span className="fs2-v">{forecast[1]?.n ?? 0}<small> {(forecast[1]?.n ?? 0) === 1 ? 'cartão' : 'cartões'}</small></span>
-          <span className="fs2-s">{forecast[0].n ? `${forecast[0].n} vencem hoje` : 'nada vencendo hoje'}</span>
+          <span className="fs2-s">{forecast[0].n ? `${forecast[0].n} ${forecast[0].n === 1 ? 'vence' : 'vencem'} hoje` : 'nada vencendo hoje'}</span>
         </div>
       </div>
 
       <div className="fs2-row">
-        {/* previsão */}
+        {/* programação */}
         <section className="card fs2-card">
-          <h3 className="card-title">Previsão: cartões que vencem</h3>
-          <div className="fs2-fc">
-            {forecast.map((f, i) => (
-              <div key={f.day} className={`fs2-fc-day ${i === 0 ? 'is-today' : ''}`}>
-                <span className="fs2-fc-n">{f.n}</span>
-                <span className="fs2-fc-bar"><motion.span initial={{ height: 0 }} animate={{ height: `${(f.n / maxF) * 100}%` }} transition={{ delay: i * 0.05 }} /></span>
-                <span className="fs2-fc-d">{i === 0 ? 'hoje' : i === 1 ? 'amanhã' : DIAS_CURTOS[fromKey(f.day).getDay()]}</span>
+          <h3 className="card-title">Sua programação</h3>
+          <div className="fs2-plan">
+            <div className="fs2-plan-today">
+              <span className="fs2-plan-n">{dueNow}</span>
+              <span>{dueNow === 1 ? 'cartão vencido para hoje' : 'cartões vencidos para hoje'}</span>
+            </div>
+            {toGoal > 0 && newPick && (
+              <p className="fs2-plan-tip">Para bater a meta, faça também <b>{toGoal} novos</b> de <b>{newPick}</b>.</p>
+            )}
+            {toGoal <= 0 && <p className="fs2-plan-tip">Com os vencidos você já chega na meta de hoje. 🎯</p>}
+            <div className="fs2-plan-days">
+              {forecast.slice(1, 6).map((f, i) => (
+                <span key={f.day} className="fs2-plan-day"><b>{f.n}</b>{i === 0 ? 'amanhã' : DIAS_CURTOS[fromKey(f.day).getDay()]}</span>
+              ))}
+            </div>
+          </div>
+          <h4 className="fs2-sub">Próximos cartões</h4>
+          {upcoming.length ? (
+            <ul className="fs2-next">
+              {upcoming.map((c) => (
+                <li key={c.id}>
+                  <span className={`fs2-when ${new Date(c.fsrs.due).getTime() <= now ? 'is-now' : ''}`}>{whenTxt(c)}</span>
+                  <span className="fs2-next-q">{c.front}</span>
+                  <span className="muted small">{dname(c.deckId)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="muted">Nenhum cartão agendado ainda.</p>}
+        </section>
+
+        {/* errei × difícil */}
+        <section className="card fs2-card">
+          <h3 className="card-title">Onde estou errando</h3>
+          <div className="fs2-miss">
+            {([['errei', 'Errei (De novo)', againList], ['dificil', 'Difícil', hardList]] as const).map(([k, label, list]) => (
+              <div key={k} className={`fs2-miss-col m-${k}`}>
+                <span className="fs2-miss-h">{label} <b>{list.reduce((a, x) => a + x.n, 0)}</b></span>
+                {list.length ? (
+                  <ol>
+                    {list.slice(0, 6).map(({ c, n }) => (
+                      <li key={c.id} title={c.back}>
+                        <span className="fs2-miss-q">{c.front}</span>
+                        <span className="muted small">{dname(c.deckId)} · {n}×</span>
+                      </li>
+                    ))}
+                  </ol>
+                ) : <p className="muted small">Nenhum por aqui. ✨</p>}
               </div>
             ))}
           </div>
-          <p className="field-hint">Os atrasados entram em "hoje". Use o Modo Turbo quando a barra de hoje estiver alta.</p>
-        </section>
-
-        {/* maturidade */}
-        <section className="card fs2-card">
-          <h3 className="card-title">Maturidade dos cartões</h3>
-          <div className="fs2-mat" role="img" aria-label={`${mat.maduros} maduros, ${mat.jovens} jovens, ${mat.aprendendo} aprendendo, ${mat.novos} novos`}>
-            {([['maduros', mat.maduros], ['jovens', mat.jovens], ['aprendendo', mat.aprendendo], ['novos', mat.novos]] as const).map(([k, v]) => v > 0 && <span key={k} className={`m-${k}`} style={{ width: `${(v / matTotal) * 100}%` }} />)}
-          </div>
-          <ul className="fs2-mat-leg">
-            <li><i className="m-maduros" /> <b>{mat.maduros}</b> maduros <span className="muted">(intervalo ≥ 21 dias)</span></li>
-            <li><i className="m-jovens" /> <b>{mat.jovens}</b> jovens</li>
-            <li><i className="m-aprendendo" /> <b>{mat.aprendendo}</b> aprendendo</li>
-            <li><i className="m-novos" /> <b>{mat.novos}</b> novos (nunca estudados)</li>
-          </ul>
+          <p className="field-hint">Conta as respostas registradas como "De novo" (1) e "Difícil" (2), das mais frequentes para as menos.</p>
         </section>
       </div>
 

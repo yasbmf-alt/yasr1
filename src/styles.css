@@ -2481,3 +2481,28 @@ h5.sum-h { font-size: 14px; }
 .fs2-prob-n { grid-row: span 2; align-self: center; font-family: var(--font-display); font-weight: 800; font-size: 18px; color: #b4436c; }
 .fs2-prob-q { font-weight: 600; font-size: 14px; }
 @media (max-width: 900px) { .fs2-hero { grid-template-columns: repeat(2, minmax(0, 1fr)); } .fs2-row { grid-template-columns: minmax(0, 1fr); } }
+/* flashcards · programação e erros */
+.fs2-plan { display: flex; flex-direction: column; gap: 8px; }
+.fs2-plan-today { display: flex; align-items: baseline; gap: 8px; font-weight: 700; }
+.fs2-plan-n { font-family: var(--font-display); font-size: 34px; font-weight: 800; color: var(--rosa-ink); line-height: 1; }
+.fs2-plan-tip { margin: 0; font-size: 13.5px; background: var(--surface-2); border-radius: 12px; padding: 8px 12px; }
+.fs2-plan-days { display: flex; gap: 6px; flex-wrap: wrap; }
+.fs2-plan-day { display: inline-flex; flex-direction: column; align-items: center; min-width: 54px; padding: 6px 8px; border-radius: 12px; background: var(--surface-2); font-size: 11.5px; font-weight: 700; color: var(--muted); }
+.fs2-plan-day b { font-family: var(--font-display); font-size: 18px; color: var(--fg); }
+.fs2-sub { margin: 14px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.fs2-next { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.fs2-next li { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 0 8px; font-size: 13.5px; }
+.fs2-next li .muted { grid-column: 2; }
+.fs2-when { grid-row: span 2; align-self: center; font-size: 11.5px; font-weight: 800; text-align: center; background: var(--azul-claro); color: var(--azul-ink); border-radius: 999px; padding: 2px 6px; }
+.fs2-when.is-now { background: var(--rosa); color: var(--rosa-ink); }
+.fs2-next-q { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fs2-miss { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.fs2-miss-col { border-radius: 14px; padding: 10px 12px; }
+.fs2-miss-col.m-errei { background: #fff0f1; }
+.fs2-miss-col.m-dificil { background: #fff8e6; }
+.fs2-miss-h { display: flex; justify-content: space-between; font-weight: 800; font-size: 13.5px; margin-bottom: 6px; }
+.m-errei .fs2-miss-h b { color: #b4436c; } .m-dificil .fs2-miss-h b { color: #a2700e; }
+.fs2-miss-col ol { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 5px; }
+.fs2-miss-col li { font-size: 13px; }
+.fs2-miss-q { display: block; font-weight: 600; }
+@media (max-width: 560px) { .fs2-miss { grid-template-columns: minmax(0, 1fr); } }
