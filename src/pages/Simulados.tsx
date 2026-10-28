@@ -76,7 +76,16 @@ export function Simulados() {
       </div>
 
       {tab === 'diag' ? (
-        <Diagnostico />
+        <Diagnostico
+          onCorrect={(id) => {
+            try {
+              if (id) localStorage.setItem('yasr1-corr-sim', id);
+            } catch {
+              /* ignore */
+            }
+            pickTab('corr');
+          }}
+        />
       ) : tab === 'corr' ? (
         <Correcao onEdit={setEditing} />
       ) : list.length === 0 ? (
