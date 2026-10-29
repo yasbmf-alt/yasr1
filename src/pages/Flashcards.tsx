@@ -5,11 +5,12 @@ import { Modal, Field, ConfirmButton, LazyInput, useUI } from '../components/ui'
 import { Icon } from '../components/Icon';
 import { AREAS, areaOf, type Area, type Deck, type Flashcard } from '../types';
 import { newCardState, previewLabel, RATING_LABEL, schedule, type Rating } from '../logic/fsrs';
-import { answeredToday, DAILY_GOAL, deckCounts, deckQueue, mistakesQueue, TURBO_SIZE, turboQueue } from '../logic/flashQueue';
+import { deckCounts, deckQueue, mistakesQueue, TURBO_SIZE, turboQueue } from '../logic/flashQueue';
 import { StationIcon } from '../assets/art';
 import type { CardState } from '../types';
 import { parseAny, type RawCard } from '../logic/cardImport';
-import { relDay, today, toKey, uid } from '../logic/dates';
+import { addDays, relDay, today, toKey, uid } from '../logic/dates';
+import { catchUpDays, dayPlan, isLearning, topicWeights } from '../logic/dailyPlan';
 import { play } from '../logic/sound';
 import { isActive as isFocusActive } from '../components/focus';
 
@@ -26,10 +27,15 @@ export function Flashcards() {
   const ui = useUI();
   const studyDeck = (id: string) => {
     const d = data.decks.find((x) => x.id === id);
-    const ids = deckQueue(id, data.cards);
     if (!d) return;
+    // novos do baralho respeitam o limite do dia; as revisões vencidas entram todas
+    const p = dayPlan(data);
+    const quota = Math.max(0, p.newLimit - p.newToday);
+    const newSet = new Set(data.cards.filter((c) => c.deckId === id && c.fsrs.phase === 'new').map((c) => c.id));
+    let left = quota;
+    const ids = deckQueue(id, data.cards).filter((x) => !newSet.has(x) || left-- > 0);
     // em dia: revisa o baralho inteiro mesmo assim (revisão de tema pela página Revisões)
-    const all = ids.length ? ids : data.cards.filter((c) => c.deckId === id).map((c) => c.id);
+    const all = ids.length ? ids : data.cards.filter((c) => c.deckId === id && c.fsrs.phase !== 'new').map((c) => c.id);
     if (!all.length) return;
     setPlan({ key: `${id}-${Date.now()}`, title: d.name, ids: all, kind: 'deck' });
   };
@@ -56,11 +62,24 @@ export function Flashcards() {
               <button className="btn btn-primary" onClick={() => setNewDeck(true)}><Icon name="plus" size={18} /> Novo baralho</button>
             </div>
           </header>
-          <FlashHub
-            onTurbo={() => { const ids = turboQueue(data.cards); if (ids.length) setPlan({ key: `turbo-${Date.now()}`, title: 'Turbo', ids, kind: 'turbo' }); }}
-            onMistakes={() => { const ids = mistakesQueue(data.cards); if (ids.length) setPlan({ key: `erros-${Date.now()}`, title: 'Revisar meus erros', ids, kind: 'erros' }); }}
-          />
-          <TokenField onOpen={setDeckId} onStudy={studyDeck} onImport={() => setImporting('any')} />
+          <div className={data.cards.length ? 'fc-layout' : ''}>
+            <div className="fc-main">
+              <DayPlanCard onStart={(ids, title) => setPlan({ key: `dia-${Date.now()}`, title, ids, kind: 'dia' })} />
+              <FlashHub
+                onTurbo={() => { const ids = turboQueue(data.cards); if (ids.length) setPlan({ key: `turbo-${Date.now()}`, title: 'Turbo', ids, kind: 'turbo' }); }}
+                onMistakes={() => { const ids = mistakesQueue(data.cards); if (ids.length) setPlan({ key: `erros-${Date.now()}`, title: 'Revisar meus erros', ids, kind: 'erros' }); }}
+              />
+              {data.cards.length > 0 && (
+                <p className="fc-legend">
+                  <span><i className="c-new" /> novos</span>
+                  <span><i className="c-rev" /> para revisar</span>
+                  <span><i className="c-err" /> errados / aprendendo</span>
+                </p>
+              )}
+              <TokenField onOpen={setDeckId} onStudy={studyDeck} onImport={() => setImporting('any')} />
+            </div>
+            {data.cards.length > 0 && <FlashSide />}
+          </div>
         </>
       )}
       <ImportModal target={importing} onClose={() => setImporting(null)} onDone={(id) => { setImporting(null); setDeckId(id); }} />
@@ -74,25 +93,12 @@ export function Flashcards() {
 
 function FlashHub({ onTurbo, onMistakes }: { onTurbo: () => void; onMistakes: () => void }) {
   const { data } = useStore();
-  const t = today();
-  const fromSessions = data.sessions.filter((s) => s.type === 'flashcards' && s.date === t).reduce((a, s) => a + (s.questions ?? 0), 0);
-  const doneToday = answeredToday(data.cards, fromSessions);
-  const pct = Math.min(1, doneToday / DAILY_GOAL);
   const turboN = Math.min(TURBO_SIZE, data.cards.filter((c) => c.fsrs.phase !== 'new').length);
   const errN = mistakesQueue(data.cards).length;
   if (!data.cards.length) return null;
   return (
     <section className="fhub">
-      <div className="fhub-goal" title="Meta do dia: 30 cartões (não é limite)">
-        <svg viewBox="0 0 44 44" className="fhub-ring" aria-hidden="true">
-          <circle cx="22" cy="22" r="18" className="fhub-ring-bg" />
-          <circle cx="22" cy="22" r="18" className="fhub-ring-fg" strokeDasharray={`${pct * 113.1} 113.1`} />
-        </svg>
-        <div>
-          <strong>{doneToday}<span className="muted">/{DAILY_GOAL}</span></strong>
-          <span className="muted small">{doneToday >= DAILY_GOAL ? 'meta do dia batida! pode seguir se quiser' : 'cartões hoje · meta do dia'}</span>
-        </div>
-      </div>
+      <span className="fhub-k">Extras, se sobrar fôlego:</span>
       <motion.button className="turbo" onClick={onTurbo} disabled={!turboN} whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} title="30 cartões misturados dos temas que você já estudou, priorizando atrasados, errados e difíceis">
         <span className="turbo-bolt" aria-hidden="true">
           <svg viewBox="0 0 24 32"><path d="M14 1 L3 18 h8 l-3 13 L21 12 h-8 z" /></svg>
@@ -103,6 +109,151 @@ function FlashHub({ onTurbo, onMistakes }: { onTurbo: () => void; onMistakes: ()
         <Icon name="restore" size={16} /> Revisar meus erros{errN ? ` · ${errN}` : ''}
       </button>
     </section>
+  );
+}
+
+// ── Plano de hoje ─────────────────────────────────────────────
+
+function DayPlanCard({ onStart }: { onStart: (ids: string[], title: string) => void }) {
+  const { data } = useStore();
+  const p = useMemo(() => dayPlan(data), [data]);
+  if (!data.cards.length) return null;
+  const extraNew = () => {
+    // adiantar: mais 10 novos dos temas mais importantes, fora do plano
+    const w = topicWeights(data);
+    const deckTopic = new Map(data.decks.map((x) => [x.id, x.topicId]));
+    const ids = data.cards
+      .filter((c) => c.fsrs.phase === 'new')
+      .sort((a, b) => (w.get(deckTopic.get(b.deckId) ?? '') ?? 0) - (w.get(deckTopic.get(a.deckId) ?? '') ?? 0) || a.createdAt.localeCompare(b.createdAt))
+      .slice(0, 10)
+      .map((c) => c.id);
+    if (ids.length) onStart(ids, 'Novos extras');
+  };
+  const days = catchUpDays(p);
+  return (
+    <motion.section className={`dplan ${p.doneForToday ? 'is-done' : ''}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+      {p.doneForToday ? (
+        <div className="dplan-main">
+          <span className="dplan-k">Plano de hoje</span>
+          <strong className="dplan-big">Feito! 🎉</strong>
+          <p>{p.doneToday} cartões hoje. Você está liberada dos flashcards por hoje.</p>
+          <div className="btn-row">
+            {p.waiting > 0 && <button className="btn btn-quiet btn-sm" onClick={extraNew}>Adiantar 10 novos</button>}
+          </div>
+        </div>
+      ) : (
+        <div className="dplan-main">
+          <span className="dplan-k">Plano de hoje · cabe em {p.budget} min</span>
+          <strong className="dplan-big">
+            {p.reviewIds.length > 0 && <span className="c-rev-t">{p.reviewIds.length} revisões</span>}
+            {p.reviewIds.length > 0 && p.newIds.length > 0 && ' + '}
+            {p.newIds.length > 0 && <span className="c-new-t">{p.newIds.length} novos</span>}
+          </strong>
+          <p>≈ {Math.max(1, p.estMinutes)} min. Primeiro o que está para vencer, depois os novos dos temas que mais caem errado.</p>
+          <button className="btn btn-primary btn-lg" onClick={() => { play('pop'); onStart(p.queue, 'Plano de hoje'); }}>
+            {p.doneToday ? 'Continuar o plano de hoje' : 'Começar o plano de hoje'}
+          </button>
+          <span className="muted small">Pode parar quando quiser: o que faltar fica guardado.</span>
+        </div>
+      )}
+      <ul className="dplan-notes">
+        {p.carried > 0 && (
+          <li>
+            <b className="c-rev-t">{p.carried}</b> revisões atrasadas não cabem hoje e entram nos próximos dias, as mais urgentes primeiro{days > 1 ? ` (zera em uns ${days} dias)` : ''}.
+          </li>
+        )}
+        {p.waiting > 0 && (
+          <li>
+            <b className="c-new-t">{p.waiting}</b> novos estão na <b>fila de espera</b>: entram até {p.newLimit} por dia, pelos temas mais importantes. Não precisa se preocupar com eles agora.
+          </li>
+        )}
+      </ul>
+    </motion.section>
+  );
+}
+
+// ── Painel lateral ────────────────────────────────────────────
+
+function FlashSide() {
+  const { data, saveSettings } = useStore();
+  const p = useMemo(() => dayPlan(data), [data]);
+  const now = Date.now();
+  const logs = data.cards.flatMap((c) => (c.log ?? []).map((r) => ({ ...r, deckId: c.deckId })));
+  const wk = logs.filter((r) => now - new Date(r.at).getTime() < 7 * 86400000);
+  const acc = wk.length ? Math.round((wk.filter((r) => r.g >= 2).length / wk.length) * 100) : null;
+  const days = new Set(logs.map((r) => toKey(new Date(r.at))));
+  let streak = 0;
+  for (let d = days.has(today()) ? today() : addDays(today(), -1); days.has(d); d = addDays(d, -1)) streak++;
+  // baralhos onde mais erro (14 dias)
+  const per = new Map<string, { n: number; bad: number }>();
+  for (const r of logs) {
+    if (now - new Date(r.at).getTime() > 14 * 86400000) continue;
+    const x = per.get(r.deckId) ?? { n: 0, bad: 0 };
+    x.n++;
+    if (r.g <= 2) x.bad++;
+    per.set(r.deckId, x);
+  }
+  const worst = [...per.entries()].filter(([, x]) => x.n >= 5).map(([id, x]) => ({ id, rate: x.bad / x.n, n: x.n })).sort((a, b) => b.rate - a.rate).slice(0, 4);
+  const total = p.doneToday + p.queue.length;
+  const pct = total ? Math.min(1, p.doneToday / total) : 1;
+  const learning = data.cards.filter(isLearning).length;
+  const setMin = (v: number) => saveSettings({ flashMinutes: Math.max(10, Math.min(180, v)) });
+  const setNew = (v: number) => saveSettings({ flashNewPerDay: Math.max(0, Math.min(80, v)) });
+  return (
+    <aside className="fside">
+      <div className="fside-ring">
+        <svg viewBox="0 0 44 44" aria-hidden="true">
+          <circle cx="22" cy="22" r="18" className="fhub-ring-bg" />
+          <circle cx="22" cy="22" r="18" className="fhub-ring-fg" strokeDasharray={`${pct * 113.1} 113.1`} />
+        </svg>
+        <div>
+          <strong>{p.doneToday}<span className="muted">/{total}</span></strong>
+          <span className="muted small">cartões do plano hoje</span>
+        </div>
+      </div>
+      <dl className="fside-stats">
+        <div><dt>Tempo hoje</dt><dd>{p.minutesToday}<small>/{p.budget} min</small></dd></div>
+        <div><dt>Novos hoje</dt><dd className="c-new-t">{p.newToday}<small>/{p.newLimit}</small></dd></div>
+        <div><dt>Lembrei (7 dias)</dt><dd>{acc == null ? '—' : `${acc}%`}</dd></div>
+        <div><dt>Dias seguidos</dt><dd>{streak}</dd></div>
+        <div><dt>Para revisar</dt><dd className="c-rev-t">{p.reviewsDue}</dd></div>
+        <div><dt>Errados</dt><dd className="c-err-t">{learning}</dd></div>
+        <div><dt>Fila de espera</dt><dd className="c-new-t">{p.waiting}</dd></div>
+      </dl>
+      {worst.length > 0 && (
+        <div className="fside-worst">
+          <span className="fside-h">Onde mais erro (14 dias)</span>
+          <ul>
+            {worst.map((w) => (
+              <li key={w.id}>
+                <span>{data.decks.find((d) => d.id === w.id)?.name ?? 'Baralho'}</span>
+                <b className={w.rate >= 0.4 ? 'c-err-t' : ''}>{Math.round(w.rate * 100)}%</b>
+              </li>
+            ))}
+          </ul>
+          <span className="muted small">% de respostas "De novo" ou "Difícil"</span>
+        </div>
+      )}
+      <div className="fside-cfg">
+        <span className="fside-h">Meu ritmo</span>
+        <div className="fside-ctl">
+          <span>Tempo por dia</span>
+          <span className="pn-goal-ctl">
+            <button className="icon-btn icon-btn-sm" onClick={() => setMin(p.budget - 5)} aria-label="Menos tempo">−</button>
+            <b>{p.budget} min</b>
+            <button className="icon-btn icon-btn-sm" onClick={() => setMin(p.budget + 5)} aria-label="Mais tempo">+</button>
+          </span>
+        </div>
+        <div className="fside-ctl">
+          <span>Novos por dia</span>
+          <span className="pn-goal-ctl">
+            <button className="icon-btn icon-btn-sm" onClick={() => setNew(p.newLimit - 1)} aria-label="Menos novos">−</button>
+            <b>{p.newLimit}</b>
+            <button className="icon-btn icon-btn-sm" onClick={() => setNew(p.newLimit + 1)} aria-label="Mais novos">+</button>
+          </span>
+        </div>
+      </div>
+    </aside>
   );
 }
 
@@ -168,7 +319,16 @@ function Token({ i, name, sub, area, counts, onStudy, onOpen }: {
         <span className="token-shadow" aria-hidden="true" />
       </div>
       <strong className="token-name">{name}</strong>
-      <span className="token-sub">{ready ? `${counts.due ? `${counts.due} para revisar` : ''}${counts.due && counts.fresh ? ' · ' : ''}${counts.fresh ? `${counts.fresh} novos` : ''}` : `${counts.total} cartões · em dia`}{sub ? ` · ${sub}` : ''}</span>
+      <span className="token-sub">
+        {ready ? (
+          <span className="token-counts">
+            {counts.fresh > 0 && <b className="c-new-t" title="novos">{counts.fresh}</b>}
+            {counts.due - counts.learning > 0 && <b className="c-rev-t" title="para revisar">{counts.due - counts.learning}</b>}
+            {counts.learning > 0 && <b className="c-err-t" title="errados / aprendendo">{counts.learning}</b>}
+          </span>
+        ) : `${counts.total} cartões · em dia`}
+        {sub ? <span className="muted"> · {sub}</span> : null}
+      </span>
     </motion.div>
   );
 }
@@ -432,7 +592,7 @@ export interface StudyPlan {
   key: string;
   title: string;
   ids: string[]; // fila fixada no início; o que não for respondido continua pendente
-  kind: 'deck' | 'turbo' | 'erros';
+  kind: 'deck' | 'turbo' | 'erros' | 'dia';
 }
 
 function Study({ plan, onClose }: { plan: StudyPlan; onClose: () => void }) {
@@ -496,7 +656,7 @@ function Study({ plan, onClose }: { plan: StudyPlan; onClose: () => void }) {
       saveSession({
         id: ref.id, date: today(), topicId, missionId: null, activityId: null, type: 'flashcards',
         minutes: minutes == null ? null : Math.max(1, Math.round((minutes * x.n) / history.length)), questions: x.n, correct: x.ok,
-        errorTopics: [], notes: `${plan.kind === 'turbo' ? 'Turbo' : plan.kind === 'erros' ? 'Revisar meus erros' : 'Baralho'}: ${names}`, createdAt: ref.createdAt,
+        errorTopics: [], notes: `${plan.kind === 'turbo' ? 'Turbo' : plan.kind === 'erros' ? 'Revisar meus erros' : plan.kind === 'dia' ? 'Plano de hoje' : 'Baralho'}: ${names}`, createdAt: ref.createdAt,
       });
     }
   };
@@ -583,7 +743,7 @@ function Study({ plan, onClose }: { plan: StudyPlan; onClose: () => void }) {
 
       {finished ? (
         <motion.div className="study-end" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
-          <h2 className="h1">{plan.kind === 'turbo' ? 'Turbo feito!' : 'Sessão feita'}</h2>
+          <h2 className="h1">{plan.kind === 'turbo' ? 'Turbo feito!' : plan.kind === 'dia' ? 'Plano de hoje feito! 🎉' : 'Sessão feita'}</h2>
           <p>{reviewed} respostas · {ok} lembradas{again ? ` · ${again} para rever` : ''}</p>
           <p className="muted">Os cartões respondidos entraram no registro de estudos de cada tema.</p>
           <div className="btn-row">

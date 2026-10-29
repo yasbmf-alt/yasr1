@@ -223,6 +223,8 @@ export interface Settings {
   backupReminder?: boolean; // lembrete semanal de backup (padrão: ligado)
   streakBreakSeen?: string; // último dia da sequência perdida cuja animação triste já foi mostrada
   dailyGoalMinutes?: number; // meta de estudo por dia (padrão: 4h)
+  flashMinutes?: number; // tempo do plano diário de flashcards (padrão: 40 min)
+  flashNewPerDay?: number; // limite de cartões novos por dia (padrão: 21)
 }
 
 export interface RewardImage {

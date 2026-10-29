@@ -172,6 +172,27 @@ export function makeDemo(): DataSnapshot {
     ['Exemplo: frente do cartão 2', 'Exemplo: verso do cartão 2'],
     ['Exemplo: frente do cartão 3', 'Exemplo: verso do cartão 3'],
   ].map(([f, b], i) => ({ id: `dk${i}`, deckId: 'dd1', front: f, back: b, tags: [], fsrs: newCardState(), createdAt: new Date(Date.now() + i).toISOString() }));
+  // baralhos acumulados (para ver o plano do dia e a fila de espera)
+  decks.push(
+    { id: 'dd2', name: 'Exemplo · Colecistite', area: 'cirurgia', topicId: 'd2', createdAt: new Date().toISOString() },
+    { id: 'dd3', name: 'Exemplo · Pré-eclâmpsia', area: 'go', topicId: 'd3', createdAt: new Date().toISOString() },
+  );
+  const dayMs = 86400000;
+  const pile = (deckId: string, tag: string, fresh: number, due: number, relearn: number) => {
+    for (let i = 0; i < fresh + due + relearn; i++) {
+      const isNew = i < fresh;
+      const re = i >= fresh + due;
+      const ago = 1 + (i % 9);
+      cards.push({
+        id: `${deckId}-${i}`, deckId, front: `Exemplo (${tag}): pergunta ${i + 1}`, back: `Exemplo: resposta ${i + 1}`, tags: [],
+        fsrs: isNew ? newCardState() : { due: new Date(Date.now() - ago * dayMs).toISOString(), stability: 2 + (i % 6), difficulty: 4 + (i % 5), reps: 3, lapses: re ? 2 : i % 2, phase: re ? 'relearning' : 'review', lastReview: new Date(Date.now() - (ago + 3) * dayMs).toISOString() },
+        log: isNew ? [] : [{ at: new Date(Date.now() - (ago + 3) * dayMs).toISOString(), g: re ? 1 : ((i % 4) + 1) as 1 | 2 | 3 | 4 }],
+        createdAt: new Date(Date.now() - 20 * dayMs + i).toISOString(),
+      });
+    }
+  };
+  pile('dd2', 'Colecistite', 70, 120, 8);
+  pile('dd3', 'Pré-eclâmpsia', 50, 90, 6);
   return { chapters, missions, topics, sessions, notes: [{ id: 'dn1', text: 'Exemplo de lembrete dentro do livro', color: 'manteiga', x: 7, y: 140, rot: -3, chapterId: null, createdAt: new Date().toISOString(), topicId: 'd1', onTrail: false, bx: 8, by: 10 }], events, simulados, decks, cards, errnotes: [{ id: 'den1', area: 'clinica', topicId: 'd1', subject: '', subtema: 'tratamento', text: 'Exemplo: confundo a ordem dos degraus do tratamento.', createdAt: new Date().toISOString() }],
     macetes: [
       { id: 'dmc1', title: 'Exemplo de macete', text: 'Exemplo: escreva aqui o seu macete com as suas palavras.', area: 'clinica', topicId: 'd1', tags: ['exemplo'], createdAt: new Date().toISOString() },

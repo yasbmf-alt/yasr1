@@ -21,8 +21,10 @@ export function deckQueue(deckId: string, cards: Flashcard[], now = new Date()) 
 export function deckCounts(deck: Deck, cards: Flashcard[], now = new Date()) {
   const mine = cards.filter((c) => c.deckId === deck.id);
   const fresh = mine.filter((c) => c.fsrs.phase === 'new').length;
-  const due = mine.filter((c) => c.fsrs.phase !== 'new' && isDue(c.fsrs, now)).length;
-  return { total: mine.length, fresh, due, ready: due + fresh, studied: mine.length - fresh };
+  const dueCards = mine.filter((c) => c.fsrs.phase !== 'new' && isDue(c.fsrs, now));
+  const due = dueCards.length;
+  const learning = dueCards.filter((c) => c.fsrs.phase === 'learning' || c.fsrs.phase === 'relearning').length;
+  return { total: mine.length, fresh, due, learning, ready: due + fresh, studied: mine.length - fresh };
 }
 
 /** "risco" de esquecer: atrasados primeiro, depois muito errados e difíceis */
