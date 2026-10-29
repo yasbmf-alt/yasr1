@@ -13,6 +13,9 @@ import { relDay, today, toKey, uid } from '../logic/dates';
 import { play } from '../logic/sound';
 import { isActive as isFocusActive } from '../components/focus';
 
+// mais que isso parado num cartão (app esquecido aberto) não conta como estudo
+const IDLE_CAP_MS = 3 * 60000;
+
 export function Flashcards() {
   const { data } = useStore();
   const [deckId, setDeckId] = useState<string | null>(null);
@@ -442,7 +445,22 @@ function Study({ plan, onClose }: { plan: StudyPlan; onClose: () => void }) {
   // respostas da sessão (para voltar, trocar a nota e registrar por tema)
   const [history, setHistory] = useState<{ id: string; prev: CardState; rating: Rating; at: string }[]>([]);
   const [back, setBack] = useState(0); // 0 = cartão atual; 1 = o último respondido; …
-  const startedAt = useRef(Date.now());
+  // tempo ativo: só conta com a tela visível e sem longas pausas paradas
+  const active = useRef({ ms: 0, last: Date.now(), hidden: false });
+  const tick = () => {
+    const a = active.current;
+    const now = Date.now();
+    if (!a.hidden) a.ms += Math.min(now - a.last, IDLE_CAP_MS);
+    a.last = now;
+  };
+  useEffect(() => {
+    const onVis = () => {
+      tick();
+      active.current.hidden = document.visibilityState === 'hidden';
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
   const logged = useRef(new Map<string, { id: string; createdAt: string }>()); // tema → registro desta sessão
   const past = back > 0 ? history[history.length - back] : null;
   const card = data.cards.find((c) => c.id === (past ? past.id : queue[0]));
@@ -469,7 +487,8 @@ function Study({ plan, onClose }: { plan: StudyPlan; onClose: () => void }) {
       x.decks.add(deckId!);
       per.set(topic, x);
     }
-    const minutes = isFocusActive() ? null : Math.max(1, Math.round((Date.now() - startedAt.current) / 60000));
+    tick();
+    const minutes = isFocusActive() ? null : Math.max(1, Math.round(active.current.ms / 60000));
     for (const [topicId, x] of per) {
       const ref = logged.current.get(topicId) ?? { id: uid(), createdAt: new Date().toISOString() };
       logged.current.set(topicId, ref);
@@ -491,11 +510,13 @@ function Study({ plan, onClose }: { plan: StudyPlan; onClose: () => void }) {
 
   const flip = () => {
     if (!card) return;
+    tick();
     setFlipped((f) => !f);
     setRevealed(true);
     play('flip');
   };
   const go = (n: number) => {
+    tick();
     const b2 = Math.max(0, Math.min(history.length, n));
     if (b2 === back) return;
     setBack(b2);
@@ -510,6 +531,7 @@ function Study({ plan, onClose }: { plan: StudyPlan; onClose: () => void }) {
 
   const answer = (g: Rating) => {
     if (!card || !revealed) return;
+    tick();
     if (past) {
       if (!canChange || g === past.rating) return go(back - 1);
       // troca a nota: recalcula a partir do estado de antes e corrige a resposta no histórico do cartão
