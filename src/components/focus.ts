@@ -7,7 +7,8 @@ export interface FocusState {
   startedAt: number | null; // ms do último "iniciar"
   accumulated: number; // ms já contados antes da última pausa
   topicId: string | null;
-  countdown: number | null; // minutos do temporizador regressivo, ou null para progressivo
+  countdown: number | null; // minutos do temporizador regressivo, ou null para sem limite
+  kind?: 'estudo' | 'simulado'; // simulado: o tempo vira o tempo da prova ao registrar
 }
 
 const KEY = 'yasr1-focus';
@@ -39,8 +40,8 @@ export const elapsedMs = (s = state) => s.accumulated + (s.running && s.startedA
 export const isActive = (s = state) => s.running || s.accumulated > 0;
 
 export const focus = {
-  start(topicId: string | null, countdown: number | null) {
-    write({ running: true, startedAt: Date.now(), accumulated: state.running ? elapsedMs() : state.accumulated, topicId, countdown });
+  start(topicId: string | null, countdown: number | null, kind: 'estudo' | 'simulado' = 'estudo') {
+    write({ running: true, startedAt: Date.now(), accumulated: state.running ? elapsedMs() : state.accumulated, topicId, countdown, kind });
   },
   pause() {
     if (!state.running) return;

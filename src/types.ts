@@ -158,6 +158,7 @@ export interface Session {
   notes: string;
   createdAt: string; // ISO
   focus?: boolean; // veio do Cantinho de Concentração
+  simTimer?: boolean; // tempo de simulado cronometrado no Cantinho (vira o tempo da prova ao registrar)
   // campos que dependem do tipo de atividade (todos opcionais)
   source?: string; // questões: de onde vieram
   method?: string; // revisão: como revisou

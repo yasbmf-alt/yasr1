@@ -7,6 +7,7 @@ import { elapsedMs, focus, isActive, useFocus } from '../../components/focus';
 import { AMBIENTS, ambientKind, onAmbient, setAmbientVolume, startAmbient, stopAmbient, type AmbientKind } from '../../logic/ambient';
 import { play } from '../../logic/sound';
 import { today, uid } from '../../logic/dates';
+import { fmtHM } from '../../components/HoursJar';
 
 const PRESETS = [25, 30, 45, 50, 60];
 const two = (n: number) => String(Math.floor(n)).padStart(2, '0');
@@ -23,6 +24,7 @@ export function Cantinho() {
   const [, force] = useState(0);
   const [mode, setMode] = useState<number | null>(st.countdown);
   const [topicId, setTopicId] = useState<string>(st.topicId ?? '');
+  const [kind, setKind] = useState<'estudo' | 'simulado'>(st.kind ?? 'estudo');
   const [amb, setAmb] = useState<AmbientKind | null>(ambientKind());
   const [vol, setVol] = useState(data.settings.ambientVolume ?? 0.5);
   const finishing = useRef(false);
@@ -35,8 +37,16 @@ export function Cantinho() {
   const finish = (auto = false) => {
     if (finishing.current) return;
     finishing.current = true;
+    const isSim = st.kind === 'simulado';
     const minutes = focus.consume();
-    if (minutes >= 1) {
+    if (minutes >= 1 && isSim) {
+      saveSession({
+        id: uid(), date: today(), topicId: '', missionId: null, activityId: null, type: 'foco', minutes, questions: null, correct: null,
+        errorTopics: [], errors: [], notes: 'Simulado (cronômetro do Cantinho)', createdAt: new Date().toISOString(), focus: true, simTimer: true,
+      });
+      play('mission');
+      ui.toast(`${fmtHM(minutes)} de simulado contadas no seu dia. Ao registrar o simulado, esse tempo já vem preenchido (sem contar duas vezes).`, 'diva');
+    } else if (minutes >= 1) {
       const id = uid();
       saveSession({
         id, date: today(), topicId: st.topicId ?? '', missionId: null, activityId: null, type: 'foco', minutes, questions: null, correct: null,
@@ -74,7 +84,7 @@ export function Cantinho() {
           </svg>
           <div className="fs-time" aria-live="polite">
             <span className="fs-clock">{clock(remaining != null ? remaining : el)}</span>
-            <span className="fs-sub">{st.countdown ? (remaining != null && remaining > 0 ? `de ${st.countdown} min` : 'tempo!') : active ? 'cronômetro' : 'pronta?'}</span>
+            <span className="fs-sub">{st.countdown ? (remaining != null && remaining > 0 ? `de ${st.countdown} min` : 'tempo!') : active ? (st.kind === 'simulado' ? 'simulado · sem limite' : 'sem limite') : 'pronta?'}</span>
           </div>
         </div>
         <span className="fs-mug" aria-hidden="true"><i className="steam1" /><i className="steam2" /></span>
@@ -84,23 +94,31 @@ export function Cantinho() {
         <div className="fc-row">
           <span className="field-label">Modo</span>
           <div className="seg seg-wrap">
-            <button className={mode == null ? 'is-on' : ''} disabled={active} onClick={() => setMode(null)}>Progressivo</button>
+            <button className={mode == null ? 'is-on' : ''} disabled={active} onClick={() => setMode(null)}>∞ Sem limite</button>
             {PRESETS.map((p) => <button key={p} className={mode === p ? 'is-on' : ''} disabled={active} onClick={() => setMode(p)}>{p} min</button>)}
           </div>
         </div>
         <div className="fc-row">
+          <span className="field-label">O que vou fazer</span>
+          <div className="seg seg-wrap">
+            <button className={kind === 'estudo' ? 'is-on' : ''} disabled={active} onClick={() => setKind('estudo')}>📚 Estudo</button>
+            <button className={kind === 'simulado' ? 'is-on' : ''} disabled={active} onClick={() => { setKind('simulado'); setMode(null); }}>📝 Simulado</button>
+          </div>
+        </div>
+        {kind === 'estudo' && <div className="fc-row">
           <label className="field-label" htmlFor="fc-topic">Estudando</label>
           <select id="fc-topic" value={topicId} onChange={(e) => { setTopicId(e.target.value); if (active) focus.setTopic(e.target.value || null); }}>
             <option value="">Sem tema (conta nas horas)</option>
             {[...data.topics].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
-        </div>
+        </div>}
         <div className="fc-buttons">
-          {!active && <button className="btn btn-primary btn-lg" onClick={() => { play('pop'); focus.start(topicId || null, mode); }}><span aria-hidden="true">▶</span> Iniciar</button>}
+          {!active && <button className="btn btn-primary btn-lg" onClick={() => { play('pop'); focus.start(kind === 'simulado' ? null : topicId || null, mode, kind); }}><span aria-hidden="true">▶</span> Iniciar</button>}
           {active && st.running && <button className="btn btn-secondary btn-lg" onClick={() => focus.pause()}>❚❚ Pausar</button>}
           {active && !st.running && <button className="btn btn-primary btn-lg" onClick={() => focus.resume()}>▶ Continuar</button>}
           {active && <button className="btn btn-quiet btn-lg" onClick={() => finish()}>■ Encerrar e registrar</button>}
         </div>
+        {kind === 'simulado' && <p className="field-hint">No simulado o cronômetro corre sem limite. Ao encerrar, o tempo entra nas horas do dia e já vem preenchido quando você registrar a prova.</p>}
         <p className="field-hint">Se você concluir uma atividade da trilha com o cronômetro ligado, o tempo vai para ela e o cronômetro zera, para não contar duas vezes.</p>
       </div>
 

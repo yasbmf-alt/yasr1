@@ -354,9 +354,11 @@ export function emptySim(): Simulado {
 }
 
 export function SimuladoForm({ value, onClose }: { value: Simulado | 'new' | null; onClose: () => void }) {
-  const { data, saveSimulado, saveTopic } = useStore();
+  const { data, saveSimulado, saveTopic, deleteSession } = useStore();
   const ui = useUI();
   const [s, setS] = useState<Simulado>(emptySim());
+  // tempo cronometrado no Cantinho para um simulado ainda não registrado
+  const [timed, setTimed] = useState<{ ids: string[]; minutes: number } | null>(null);
   const [openAreas, setOpenAreas] = useState<BigArea[]>([]);
   const [hh, setHh] = useState('');
   const [mm, setMm] = useState('');
@@ -369,6 +371,13 @@ export function SimuladoForm({ value, onClose }: { value: Simulado | 'new' | nul
     base.errors = (base.errors ?? []).map(withItems);
     setS(base);
     setOpenAreas(BIG_AREAS.filter((a) => base.errors!.some((g) => g.area === a)));
+    const pend = value === 'new' ? data.sessions.filter((x) => x.simTimer && !x.simuladoId) : [];
+    const tm = pend.reduce((a, x) => a + (x.minutes ?? 0), 0);
+    if (pend.length && tm) {
+      setTimed({ ids: pend.map((x) => x.id), minutes: tm });
+      base.minutes = tm;
+      base.date = pend.map((x) => x.date).sort().at(-1)!;
+    } else setTimed(null);
     setHh(base.minutes != null ? String(Math.floor(base.minutes / 60)) : '');
     setMm(base.minutes != null ? String(base.minutes % 60) : '');
     setTag('');
@@ -409,7 +418,10 @@ export function SimuladoForm({ value, onClose }: { value: Simulado | 'new' | nul
           // liga cada tema à Biblioteca (reaproveita o tema existente; cria só os que faltam)
           const { groups, created } = linkTopics(kept.map(finalizeGroup), data.topics);
           for (const t of created) saveTopic(t);
-          saveSimulado({ ...s, errors: groups, name: s.name.trim(), total, correct, minutes: hh || mm ? h * 60 + m : null });
+          const minutes = hh || mm ? h * 60 + m : null;
+          saveSimulado({ ...s, errors: groups, name: s.name.trim(), total, correct, minutes });
+          // o tempo do cronômetro passa a ser o tempo da prova: tira o registro avulso para não contar duas vezes
+          if (timed && minutes) for (const id of timed.ids) deleteSession(id);
           ui.toast(created.length ? `Simulado registrado · ${created.length} tema${created.length > 1 ? 's novos' : ' novo'} na Biblioteca.` : 'Simulado registrado.');
           onClose();
         }}
@@ -421,7 +433,7 @@ export function SimuladoForm({ value, onClose }: { value: Simulado | 'new' | nul
           <Field label="Data">
             <input id="sim-date" type="date" value={s.date} onChange={(e) => setS({ ...s, date: e.target.value || today() })} />
           </Field>
-          <Field label="Tempo gasto">
+          <Field label="Tempo gasto" hint={timed ? `⏱ Veio do cronômetro do Cantinho (${Math.floor(timed.minutes / 60)}h${String(timed.minutes % 60).padStart(2, '0')}). Pode ajustar.` : undefined}>
             <span className="time-pair">
               <input id="sim-h" inputMode="numeric" value={hh} onChange={(e) => setHh(e.target.value)} aria-label="Horas" placeholder="h" /> h
               <input id="sim-m" inputMode="numeric" value={mm} onChange={(e) => setMm(e.target.value)} aria-label="Minutos" placeholder="min" /> min
