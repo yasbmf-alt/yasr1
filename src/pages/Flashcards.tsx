@@ -27,24 +27,35 @@ export function Flashcards() {
   const [newDeck, setNewDeck] = useState(false);
   const deck = data.decks.find((d) => d.id === deckId) ?? null;
   const ui = useUI();
-  const studyDeck = (id: string) => {
+  const studyDeck = (id: string, mode: StudyMode = 'tudo') => {
     const d = data.decks.find((x) => x.id === id);
     if (!d) return;
-    // novos do baralho respeitam o limite do dia; as revisões vencidas entram todas
+    const mine = data.cards.filter((c) => c.deckId === id);
+    const queue = deckQueue(id, data.cards);
+    const byId = new Map(mine.map((c) => [c.id, c]));
     const p = dayPlan(data);
     const quota = Math.max(0, p.newLimit - p.newToday);
-    const newSet = new Set(data.cards.filter((c) => c.deckId === id && c.fsrs.phase === 'new').map((c) => c.id));
-    let left = quota;
-    const ids = deckQueue(id, data.cards).filter((x) => !newSet.has(x) || left-- > 0);
-    // em dia: revisa o baralho inteiro mesmo assim (revisão de tema pela página Revisões)
-    let all = ids.length ? ids : data.cards.filter((c) => c.deckId === id && c.fsrs.phase !== 'new').map((c) => c.id);
-    // só tem novos e o limite do dia já foi: abrir o baralho é escolha sua, então entram como extra
-    if (!all.length && newSet.size) {
-      all = deckQueue(id, data.cards).filter((x) => newSet.has(x)).slice(0, EXTRA_NEW);
-      ui.toast(`O limite de novos de hoje já foi atingido. Estes ${all.length} entram como extra, fora do plano.`);
+    const newIds = queue.filter((x) => byId.get(x)?.fsrs.phase === 'new');
+    // novos: o que cabe no limite do dia; se já acabou, até 20 como extra (abrir o baralho é escolha sua)
+    const pickNew = () => {
+      if (quota > 0) return newIds.slice(0, quota);
+      const extra = newIds.slice(0, EXTRA_NEW);
+      if (extra.length) ui.toast(`O limite de novos de hoje já foi atingido. Estes ${extra.length} entram como extra, fora do plano.`);
+      return extra;
+    };
+    let ids: string[];
+    if (mode === 'novos') ids = pickNew();
+    else if (mode === 'revisar') ids = queue.filter((x) => byId.get(x)?.fsrs.phase !== 'new');
+    else if (mode === 'errados') ids = queue.filter((x) => { const c = byId.get(x); return !!c && isLearning(c); });
+    else if (mode === 'baralho') ids = mine.filter((c) => c.fsrs.phase !== 'new').sort((a, b) => a.fsrs.due.localeCompare(b.fsrs.due)).map((c) => c.id);
+    else {
+      let left = quota;
+      ids = queue.filter((x) => byId.get(x)?.fsrs.phase !== 'new' || left-- > 0);
+      if (!ids.length) ids = pickNew();
     }
-    if (!all.length) return setDeckId(id); // nada para estudar: mostra os cartões do baralho
-    setPlan({ key: `${id}-${Date.now()}`, title: d.name, ids: all, kind: 'deck' });
+    if (!ids.length) return setDeckId(id); // nada para estudar: mostra os cartões do baralho
+    const label = mode === 'novos' ? ' · novos' : mode === 'revisar' ? ' · revisar' : mode === 'errados' ? ' · errados' : mode === 'baralho' ? ' · baralho inteiro' : '';
+    setPlan({ key: `${id}-${Date.now()}`, title: d.name + label, ids, kind: 'deck' });
   };
   useEffect(() => {
     if (!ui.pendingStudy) return;
@@ -266,8 +277,9 @@ function FlashSide() {
 
 // ── Fichas dos temas (flutuando) ──────────────────────────────
 
-function TokenField({ onOpen, onStudy, onImport }: { onOpen: (id: string) => void; onStudy: (id: string) => void; onImport: () => void }) {
+function TokenField({ onOpen, onStudy, onImport }: { onOpen: (id: string) => void; onStudy: (id: string, mode: StudyMode) => void; onImport: () => void }) {
   const { data } = useStore();
+  const [choose, setChoose] = useState<string | null>(null);
   const decks = [...data.decks].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
   if (!decks.length)
     return (
@@ -282,9 +294,46 @@ function TokenField({ onOpen, onStudy, onImport }: { onOpen: (id: string) => voi
       {decks.map((d, i) => {
         const topic = d.topicId ? data.topics.find((t) => t.id === d.topicId) : null;
         const area = topic?.area ?? d.area;
-        return <Token key={d.id} i={i} name={topic?.name ?? d.name} sub={topic && topic.name !== d.name ? d.name : null} area={area} counts={deckCounts(d, data.cards)} onStudy={() => onStudy(d.id)} onOpen={() => onOpen(d.id)} />;
+        return <Token key={d.id} i={i} name={topic?.name ?? d.name} sub={topic && topic.name !== d.name ? d.name : null} area={area} counts={deckCounts(d, data.cards)} onStudy={() => setChoose(d.id)} onOpen={() => onOpen(d.id)} />;
       })}
+      <StudyChooser deckId={choose} onClose={() => setChoose(null)} onPick={(id, m) => { setChoose(null); onStudy(id, m); }} onOpen={(id) => { setChoose(null); onOpen(id); }} />
     </div>
+  );
+}
+
+type StudyMode = 'tudo' | 'novos' | 'revisar' | 'errados' | 'baralho';
+
+/** escolher o que estudar no baralho: tudo, só novos, só revisões, só errados */
+function StudyChooser({ deckId, onClose, onPick, onOpen }: { deckId: string | null; onClose: () => void; onPick: (id: string, m: StudyMode) => void; onOpen: (id: string) => void }) {
+  const { data } = useStore();
+  const d = deckId ? data.decks.find((x) => x.id === deckId) : null;
+  const c = d ? deckCounts(d, data.cards) : null;
+  const p = useMemo(() => dayPlan(data), [data]);
+  const quota = Math.max(0, p.newLimit - p.newToday);
+  const opts: { m: StudyMode; label: string; n: number; cls: string; hint: string }[] = c
+    ? [
+        { m: 'tudo', label: 'Tudo', n: c.due + Math.min(c.fresh, quota), cls: '', hint: 'revisões vencidas + novos dentro do limite do dia' },
+        { m: 'novos', label: 'Só novos', n: c.fresh, cls: 'c-new-t', hint: quota ? `até ${Math.min(quota, c.fresh)} hoje pelo limite` : 'limite do dia atingido: entram como extra' },
+        { m: 'revisar', label: 'Só revisões', n: c.due, cls: 'c-rev-t', hint: 'os que venceram, inclusive os que você errou' },
+        { m: 'errados', label: 'Só os errados', n: c.learning, cls: 'c-err-t', hint: 'os que você marcou "De novo" e ainda estão aprendendo' },
+        { m: 'baralho', label: 'Rever o baralho inteiro', n: c.total - c.fresh, cls: '', hint: 'todos os já estudados, mesmo os que não venceram' },
+      ]
+    : [];
+  return (
+    <Modal open={!!d} onClose={onClose} title={d ? `Estudar ${d.name}` : ''}>
+      <div className="schoose">
+        {opts.map((o) => (
+          <button key={o.m} className="schoose-opt" disabled={!o.n} onClick={() => d && onPick(d.id, o.m)}>
+            <span className="schoose-main">
+              <strong>{o.label}</strong>
+              <span className="muted small">{o.hint}</span>
+            </span>
+            <b className={`schoose-n ${o.cls}`}>{o.n}</b>
+          </button>
+        ))}
+        {d && <button className="link small" onClick={() => onOpen(d.id)}>Ver e editar os cartões</button>}
+      </div>
+    </Modal>
   );
 }
 
