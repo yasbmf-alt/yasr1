@@ -16,6 +16,8 @@ import { isActive as isFocusActive } from '../components/focus';
 
 // mais que isso parado num cartão (app esquecido aberto) não conta como estudo
 const IDLE_CAP_MS = 3 * 60000;
+// novos extras ao abrir um baralho depois do limite do dia
+const EXTRA_NEW = 20;
 
 export function Flashcards() {
   const { data } = useStore();
@@ -35,8 +37,13 @@ export function Flashcards() {
     let left = quota;
     const ids = deckQueue(id, data.cards).filter((x) => !newSet.has(x) || left-- > 0);
     // em dia: revisa o baralho inteiro mesmo assim (revisão de tema pela página Revisões)
-    const all = ids.length ? ids : data.cards.filter((c) => c.deckId === id && c.fsrs.phase !== 'new').map((c) => c.id);
-    if (!all.length) return;
+    let all = ids.length ? ids : data.cards.filter((c) => c.deckId === id && c.fsrs.phase !== 'new').map((c) => c.id);
+    // só tem novos e o limite do dia já foi: abrir o baralho é escolha sua, então entram como extra
+    if (!all.length && newSet.size) {
+      all = deckQueue(id, data.cards).filter((x) => newSet.has(x)).slice(0, EXTRA_NEW);
+      ui.toast(`O limite de novos de hoje já foi atingido. Estes ${all.length} entram como extra, fora do plano.`);
+    }
+    if (!all.length) return setDeckId(id); // nada para estudar: mostra os cartões do baralho
     setPlan({ key: `${id}-${Date.now()}`, title: d.name, ids: all, kind: 'deck' });
   };
   useEffect(() => {
