@@ -2561,8 +2561,8 @@ h5.sum-h { font-size: 14px; }
 .pn-days { position: relative; display: grid; grid-template-columns: repeat(14, minmax(0, 1fr)); gap: 5px; height: 190px; align-items: end; padding-top: 6px; }
 .pn-day { display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; cursor: default; }
 .pn-day-v { font-size: 11px; font-weight: 800; min-height: 14px; white-space: nowrap; color: var(--rosa-ink); }
-.pn-day-bar { flex: 1; width: 78%; display: flex; align-items: flex-end; background: var(--surface-2); border-radius: 8px; overflow: hidden; }
-.pn-day-bar span { display: block; width: 100%; background: var(--azul-claro); border-radius: 8px 8px 0 0; }
+.pn-day-bar { position: relative; flex: 1; width: 78%; display: flex; align-items: flex-end; background: var(--surface-2); border-radius: 8px; }
+.pn-day-bar span { display: block; width: 100%; max-height: 100%; background: var(--azul-claro); border-radius: 8px; }
 .pn-day.is-hit .pn-day-bar span { background: #9fc46a; }
 .pn-day.is-today .pn-day-bar span { background: var(--rosa-medio); }
 .pn-day:hover .pn-day-bar span { filter: brightness(0.92); }
@@ -2781,3 +2781,9 @@ html.corr-wide .corr-log .corr-timer-state { display: none; }
 .schoose-main strong { font-size: 15px; }
 .schoose-n { font-family: var(--font-display); font-size: 24px; font-weight: 800; }
 .schoose .link { align-self: center; margin-top: 4px; }
+
+.pn-goal-tick { position: absolute; left: -12%; right: -12%; height: 0; border-top: 2px dashed rgba(224, 169, 28, .75); pointer-events: none; z-index: 1; }
+.pn-goal-tick b { position: absolute; right: 0; bottom: 3px; font-size: 10.5px; font-weight: 800; color: #a2700e; background: var(--surface); padding: 0 4px; border-radius: 4px; white-space: nowrap; }
+.pn-notime { font-style: normal; display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; background: var(--manteiga); color: var(--manteiga-ink); font-size: 10px; font-weight: 900; }
+.pn-notime-hint { margin-top: 10px; line-height: 1.6; }
+.pn-notime-hint .pn-notime { margin-right: 4px; vertical-align: 1px; }

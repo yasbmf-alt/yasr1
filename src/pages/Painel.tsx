@@ -9,7 +9,7 @@ import { StationIcon } from '../assets/art';
 import { AREA_CHART } from './Simulados';
 import { ACTIVITY_TYPES, BIG_AREAS, CORRECTION_TYPE, activityLabel, areaOf, type BigArea, type Session } from '../types';
 import { streakInfo } from '../logic/progress';
-import { addDays, DIAS_CURTOS, fmtShort, fromKey, today } from '../logic/dates';
+import { addDays, DIAS_CURTOS, fmtShort, fromKey, toKey, today } from '../logic/dates';
 
 // Painel numa página só: hoje (horas no pote), a semana, os últimos 14 dias,
 // acerto em questões (nunca mistura flashcards), onde investir e para onde
@@ -62,8 +62,14 @@ export function Painel() {
   // últimos 14 dias
   const days14 = Array.from({ length: 14 }, (_, i) => {
     const d = addDays(t0, i - 13);
-    return { d, m: dayStudyMinutes(data.sessions, data.simulados, d) };
+    // estudo sem tempo anotado: registros sem minutos e flashcards respondidos sem registro do dia
+    const sess = data.sessions.filter((x) => x.date === d);
+    const noTime = sess.filter((x) => !x.minutes).length;
+    const cardsLogged = sess.filter((x) => x.type === 'flashcards').reduce((a, x) => a + (x.questions ?? 0), 0);
+    const cardsAnswered = data.cards.reduce((a, c) => a + (c.log ?? []).filter((r) => toKey(new Date(r.at)) === d).length, 0);
+    return { d, m: dayStudyMinutes(data.sessions, data.simulados, d), noTime, lostCards: Math.max(0, cardsAnswered - cardsLogged) };
   });
+  const anyNoTime = days14.some((x) => x.noTime || x.lostCards);
   const max14 = Math.max(goal, ...days14.map((x) => x.m), 60);
 
   // acerto em questões por grande área: 30 dias × 30 anteriores
@@ -178,15 +184,27 @@ export function Painel() {
         <section className="card pn-card">
           <h3 className="card-title">Horas por dia · últimos 14 dias</h3>
           <div className="pn-days" onMouseLeave={() => setHover(null)}>
-            <span className="pn-goal-line" style={{ bottom: `calc(${(goal / max14) * 100}% * 0.78 + 34px)` }}><i>meta {fmtHM(goal)}</i></span>
-            {days14.map((x) => (
-              <div key={x.d} className={`pn-day ${x.d === t0 ? 'is-today' : ''} ${x.m >= goal ? 'is-hit' : ''}`} onMouseEnter={() => setHover(x.d)}>
-                <span className="pn-day-v">{hover === x.d || x.d === t0 ? (x.m ? fmtHM(x.m) : '0') : ''}</span>
-                <span className="pn-day-bar"><motion.span initial={{ height: 0 }} animate={{ height: `${(x.m / max14) * 100}%` }} transition={{ type: 'spring', stiffness: 120, damping: 18 }} /></span>
+            {days14.map((x, i) => (
+              <div
+                key={x.d}
+                className={`pn-day ${x.d === t0 ? 'is-today' : ''} ${x.m >= goal ? 'is-hit' : ''}`}
+                onMouseEnter={() => setHover(x.d)}
+                title={`${fmtHM(x.m)}${x.noTime ? ` · ${x.noTime} registro${x.noTime > 1 ? 's' : ''} sem tempo anotado` : ''}${x.lostCards ? ` · ${x.lostCards} flashcards sem tempo salvo` : ''}`}
+              >
+                <span className="pn-day-v">{hover === x.d || x.d === t0 ? (x.m ? fmtHM(x.m) : '0') : x.noTime || x.lostCards ? <em className="pn-notime">?</em> : ''}</span>
+                <span className="pn-day-bar">
+                  <motion.span initial={{ height: 0 }} animate={{ height: `${(x.m / max14) * 100}%` }} transition={{ type: 'spring', stiffness: 120, damping: 18 }} />
+                  <i className="pn-goal-tick" style={{ bottom: `${(goal / max14) * 100}%` }}>{i === 13 && <b>meta {fmtHM(goal)}</b>}</i>
+                </span>
                 <span className="pn-day-d">{x.d === t0 ? 'hoje' : `${DIAS_CURTOS[fromKey(x.d).getDay()].slice(0, 1)}${fromKey(x.d).getDate()}`}</span>
               </div>
             ))}
           </div>
+          {anyNoTime && (
+            <p className="field-hint pn-notime-hint">
+              <em className="pn-notime">?</em> dia com estudo sem tempo anotado (passe o mouse para ver). Dá para completar o tempo em <button className="link small" onClick={() => ui.go('evolucao')}>Jardim → Registros</button>.
+            </p>
+          )}
         </section>
 
         {/* acerto em questões */}

@@ -716,6 +716,20 @@ function Study({ plan, onClose }: { plan: StudyPlan; onClose: () => void }) {
       });
     }
   };
+  // salva também se o app for para segundo plano ou fechar no meio (antes, só ao terminar ou no X)
+  const logRef = useRef(logSession);
+  logRef.current = logSession;
+  useEffect(() => {
+    const save = () => logRef.current();
+    const onVis = () => document.visibilityState === 'hidden' && save();
+    window.addEventListener('pagehide', save);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.removeEventListener('pagehide', save);
+      document.removeEventListener('visibilitychange', onVis);
+      save();
+    };
+  }, []);
   useEffect(() => {
     if (finished) {
       logSession();
