@@ -204,7 +204,8 @@ function Museum({ got, onClose }: { got: Map<string, string>; onClose: () => voi
               return (
                 <motion.button key={x.id} className={`yl-badge ${on ? 'is-got' : ''} ${sel === x.id ? 'is-sel' : ''}`} onClick={() => setSel(x.id)} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }} whileHover={{ y: -5, rotate: on ? -4 : 0 }}>
                   <span className="yl-badge-e">{on ? x.emoji : '?'}</span>
-                  <strong>{on ? x.name : '· · ·'}</strong>
+                  <strong>{x.name}</strong>
+                  {!on && <small>{x.desc}</small>}
                 </motion.button>
               );
             })}

@@ -24,7 +24,13 @@ function PlantArt({ species, stage, x, y }: { species: string; stage: number; x:
   const sp = speciesOf(species);
   return (
     <g transform={`translate(${x} ${y})`} className={`yl-plant st-${stage}`}>
-      {stage === 0 && <ellipse cx="0" cy="4" rx="14" ry="6" fill="#5E3D27" />}
+      {stage === 0 && (
+        <>
+          <ellipse cx="0" cy="4" rx="15" ry="7" fill="#A0704B" />
+          <ellipse cx="-4" cy="1" rx="3" ry="2" fill="#F3D9A4" />
+          <ellipse cx="4" cy="3" rx="3" ry="2" fill="#F3D9A4" />
+        </>
+      )}
       {stage >= 1 && <path d="M0 6 v-18" stroke="#5FA36A" strokeWidth="4" strokeLinecap="round" />}
       {stage >= 1 && <ellipse cx="-7" cy="-12" rx="7" ry="4" fill="#8DC26F" transform="rotate(-30 -7 -12)" />}
       {stage >= 1 && <ellipse cx="7" cy="-14" rx="7" ry="4" fill="#8DC26F" transform="rotate(30 7 -14)" />}
@@ -67,6 +73,7 @@ export function Horta({ onBack }: PlaceProps) {
             <rect x={x} y={y} width="160" height="100" rx="14" fill="#9C6B45" />
             <rect x={x + 8} y={y + 8} width="144" height="84" rx="10" fill={p ? '#6E4730' : '#7D5236'} />
             {!p && <text x={x + 80} y={y + 56} textAnchor="middle" className="yl-tag yl-plus">+ plantar</text>}
+            {p && <text x={x + 146} y={y + 26} textAnchor="end" fontSize="16">{speciesOf(p.species).emoji}</text>}
             {p && [0, 1, 2].map((k) => <PlantArt key={k} species={p.species} stage={g!.stage} x={x + 36 + k * 44} y={y + 70} />)}
             {p && g!.stage < 4 && <rect x={x + 20} y={y + 86} width={120 * g!.pct} height="5" rx="2.5" fill="#FFE08A" />}
             {water === i && [0, 1, 2, 3, 4].map((k) => <circle key={k} className="yl-rain" cx={x + 30 + k * 25} cy={y + 10} r="4" fill="#7FB8F5" style={{ animationDelay: `${k * 0.08}s` }} />)}

@@ -357,10 +357,10 @@
 .yl-vitrine { background: linear-gradient(180deg, #F3EDFB, #fff); border-radius: 18px; padding: 10px 12px 14px; border-bottom: 8px solid #C9B6EE; margin-bottom: 10px; }
 .yl-vitrine-t { display: block; font-size: 12px; font-weight: 800; text-transform: uppercase; color: var(--lilas-ink); margin-bottom: 8px; letter-spacing: .05em; }
 .yl-vitrine-row { display: flex; gap: 10px; flex-wrap: wrap; }
-.yl-badge { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 110px; border: 2px dashed #D9CBF5; background: rgba(255, 255, 255, .6); border-radius: 16px; padding: 10px 6px; cursor: pointer; text-align: center; font-size: 12px; }
+.yl-badge { color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 4px; width: 110px; border: 2px dashed #D9CBF5; background: rgba(255, 255, 255, .6); border-radius: 16px; padding: 10px 6px; cursor: pointer; text-align: center; font-size: 12px; }
 .yl-badge.is-mini { width: 54px; padding: 6px; cursor: default; }
 .yl-badge-e { font-size: 30px; filter: grayscale(1) opacity(.35); }
-.yl-badge.is-got { border: 2px solid #F3C9DD; background: #fff; box-shadow: 0 6px 14px -10px rgba(138, 39, 99, .5); }
+.yl-badge.is-got { color: var(--fg); border: 2px solid #F3C9DD; background: #fff; box-shadow: 0 6px 14px -10px rgba(138, 39, 99, .5); }
 .yl-badge.is-got .yl-badge-e { filter: none; }
 .yl-badge.is-sel { box-shadow: 0 0 0 3px var(--rosa-medio); }
 .yl-badge small { color: var(--muted); font-size: 11.5px; }
