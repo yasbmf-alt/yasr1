@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import type { PlaceProps } from '../Yasland';
-import { Hot, Place, PanelHead, F, DateIn, Bars, MiniMonth, fmtDate, lastDays, num, weekStartOf } from '../ui';
+import { art, ImgScene, Place, PanelHead, Tiles, F, DateIn, Bars, MiniMonth, fmtDate, lastDays, num, over, weekStartOf } from '../ui';
 import { useYl, ylId, nowIso } from '../store';
 import { HAIR_LABEL, type HairType, type YlHabit } from '../types';
 import { ConfirmButton } from '../../components/ui';
@@ -15,52 +15,41 @@ import { burst } from '../../logic/fx';
 type Spot = 'penteadeira' | 'lavatorio' | 'descanso' | 'habitos' | 'corpo';
 
 export function Spa({ onBack }: PlaceProps) {
+  const yl = useYl();
   const [spot, setSpot] = useState<Spot | null>(null);
   const pick = (id: string) => setSpot((s) => (s === id ? null : (id as Spot)));
+  const W = 904;
+  const H = 629;
+  const habits = yl.of('habit').filter((h) => !h.archived);
+  const doneToday = new Set(yl.of('hcheck').filter((c) => c.date === today()).map((c) => c.habitId)).size;
+  const skinToday = yl.of('skin').filter((x) => x.date === today()).reduce((n, x) => n + x.done.length, 0);
   const scene = (
-    <svg viewBox="0 0 1000 470" className="yl-room" role="img" aria-label="Spa">
-      <rect width="1000" height="330" fill="#F6F0FF" />
-      {Array.from({ length: 20 }).map((_, i) => <circle key={i} cx={(i * 97) % 1000} cy={(i * 53) % 300} r="3" fill="#E5D8FA" />)}
-      <rect y="330" width="1000" height="140" fill="#EADFF5" />
-      {/* penteadeira */}
-      <Hot id="penteadeira" label="Penteadeira: skincare" on={spot === 'penteadeira'} onPick={pick}>
-        <ellipse cx="160" cy="150" rx="70" ry="86" fill="#fff" stroke="#E2B7D6" strokeWidth="8" />
-        <ellipse cx="160" cy="150" rx="56" ry="72" fill="#EAF4FF" />
-        <path d="M128 110 q20 -20 40 0" fill="none" stroke="#fff" strokeWidth="6" strokeLinecap="round" />
-        <rect x="60" y="250" width="200" height="20" rx="8" fill="#E2B7D6" />
-        <rect x="70" y="270" width="180" height="70" rx="8" fill="#F3D3E8" />
-        {['#F38CB8', '#9C7FE0', '#9FC46A', '#F4C430'].map((c, i) => <rect key={i} x={86 + i * 40} y={226 - (i % 2) * 8} width="18" height={26 + (i % 2) * 8} rx="5" fill={c} />)}
-      </Hot>
-      {/* lavatório */}
-      <Hot id="lavatorio" label="Lavatório: cabelo" on={spot === 'lavatorio'} onPick={pick}>
-        <rect x="320" y="200" width="160" height="40" rx="18" fill="#fff" stroke="#C9D7EA" strokeWidth="4" />
-        <rect x="380" y="240" width="40" height="100" rx="8" fill="#C9D7EA" />
-        <path d="M400 200 v-50 q0 -14 16 -14 h12" fill="none" stroke="#9FB4CF" strokeWidth="8" strokeLinecap="round" />
-        <circle className="yl-drip" cx="428" cy="146" r="4" fill="#7FB8F5" />
-        <path d="M330 300 q40 -30 70 10 q30 -40 70 0 v40 h-140z" fill="#F7C8DD" />
-      </Hot>
-      {/* descanso */}
-      <Hot id="descanso" label="Sala de descanso: sono" on={spot === 'descanso'} onPick={pick}>
-        <rect x="540" y="230" width="240" height="70" rx="20" fill="#9C7FE0" />
-        <rect x="540" y="210" width="80" height="50" rx="18" fill="#fff" />
-        <rect x="610" y="236" width="170" height="40" rx="14" fill="#C7B3F2" />
-        <rect x="550" y="300" width="14" height="40" fill="#7D62C4" /><rect x="756" y="300" width="14" height="40" fill="#7D62C4" />
-        <circle cx="720" cy="110" r="34" fill="#FFF3B0" /><circle cx="736" cy="100" r="30" fill="#F6F0FF" />
-        <text className="yl-zzz" x="640" y="200">z z</text>
-      </Hot>
-      {/* mural de hábitos */}
-      <Hot id="habitos" label="Mural de hábitos" on={spot === 'habitos'} onPick={pick}>
-        <rect x="820" y="40" width="150" height="190" rx="10" fill="#E6CFB4" stroke="#C79A72" strokeWidth="4" />
-        {[0, 1, 2, 3].map((r) => [0, 1, 2, 3].map((c) => <circle key={`${r}${c}`} cx={850 + c * 30} cy={80 + r * 36} r="10" fill={(r + c) % 3 ? '#9FC46A' : '#fff'} opacity=".9" />))}
-        <rect x="860" y="30" width="70" height="20" rx="4" fill="#F38CB8" />
-      </Hot>
-      {/* diário do corpo: um caderninho discreto sobre o banco */}
-      <Hot id="corpo" label="Diário do corpo" on={spot === 'corpo'} onPick={pick}>
-        <rect x="840" y="300" width="120" height="16" rx="6" fill="#C79A72" />
-        <rect x="868" y="282" width="50" height="20" rx="3" fill="#AFC47E" />
-        <rect x="872" y="285" width="42" height="3" rx="1.5" fill="#fff" opacity=".7" />
-      </Hot>
-    </svg>
+    <ImgScene
+      img="s-spa" w={W} h={H} on={spot} onPick={pick}
+      areas={[
+        { id: 'penteadeira', label: 'Penteadeira: skincare', box: [28, 140, 222, 380] },
+        { id: 'lavatorio', label: 'Lavatório: cabelo', box: [262, 200, 205, 215] },
+        { id: 'descanso', label: 'Sala de descanso: sono', box: [470, 240, 270, 185] },
+        { id: 'habitos', label: 'Mural de hábitos', box: [732, 95, 165, 210] },
+        { id: 'corpo', label: 'Diário do corpo', box: [400, 470, 150, 95] },
+      ]}
+    >
+      {habits.length > 0 && <span className="yl-pin" style={over(W, H, 760, 300)}>✅ {doneToday}/{habits.length} hoje</span>}
+      {skinToday > 0 && <span className="yl-pin" style={over(W, H, 70, 520)}>✨ {skinToday} passos hoje</span>}
+    </ImgScene>
+  );
+  const tiles = (
+    <Tiles
+      on={spot}
+      onPick={pick}
+      items={[
+        { id: 'penteadeira', label: 'Penteadeira', icon: 'i-penteadeira' },
+        { id: 'lavatorio', label: 'Lavatório', icon: 'i-lavatorio' },
+        { id: 'descanso', label: 'Descanso', icon: 'i-descanso' },
+        { id: 'habitos', label: 'Hábitos', icon: 'i-habitos', badge: habits.length ? `${doneToday}/${habits.length}` : null },
+        { id: 'corpo', label: 'Diário', icon: 'i-diario' },
+      ]}
+    />
   );
   const close = () => setSpot(null);
   const panel =
@@ -70,7 +59,7 @@ export function Spa({ onBack }: PlaceProps) {
     : spot === 'habitos' ? <Habits onClose={close} />
     : spot === 'corpo' ? <Body onClose={close} />
     : null;
-  return <Place title="Spa" emoji="🧖🏻‍♀️" onBack={onBack} scene={scene} spot={spot} panel={panel} hint="Penteadeira · Lavatório · Descanso · Mural de hábitos · e um caderninho no banco." />;
+  return <Place title="Spa" emoji="🧖🏻‍♀️" onBack={onBack} scene={scene} tiles={tiles} spot={spot} panel={panel} hint="Autocuidado, bem-estar e rotina em um só lugar. 🪷" />;
 }
 
 // ── Penteadeira ───────────────────────────────────────────────
@@ -107,6 +96,8 @@ function Skincare({ onClose }: { onClose: () => void }) {
           ))}
         </div>
       )}
+      <div className="yl-illu-row">
+      <img className="yl-illu" src={art('c-penteadeira')} alt="" />
       <div className="yl-routines">
         {(['manha', 'noite'] as const).map((p) => {
           const done = logs.find((s) => s.date === date && s.period === p)?.done ?? [];
@@ -131,6 +122,7 @@ function Skincare({ onClose }: { onClose: () => void }) {
             </div>
           );
         })}
+      </div>
       </div>
       <span className="yl-k">Últimos 14 dias</span>
       <div className="yl-dots">
@@ -222,6 +214,7 @@ function Sleep({ onClose }: { onClose: () => void }) {
   return (
     <div>
       <PanelHead title="🌙 Descanso" sub={logs.length ? `Média das últimas noites: ${avg.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} h` : 'Registre como dormiu (a data é a da manhã em que acordou).'} onClose={onClose} />
+      <img className="yl-banner" src={art('c-descanso')} alt="" />
       <form
         className="yl-form"
         onSubmit={(e) => {

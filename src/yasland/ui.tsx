@@ -24,19 +24,84 @@ export function Hot({ id, label, on, onPick, children }: { id: string; label: st
   );
 }
 
-/** casca de um ambiente: voltar para a cidade, título, cena e o painel do objeto escolhido */
-export function Place({ title, emoji, onBack, scene, spot, panel, hint }: {
-  title: string; emoji: string; onBack: () => void; scene: React.ReactNode; spot: string | null; panel: React.ReactNode; hint?: string;
+// ilustrações da Yasland (src/yasland/art): o Vite gera a URL (ou embute no build de arquivo único)
+const ART = import.meta.glob('./art/*.webp', { eager: true, query: '?url', import: 'default' }) as Record<string, string>;
+export const art = (name: string) => ART[`./art/${name}.webp`] ?? '';
+
+export interface Area { id: string; label: string; box: [number, number, number, number] } // x, y, largura, altura em px da imagem
+
+/** cena ilustrada: a imagem é o cenário e cada objeto tem uma área clicável por cima */
+export function ImgScene({ img, w, h, areas, on, onPick, children, sparkles = 8 }: {
+  img: string; w: number; h: number; areas: Area[]; on?: string | null; onPick: (id: string) => void; children?: React.ReactNode; sparkles?: number;
+}) {
+  const pct = (v: number, t: number) => `${(v / t) * 100}%`;
+  return (
+    <div className="yl-iscene" style={{ aspectRatio: `${w} / ${h}` }}>
+      <img src={art(img)} alt="" draggable={false} className="yl-iscene-img" />
+      {Array.from({ length: sparkles }).map((_, i) => (
+        <i key={i} className="yl-spark" style={{ left: `${(i * 37 + 11) % 92 + 4}%`, top: `${(i * 53 + 7) % 70 + 6}%`, animationDelay: `${(i * 0.7) % 4}s` }} aria-hidden="true" />
+      ))}
+      {children}
+      {areas.map((a) => (
+        <button
+          key={a.id}
+          className={`yl-area ${on === a.id ? 'is-on' : ''}`}
+          style={{ left: pct(a.box[0], w), top: pct(a.box[1], h), width: pct(a.box[2], w), height: pct(a.box[3], h) }}
+          onClick={() => { play('pop'); onPick(a.id); }}
+          aria-label={a.label}
+          aria-pressed={on === a.id}
+        >
+          <span className="yl-area-tip">{a.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** posição de um elemento por cima da cena, em px da imagem */
+export const over = (w: number, h: number, x: number, y: number, ww?: number, hh?: number): React.CSSProperties => ({
+  position: 'absolute', left: `${(x / w) * 100}%`, top: `${(y / h) * 100}%`, ...(ww ? { width: `${(ww / w) * 100}%` } : {}), ...(hh ? { height: `${(hh / h) * 100}%` } : {}),
+});
+
+/** fileira de botões ilustrados abaixo da cena */
+export function Tiles({ items, on, onPick }: { items: { id: string; label: string; icon: string; badge?: number | string | null }[]; on: string | null; onPick: (id: string) => void }) {
+  return (
+    <div className="yl-tiles" role="tablist">
+      {items.map((t, i) => (
+        <motion.button
+          key={t.id}
+          role="tab"
+          aria-selected={on === t.id}
+          className={`yl-tile ${on === t.id ? 'is-on' : ''}`}
+          onClick={() => { play('pop'); onPick(t.id); }}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 + i * 0.05 }}
+          whileTap={{ scale: 0.94 }}
+        >
+          <img src={art(t.icon)} alt="" draggable={false} />
+          <span>{t.label}</span>
+          {t.badge ? <b className="yl-tile-badge">{t.badge}</b> : null}
+        </motion.button>
+      ))}
+    </div>
+  );
+}
+
+/** casca de um ambiente: voltar para a cidade, título, cena, botões e o painel do objeto escolhido */
+export function Place({ title, emoji, onBack, scene, tiles, spot, panel, hint }: {
+  title: string; emoji: string; onBack: () => void; scene: React.ReactNode; tiles?: React.ReactNode; spot: string | null; panel: React.ReactNode; hint?: string;
 }) {
   return (
     <div className="yl-place">
       <header className="yl-place-head">
-        <button className="btn btn-quiet btn-sm" onClick={onBack}><Icon name="chevronL" size={16} /> Cidade</button>
+        <button className="yl-back" onClick={onBack}><Icon name="chevronL" size={18} /> Cidade</button>
         <h1 className="h1">{emoji} {title}</h1>
       </header>
       <motion.div className="yl-scene" initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: 'spring', stiffness: 160, damping: 20 }}>
         {scene}
       </motion.div>
+      {tiles}
       {!spot && hint && <p className="yl-hint">{hint}</p>}
       <AnimatePresence mode="wait">
         {spot && (
@@ -52,13 +117,15 @@ export function Place({ title, emoji, onBack, scene, spot, panel, hint }: {
 export function PanelHead({ title, sub, onClose, children }: { title: string; sub?: string; onClose?: () => void; children?: React.ReactNode }) {
   return (
     <div className="yl-ph">
-      <div>
+      <div className="yl-ph-l">
+        {onClose && <button className="yl-ph-back" onClick={onClose} aria-label="Voltar"><Icon name="chevronL" size={18} /></button>}
+        <div>
         <h2 className="yl-ph-t">{title}</h2>
         {sub && <p className="muted small yl-ph-s">{sub}</p>}
+        </div>
       </div>
       <div className="btn-row">
         {children}
-        {onClose && <button className="icon-btn icon-btn-sm" onClick={onClose} aria-label="Fechar"><Icon name="close" size={16} /></button>}
       </div>
     </div>
   );
@@ -139,3 +206,39 @@ export function Bars({ items, color, fmt }: { items: { label: string; value: num
 /** os últimos n dias (antigo → hoje) */
 export const lastDays = (n: number) => Array.from({ length: n }, (_, i) => addDays(today(), i - n + 1));
 export const weekStartOf = (k: string) => addDays(k, -((fromKey(k).getDay() + 6) % 7));
+
+/** anel de progresso grande (evolução geral) */
+export function Ring({ value, label, emoji, color = '#DD5D78', size = 170 }: { value: number; label: string; emoji?: string; color?: string; size?: number }) {
+  const r = 70;
+  const c = 2 * Math.PI * r;
+  return (
+    <div className="yl-ring" style={{ width: size, height: size }}>
+      <svg viewBox="0 0 170 170">
+        <circle cx="85" cy="85" r={r} fill="none" stroke="#F8E3EA" strokeWidth="16" />
+        <motion.circle cx="85" cy="85" r={r} fill="none" stroke={color} strokeWidth="16" strokeLinecap="round" strokeDasharray={c} initial={{ strokeDashoffset: c }} animate={{ strokeDashoffset: c * (1 - Math.min(1, value / 100)) }} transition={{ duration: 1.1, ease: 'easeOut' }} transform="rotate(-90 85 85)" />
+      </svg>
+      <div className="yl-ring-c">
+        {emoji && <span className="yl-ring-e">{emoji}</span>}
+        <b>{Math.round(value)}%</b>
+        <small>{label}</small>
+      </div>
+    </div>
+  );
+}
+
+/** barras horizontais com ícone e porcentagem */
+export function HBars({ items }: { items: { label: string; emoji: string; value: number; color: string; hint?: string }[] }) {
+  return (
+    <div className="yl-hbars">
+      {items.map((x, i) => (
+        <div key={x.label} className="yl-hbar" title={x.hint}>
+          <span className="yl-hbar-e">{x.emoji}</span>
+          <span className="yl-hbar-m">
+            <span className="yl-hbar-l"><b>{x.label}</b><em>{Math.round(x.value)}%</em></span>
+            <span className="yl-hbar-t"><motion.i style={{ background: x.color }} initial={{ width: 0 }} animate={{ width: `${Math.min(100, x.value)}%` }} transition={{ delay: 0.15 + i * 0.08, type: 'spring', stiffness: 90, damping: 16 }} /></span>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}

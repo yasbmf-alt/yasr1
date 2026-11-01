@@ -389,3 +389,150 @@
   .yl-ex-row { grid-template-columns: minmax(0, 1fr) 54px 54px 64px; }
   .yl-ex-row input:nth-child(5) { display: none; }
 }
+
+/* ── visual ilustrado (cenas a partir das artes) ───────────── */
+.yl { --yl-acc: #DD5D78; --yl-acc-2: #F7A6BC; --yl-cream: #FFF8F3; --yl-line: #F6DCE6; --yl-lav: #8C6CD6; }
+.yl-city, .yl-place { max-width: 1000px; width: 100%; margin: 0 auto; }
+.yl-map-wrap { background: transparent; box-shadow: none; border-radius: 0; overflow: visible; }
+.yl-scene { background: transparent; box-shadow: none; border-radius: 0; overflow: visible; }
+.yl-iscene { position: relative; width: 100%; user-select: none; -webkit-user-select: none; }
+.yl-iscene-img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; filter: drop-shadow(0 18px 28px rgba(140, 108, 214, .22)); pointer-events: none; }
+.yl-area { position: absolute; border: 0; background: transparent; padding: 0; cursor: pointer; border-radius: 22px; transition: background .2s, box-shadow .2s, transform .25s cubic-bezier(.3, 1.5, .5, 1); }
+.yl-area:hover, .yl-area:focus-visible { background: radial-gradient(closest-side, rgba(255, 255, 255, .42), rgba(255, 255, 255, 0)); box-shadow: 0 0 0 3px rgba(255, 255, 255, .85), 0 0 26px 6px rgba(247, 166, 188, .55); transform: translateY(-3px); outline: none; }
+.yl-area:active { transform: scale(.98); }
+.yl-area.is-on { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--yl-lav), 0 0 30px 8px rgba(140, 108, 214, .35); animation: ylPulse 1.8s ease-in-out infinite; }
+@keyframes ylPulse { 50% { box-shadow: 0 0 0 3px #fff, 0 0 0 6px var(--yl-lav), 0 0 40px 14px rgba(140, 108, 214, .25); } }
+.yl-area-tip { position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translate(-50%, 6px); white-space: nowrap; background: #fff; color: var(--fg); font-size: 13px; font-weight: 800; padding: 5px 12px; border-radius: 999px; box-shadow: 0 6px 16px -6px rgba(46, 74, 127, .35); opacity: 0; pointer-events: none; transition: opacity .15s, transform .2s; z-index: 5; }
+.yl-area:hover .yl-area-tip, .yl-area:focus-visible .yl-area-tip { opacity: 1; transform: translate(-50%, 0); }
+@media (hover: none) { .yl-area-tip { display: none; } }
+.yl-spark { position: absolute; width: 8px; height: 8px; pointer-events: none; background: radial-gradient(circle, #fff 0 30%, rgba(255, 255, 255, 0) 70%); border-radius: 50%; animation: ylTwinkle 4s ease-in-out infinite; }
+.yl-spark::before, .yl-spark::after { content: ''; position: absolute; left: 50%; top: 50%; background: #fff; border-radius: 2px; transform: translate(-50%, -50%); }
+.yl-spark::before { width: 2px; height: 14px; } .yl-spark::after { width: 14px; height: 2px; }
+@keyframes ylTwinkle { 0%, 100% { opacity: 0; transform: scale(.4) rotate(0); } 50% { opacity: .9; transform: scale(1) rotate(45deg); } }
+
+/* botões ilustrados */
+.yl-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 12px; }
+.yl-tile { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border: 2px solid transparent; background: #fff; border-radius: 24px; padding: 14px 8px 12px; cursor: pointer; font: inherit; font-weight: 800; font-size: 15px; color: var(--fg); box-shadow: 0 10px 22px -16px rgba(140, 108, 214, .55); transition: transform .2s cubic-bezier(.3, 1.5, .5, 1), border-color .2s; }
+.yl-tile img { height: 52px; width: auto; max-width: 84px; object-fit: contain; transition: transform .3s cubic-bezier(.3, 1.6, .5, 1); }
+.yl-tile:hover { transform: translateY(-4px); }
+.yl-tile:hover img { transform: scale(1.12) rotate(-5deg); }
+.yl-tile.is-on { border-color: #B79AF0; background: #FCFAFF; }
+.yl-tile.is-on::after { content: ''; position: absolute; left: 50%; bottom: -12px; width: 18px; height: 18px; background: #FCFAFF; border-right: 2px solid #B79AF0; border-bottom: 2px solid #B79AF0; transform: translateX(-50%) rotate(45deg); border-radius: 0 0 4px 0; }
+.yl-tile-badge { position: absolute; top: 8px; right: 10px; background: var(--yl-acc); color: #fff; font-size: 11.5px; border-radius: 999px; padding: 2px 7px; }
+
+/* cabeçalhos */
+.yl-back { display: inline-flex; align-items: center; gap: 4px; border: 0; background: #fff; border-radius: 999px; padding: 9px 16px 9px 10px; font: inherit; font-weight: 800; font-size: 15px; color: var(--fg); box-shadow: 0 8px 18px -12px rgba(140, 108, 214, .6); cursor: pointer; transition: transform .15s; }
+.yl-back:hover { transform: translateX(-3px); }
+.yl-place-head .h1 { flex: 1; text-align: center; padding-right: 110px; }
+.yl-ph-l { display: flex; align-items: flex-start; gap: 8px; }
+.yl-ph-back { border: 0; background: transparent; color: var(--yl-acc); width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; cursor: pointer; flex: none; margin-top: -2px; }
+.yl-ph-back:hover { background: #FDE7EE; }
+.yl-panel { background: var(--yl-cream); border: 2px solid var(--yl-line); border-radius: 28px; box-shadow: 0 16px 34px -24px rgba(221, 93, 120, .45); }
+.yl .yl-panel .btn-primary { background: var(--yl-acc); box-shadow: 0 3px 0 #B9435E; }
+.yl .yl-panel .btn-primary:hover:not(:disabled) { background: #E86C86; }
+.yl-form { background: #fff; border: 1.5px solid var(--yl-line); }
+
+/* objetos vivos por cima das cenas */
+.yl-note { display: flex; flex-direction: column; gap: 1px; background: #FFF9C8; border-radius: 4px; padding: 6px 7px; box-shadow: 0 6px 10px -6px rgba(0, 0, 0, .35); font-size: clamp(7px, 1.05vw, 11px); line-height: 1.25; overflow: hidden; pointer-events: none; }
+.yl-note::before { content: ''; position: absolute; top: -6px; left: 50%; width: 12px; height: 12px; border-radius: 50%; background: #F38CB8; transform: translateX(-50%); box-shadow: 0 2px 2px rgba(0, 0, 0, .2); }
+.yl-note b { font-size: 1.1em; color: #8A2763; }
+.yl-note span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.yl-bubble-water { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: center; border: 0; background: #fff; border-radius: 18px; padding: 8px 12px; box-shadow: 0 10px 22px -12px rgba(79, 148, 232, .6); cursor: pointer; font: inherit; text-align: left; z-index: 3; min-width: 150px; }
+.yl-bubble-water::after { content: ''; position: absolute; right: 40px; bottom: -8px; width: 16px; height: 16px; background: #fff; transform: rotate(45deg); }
+.yl-bw-drop { font-size: 24px; grid-row: span 2; }
+.yl-bw-t { display: flex; flex-direction: column; line-height: 1.15; }
+.yl-bw-t b { font-size: 13px; } .yl-bw-t small { font-size: 12px; color: var(--muted); font-weight: 700; }
+.yl-bw-bar { grid-column: 2; height: 7px; background: #E6F0FB; border-radius: 99px; overflow: hidden; }
+.yl-bw-bar i { display: block; height: 100%; background: linear-gradient(90deg, #8CC7FF, #4F94E8); border-radius: 99px; }
+.yl-pin { background: #fff; border-radius: 999px; padding: 4px 10px; font-size: clamp(10px, 1.3vw, 13px); font-weight: 800; box-shadow: 0 6px 14px -8px rgba(46, 74, 127, .5); white-space: nowrap; pointer-events: none; z-index: 2; }
+.yl-pin.is-live { color: #D2475F; animation: ylBob 1.4s ease-in-out infinite; }
+.yl-sign-n { display: grid; place-items: center; background: #fff; border-radius: 10px; font: 800 clamp(22px, 5vw, 46px) var(--font-display); color: #8F96A8; pointer-events: none; }
+.yl-sign-n.is-alert { color: #E8455F; animation: ylBob 1.6s ease-in-out infinite; }
+.yl-lcd-o { display: grid; place-items: center; background: #1F3B4A; color: #9FE07F; border-radius: 6px; font: 700 clamp(9px, 1.6vw, 15px) ui-monospace, monospace; pointer-events: none; }
+.yl-board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4%; background: #fff; border-radius: 14px; padding: 2% 3% 1%; pointer-events: none; }
+.yl-board-col { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
+.yl-board-t { flex: 1; width: 62%; min-height: 40px; display: flex; align-items: flex-end; background: #F1EEF6; border-radius: 99px; overflow: hidden; }
+.yl-board-t i { display: block; width: 100%; border-radius: 99px; }
+.yl-board-col em { font-style: normal; font-size: clamp(11px, 2vw, 20px); line-height: 1; }
+.yl-board-col small { font-size: clamp(7px, 1.1vw, 11px); font-weight: 800; color: var(--muted); }
+.yl-mpin { background: #fff; border-radius: 999px; padding: 4px 11px; font-size: clamp(10px, 1.4vw, 13.5px); font-weight: 800; color: var(--fg); box-shadow: 0 8px 16px -8px rgba(46, 74, 127, .45); white-space: nowrap; pointer-events: none; transform-origin: 50% 100%; z-index: 3; }
+.yl-mpin.is-alert { background: #FFE2E8; color: #C2304F; }
+.yl-mpin.is-ok { background: #E8F6DA; color: #4B7A22; }
+.yl-cloud { position: absolute; width: 18%; height: 7%; border-radius: 999px; background: rgba(255, 255, 255, .55); filter: blur(6px); pointer-events: none; animation: ylDriftX 38s linear infinite; z-index: 2; }
+.yl-cloud.c1 { top: 18%; } .yl-cloud.c2 { top: 58%; animation-duration: 52s; animation-delay: -20s; width: 14%; }
+@keyframes ylDriftX { 0% { left: 6%; opacity: 0; } 15% { opacity: 1; } 85% { opacity: 1; } 100% { left: 78%; opacity: 0; } }
+.yl-bird { position: absolute; font-size: clamp(12px, 2vw, 20px); pointer-events: none; z-index: 3; }
+.yl-bird.b1 { animation: ylFly 22s linear infinite; }
+.yl-bird.b2 { animation: ylFly2 17s ease-in-out infinite; }
+@keyframes ylFly { 0% { left: 8%; top: 30%; opacity: 0; } 10% { opacity: 1; } 50% { top: 14%; } 90% { opacity: 1; } 100% { left: 90%; top: 26%; opacity: 0; } }
+@keyframes ylFly2 { 0%, 100% { left: 22%; top: 66%; } 25% { left: 40%; top: 60%; } 50% { left: 52%; top: 70%; } 75% { left: 34%; top: 76%; } }
+.yl-fount { width: 4%; height: 4%; pointer-events: none; }
+.yl-fount i { position: absolute; left: 40%; bottom: 0; width: 6px; height: 6px; border-radius: 50%; background: #BFE3FF; animation: ylJet 1.4s ease-out infinite; }
+.yl-fount i:nth-child(2) { animation-delay: .45s; left: 20%; } .yl-fount i:nth-child(3) { animation-delay: .9s; left: 60%; }
+@keyframes ylJet { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-22px); opacity: 0; } }
+.reduce-motion .yl-cloud, .reduce-motion .yl-bird, .reduce-motion .yl-spark, .reduce-motion .yl-fount i { animation: none; display: none; }
+@media (max-width: 640px) {
+  .yl-place-head .h1 { padding-right: 0; text-align: left; font-size: 26px; }
+  .yl-tiles { grid-template-columns: repeat(auto-fit, minmax(60px, 1fr)); gap: 6px; }
+  .yl-tile { font-size: 11.5px; padding: 8px 2px; border-radius: 16px; gap: 4px; }
+  .yl-tile img { height: 32px; max-width: 54px; }
+  .yl-tile-badge { top: 3px; right: 3px; font-size: 10px; }
+  .yl-bubble-water { min-width: 0; padding: 5px 8px; transform: scale(.82); transform-origin: right top; }
+}
+.yl-ring { position: relative; flex: none; }
+.yl-ring svg { width: 100%; height: 100%; }
+.yl-ring-c { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.yl-ring-e { font-size: 30px; line-height: 1; }
+.yl-ring-c b { font: 800 30px var(--font-display); line-height: 1.1; }
+.yl-ring-c small { font-size: 12px; font-weight: 700; color: var(--muted); }
+.yl-hbars { display: flex; flex-direction: column; gap: 12px; flex: 1; min-width: 220px; }
+.yl-hbar { display: flex; align-items: center; gap: 10px; }
+.yl-hbar-e { font-size: 22px; width: 30px; text-align: center; }
+.yl-hbar-m { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.yl-hbar-l { display: flex; justify-content: space-between; font-size: 14px; }
+.yl-hbar-l em { font-style: normal; font-weight: 800; color: var(--muted); }
+.yl-hbar-t { height: 12px; background: #F3ECF1; border-radius: 99px; overflow: hidden; }
+.yl-hbar-t i { display: block; height: 100%; border-radius: 99px; }
+.yl-evo-top { display: flex; gap: 28px; align-items: center; flex-wrap: wrap; background: #fff; border-radius: 22px; padding: 16px 20px; border: 1.5px solid var(--yl-line); }
+.yl-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: center; background: var(--yl-cream); border: 2px solid var(--yl-line); border-radius: 30px; padding: 18px; }
+.yl-hero-img { width: 100%; border-radius: 22px; display: block; box-shadow: 0 14px 28px -18px rgba(140, 108, 214, .6); }
+.yl-menu { display: flex; flex-direction: column; gap: 10px; }
+.yl-menu-b { display: flex; align-items: center; gap: 12px; border: 1.5px solid var(--yl-line); background: #fff; border-radius: 18px; padding: 12px 16px; font: inherit; font-weight: 800; font-size: 16px; color: var(--fg); cursor: pointer; text-align: left; transition: transform .2s cubic-bezier(.3, 1.5, .5, 1), border-color .2s; }
+.yl-menu-b span:first-child { width: 38px; height: 38px; border-radius: 12px; background: #FDE7EE; display: grid; place-items: center; font-size: 20px; flex: none; }
+.yl-menu-b small { display: block; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.yl-menu-b:hover { transform: translateX(5px); border-color: var(--yl-acc-2); }
+.yl-menu-b.is-on { border-color: #B79AF0; background: #FCFAFF; }
+@media (max-width: 760px) { .yl-hero { grid-template-columns: minmax(0, 1fr); } }
+.yl-garden { border-radius: 34px; filter: drop-shadow(0 18px 28px rgba(95, 166, 84, .25)); }
+.yl-plus-g { fill: #FFF3DD; font-size: 15px; }
+.yl-sky-cloud { animation: ylSkyCloud 40s linear infinite; }
+.yl-sky-cloud.c2 { animation-duration: 55s; animation-delay: -25s; }
+@keyframes ylSkyCloud { from { transform: translateX(-300px); } to { transform: translateX(1100px); } }
+.yl-ready { transform-box: fill-box; transform-origin: center; animation: ylSpin 12s linear infinite; }
+@keyframes ylSpin { to { transform: rotate(360deg); } }
+.yl-can { cursor: pointer; transform-box: fill-box; transform-origin: 30% 80%; transition: transform .3s; }
+.yl-can:hover { transform: rotate(-8deg) translateY(-4px); }
+.yl-can.is-on { animation: pour 1.4s ease-in-out; }
+.yl-illu-row { display: flex; gap: 16px; align-items: stretch; flex-wrap: wrap; }
+.yl-illu-row > :last-child { flex: 1; min-width: 260px; }
+.yl-illu { width: 200px; max-width: 100%; object-fit: cover; border-radius: 22px; box-shadow: 0 12px 24px -16px rgba(140, 108, 214, .6); }
+.yl-banner { width: 100%; max-height: 190px; object-fit: cover; border-radius: 22px; box-shadow: 0 12px 24px -16px rgba(140, 108, 214, .6); }
+.yl-game-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 16px; align-items: start; }
+.yl-clip { position: relative; background: #FFFBF3; border: 3px solid #E9D3B8; border-radius: 20px; padding: 26px 14px 14px; box-shadow: 0 14px 26px -20px rgba(0, 0, 0, .4); display: flex; flex-direction: column; gap: 12px; }
+.yl-clip::before { content: ''; position: absolute; top: -16px; left: 50%; width: 110px; height: 30px; transform: translateX(-50%); background: linear-gradient(180deg, #F9D14E, #E9B523); border-radius: 10px 10px 14px 14px; box-shadow: 0 4px 0 #C8961A; }
+.yl-clip::after { content: ''; position: absolute; top: -24px; left: 50%; width: 26px; height: 18px; transform: translateX(-50%); border: 5px solid #E9B523; border-bottom: 0; border-radius: 14px 14px 0 0; }
+.yl-clip .yl-game-top { background: transparent; padding: 0; }
+.yl-clip .yl-game-ex { background: #fff; border: 1.5px solid #F1E4D2; }
+.yl-tcard { display: flex; flex-direction: column; align-items: center; gap: 8px; background: #fff; border: 2px solid var(--yl-line); border-radius: 22px; padding: 16px 12px; position: sticky; top: 12px; text-align: center; }
+.yl-tcard-c { font: 800 34px var(--font-display); font-variant-numeric: tabular-nums; color: var(--yl-acc); }
+.yl-tcard-img { width: 90px; }
+.yl-chalk { background: #2F4A3E; border: 10px solid #C79A72; border-radius: 18px; padding: 14px 16px; box-shadow: inset 0 0 40px rgba(0, 0, 0, .35), 0 14px 24px -16px rgba(0, 0, 0, .5); color: #F4F1E8; }
+.yl-chalk-t { display: block; font: 700 26px 'Bricolage Grotesque', cursive; margin-bottom: 8px; text-decoration: underline wavy rgba(244, 241, 232, .5); text-underline-offset: 6px; }
+.yl-chalk .yl-gcat { background: rgba(255, 255, 255, .06); }
+.yl-chalk .yl-k { color: #CFE3C5; }
+.yl-chalk .yl-gitem { border-bottom: 1px dashed rgba(244, 241, 232, .25); color: #F4F1E8; }
+.yl-chalk .yl-gitem .muted { color: #CFE3C5; }
+.yl-chalk .yl-gcheck { background: transparent; border: 2px solid rgba(244, 241, 232, .7); color: #fff; }
+.yl-chalk .icon-btn { color: #F4F1E8; }
+.yl-chalk .chip-mini { background: rgba(255, 255, 255, .15); color: #fff; }
+@media (max-width: 760px) { .yl-game-wrap { grid-template-columns: minmax(0, 1fr); } .yl-tcard { position: static; } .yl-illu { width: 100%; max-height: 180px; } }

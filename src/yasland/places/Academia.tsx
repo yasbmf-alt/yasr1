@@ -4,7 +4,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { PlaceProps } from '../Yasland';
-import { Hot, Place, PanelHead, F, DateIn, Bars, MiniMonth, fmtDate, num, weekStartOf } from '../ui';
+import { art, ImgScene, Place, PanelHead, Tiles, Ring, HBars, F, DateIn, Bars, MiniMonth, fmtDate, num, over, weekStartOf } from '../ui';
 import { useYl, ylId, nowIso } from '../store';
 import { gauges } from '../logic';
 import { SPORT_LABEL, type Exercise, type SportKind, type YlSheet } from '../types';
@@ -47,66 +47,44 @@ export function Academia({ onBack }: PlaceProps) {
   const pick = (id: string) => setSpot((s) => (s === id ? null : (id as Spot)));
   const g = gauges(yl.of);
   const cardioRun = !!store<{ running: boolean }>('yasr1-yl-cardio')?.running;
+  const W = 919;
+  const H = 799;
   const scene = (
-    <svg viewBox="0 0 1000 480" className="yl-room" role="img" aria-label="Academia">
-      <rect width="1000" height="480" fill="#EEF5FB" />
-      {/* fundo: quadra e estúdio através do vidro */}
-      <rect x="20" y="20" width="960" height="250" rx="16" fill="url(#ac-glass)" stroke="#fff" strokeWidth="6" />
-      {[1, 2, 3, 4, 5].map((i) => <line key={i} x1={20 + i * 160} y1="20" x2={20 + i * 160} y2="270" stroke="#fff" strokeWidth="5" opacity=".9" />)}
-      <Hot id="quadra" label="Quadra: beach tennis e tênis" on={spot === 'quadra'} onPick={pick}>
-        <rect x="60" y="60" width="420" height="180" rx="8" fill="#F4B27D" />
-        <rect x="80" y="76" width="380" height="148" fill="none" stroke="#fff" strokeWidth="4" />
-        <line x1="270" y1="76" x2="270" y2="224" stroke="#fff" strokeWidth="4" />
-        <line x1="270" y1="70" x2="270" y2="230" stroke="#2E4A7F" strokeWidth="3" strokeDasharray="4 4" />
-        <circle className="yl-ball" cx="200" cy="140" r="8" fill="#E5F27A" stroke="#C7D45C" strokeWidth="2" />
-      </Hot>
-      <Hot id="pilates" label="Estúdio de pilates" on={spot === 'pilates'} onPick={pick}>
-        <rect x="560" y="60" width="380" height="180" rx="8" fill="#EFE6FF" />
-        <rect x="600" y="160" width="140" height="22" rx="8" fill="#9C7FE0" />
-        <rect x="610" y="182" width="10" height="26" fill="#7D62C4" /><rect x="720" y="182" width="10" height="26" fill="#7D62C4" />
-        <circle cx="830" cy="170" r="34" fill="#F38CB8" opacity=".85" />
-        <rect x="780" y="210" width="130" height="10" rx="5" fill="#C7B3F2" />
-        <path d="M600 100 q40 -30 80 0" fill="none" stroke="#C7B3F2" strokeWidth="5" />
-      </Hot>
-      {/* chão */}
-      <rect y="300" width="1000" height="180" fill="#D9E3EE" />
-      {Array.from({ length: 10 }).map((_, i) => <rect key={i} x={i * 100} y="300" width="50" height="180" fill="#CFDAE6" opacity=".6" />)}
-      {/* esteira */}
-      <Hot id="esteira" label="Esteira: cardio" on={spot === 'esteira'} onPick={pick}>
-        <g transform="translate(70 300)">
-          <rect x="0" y="110" width="230" height="30" rx="12" fill="#3B3F52" />
-          <rect className={`yl-belt ${cardioRun ? 'is-on' : ''}`} x="12" y="114" width="206" height="14" rx="7" fill="#5B6074" />
-          <rect x="190" y="10" width="14" height="104" rx="7" fill="#5B6074" />
-          <rect x="150" y="0" width="80" height="34" rx="10" fill="#2E4A7F" />
-          <rect x="160" y="8" width="60" height="18" rx="4" fill={cardioRun ? '#9FE07F' : '#9FB4CF'} />
-        </g>
-      </Hot>
-      {/* equipamentos */}
-      <Hot id="pesos" label="Equipamentos: musculação" on={spot === 'pesos'} onPick={pick}>
-        <g transform="translate(360 320)">
-          <rect x="0" y="60" width="200" height="12" rx="6" fill="#5B6074" />
-          <rect x="20" y="40" width="22" height="52" rx="6" fill="#F38CB8" /><rect x="158" y="40" width="22" height="52" rx="6" fill="#F38CB8" />
-          <rect x="60" y="92" width="10" height="38" fill="#5B6074" /><rect x="130" y="92" width="10" height="38" fill="#5B6074" />
-          <rect x="40" y="118" width="120" height="16" rx="8" fill="#9C7FE0" />
-          <g transform="translate(240 70)"><rect x="0" y="0" width="70" height="10" rx="5" fill="#3B3F52" /><circle cx="6" cy="5" r="14" fill="#2E4A7F" /><circle cx="64" cy="5" r="14" fill="#2E4A7F" /></g>
-        </g>
-      </Hot>
-      {/* painel de evolução na parede */}
-      <Hot id="painel" label="Painel: músculo time" on={spot === 'painel'} onPick={pick}>
-        <g transform="translate(720 296)">
-          <rect width="230" height="150" rx="14" fill="#fff" stroke="#C9D7EA" strokeWidth="3" />
-          <text x="115" y="28" textAnchor="middle" className="yl-tag yl-tag-dark">MÚSCULO TIME</text>
-          {g.map((x, i) => (
-            <g key={x.id} transform={`translate(${24 + i * 50} 40)`}>
-              <rect width="30" height="90" rx="10" fill="#EEF2F7" />
-              <rect y={90 - (x.value / 100) * 90} width="30" height={(x.value / 100) * 90} rx="10" fill={x.color} />
-              <text x="15" y="106" textAnchor="middle" fontSize="14">{x.emoji}</text>
-            </g>
-          ))}
-        </g>
-      </Hot>
-      <defs><linearGradient id="ac-glass" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#F7FBFF" /><stop offset="1" stopColor="#DCEBFB" /></linearGradient></defs>
-    </svg>
+    <ImgScene
+      img="s-academia" w={W} h={H} on={spot} onPick={pick}
+      areas={[
+        { id: 'quadra', label: 'Quadra: beach tennis e tênis', box: [60, 110, 440, 285] },
+        { id: 'pilates', label: 'Estúdio de pilates', box: [522, 92, 330, 300] },
+        { id: 'esteira', label: 'Esteira: cardio', box: [30, 420, 300, 300] },
+        { id: 'pesos', label: 'Equipamentos: musculação', box: [330, 400, 230, 320] },
+        { id: 'painel', label: 'Evolução: músculo time', box: [572, 400, 318, 290] },
+      ]}
+    >
+      {/* o quadro de evolução mostra os seus números de verdade */}
+      <div className="yl-board" style={over(W, H, 577, 448, 312, 238)} aria-hidden="true">
+        {g.map((x, i) => (
+          <span key={x.id} className="yl-board-col">
+            <span className="yl-board-t"><motion.i style={{ background: x.color }} initial={{ height: 0 }} animate={{ height: `${Math.max(6, x.value)}%` }} transition={{ delay: 0.4 + i * 0.1, type: 'spring', stiffness: 90, damping: 14 }} /></span>
+            <em>{x.emoji}</em>
+            <small>{x.label}</small>
+          </span>
+        ))}
+      </div>
+      {cardioRun && <span className="yl-pin is-live" style={over(W, H, 150, 400)}>● treinando</span>}
+    </ImgScene>
+  );
+  const tiles = (
+    <Tiles
+      on={spot}
+      onPick={pick}
+      items={[
+        { id: 'esteira', label: 'Esteira', icon: 'i-esteira' },
+        { id: 'pesos', label: 'Musculação', icon: 'i-musculacao' },
+        { id: 'quadra', label: 'Quadra', icon: 'i-quadra' },
+        { id: 'pilates', label: 'Pilates', icon: 'i-pilates' },
+        { id: 'painel', label: 'Evolução', icon: 'i-evolucao' },
+      ]}
+    />
   );
   const close = () => setSpot(null);
   const panel =
@@ -116,7 +94,7 @@ export function Academia({ onBack }: PlaceProps) {
     : spot === 'pilates' ? <Sport kinds={['pilates']} onClose={close} />
     : spot === 'painel' ? <Gauges onClose={close} />
     : null;
-  return <Place title="Academia" emoji="🏋🏻‍♀️" onBack={onBack} scene={scene} spot={spot} panel={panel} hint="Esteira: cardio · Equipamentos: musculação · Quadra e estúdio ao fundo · Painel: músculo time." />;
+  return <Place title="Academia" emoji="🏋🏻‍♀️" onBack={onBack} scene={scene} tiles={tiles} spot={spot} panel={panel} hint="Esteira: cardio · Musculação: fortalecimento · Quadra: beach tennis e tênis · Pilates: alinhamento e controle · Evolução: seu progresso." />;
 }
 
 // ── Músculo time ──────────────────────────────────────────────
@@ -129,18 +107,9 @@ function Gauges({ onClose }: { onClose: () => void }) {
   return (
     <div>
       <PanelHead title="💪 Músculo time" sub="Mostra a sua constância recente em cada atividade (não é medida do corpo). Treinar enche; parar por muito tempo esvazia devagar, sem apagar nada." onClose={onClose} />
-      <div className="yl-gauges">
-        {g.map((x, i) => (
-          <div key={x.id} className="yl-gauge">
-            <div className="yl-gauge-t">
-              <motion.i style={{ background: x.color }} initial={{ height: 0 }} animate={{ height: `${x.value}%` }} transition={{ delay: i * 0.08, type: 'spring', stiffness: 80, damping: 14 }} />
-              <span>{x.emoji}</span>
-            </div>
-            <strong>{x.label}</strong>
-            <b style={{ color: x.color }}>{x.value}%</b>
-            <small className="muted">{x.last ? `último: ${fmtDate(x.last)}` : 'ainda sem registro'} · {x.count30} em 30 dias</small>
-          </div>
-        ))}
+      <div className="yl-evo-top">
+        <Ring value={g.reduce((a, x) => a + x.value, 0) / g.length} label="evolução geral" emoji="💪" />
+        <HBars items={g.map((x) => ({ label: x.label, emoji: x.emoji, value: x.value, color: x.color, hint: x.last ? `último: ${fmtDate(x.last)}` : 'sem registro' }))} />
       </div>
       <span className="yl-k">Treinos por semana</span>
       <Bars items={weeks.map((w) => ({ label: fmtDate(w).split(' ')[1] ?? w, value: all.filter((x) => x.date >= w && x.date < addDays(w, 7)).length }))} color="#E46AA5" />
@@ -180,7 +149,9 @@ function Cardio({ onClose }: { onClose: () => void }) {
   const weeks = Array.from({ length: 8 }, (_, i) => weekStartOf(addDays(today(), -7 * (7 - i))));
   return (
     <div>
-      <PanelHead title="🏃🏻‍♀️ Esteira · cardio" onClose={onClose} />
+      <PanelHead title="Cardio · Esteira" onClose={onClose} />
+      <div className="yl-illu-row">
+      <img className="yl-illu" src={art('c-esteira')} alt="" />
       <div className="yl-timer">
         <motion.span className={`yl-timer-c ${t.running ? 'is-on' : ''}`} animate={t.running ? { scale: [1, 1.03, 1] } : { scale: 1 }} transition={{ repeat: t.running ? Infinity : 0, duration: 1 }}>{clock(ms)}</motion.span>
         <div className="btn-row">
@@ -189,6 +160,7 @@ function Cardio({ onClose }: { onClose: () => void }) {
           {!t.running && ms > 0 && <button className="btn btn-primary" onClick={() => save({ running: true, startedAt: Date.now(), acc: t.acc })}>▶ Continuar</button>}
           {ms > 0 && <button className="btn btn-quiet" onClick={finish}>■ Finalizar</button>}
         </div>
+      </div>
       </div>
       <form className="yl-form" onSubmit={submit}>
         <F label="Modalidade"><select id="cd-m" value={f.modality} onChange={(e) => setF({ ...f, modality: e.target.value })}>{CARDIO.map((c) => <option key={c}>{c}</option>)}</select></F>
@@ -372,12 +344,13 @@ function LiftGame({ sheet, live, setLive, onClose }: { sheet: YlSheet; live: Liv
       <PanelHead title={`💪 ${sheet.name}`} sub={`${done}/${total} séries · ${clock(Date.now() - live.startedAt)}`} onClose={onClose}>
         <ConfirmButton className="btn btn-quiet btn-sm" label="Cancelar treino" question="Sair sem salvar?" confirmLabel="Sair" onConfirm={() => setLive(null)} />
       </PanelHead>
+      <div className="yl-game-wrap">
+      <div className="yl-clip">
       <div className="yl-game-top">
         <motion.div className="yl-lifter" key={lift} animate={{ y: [0, -26, 0] }} transition={{ duration: 0.5 }} aria-hidden="true">
           <svg viewBox="0 0 120 50"><rect x="10" y="22" width="100" height="6" rx="3" fill="#3B3F52" /><rect x="6" y="8" width="16" height="34" rx="5" fill="#E46AA5" /><rect x="98" y="8" width="16" height="34" rx="5" fill="#E46AA5" /></svg>
         </motion.div>
         <div className="yl-game-bar"><motion.i animate={{ width: `${pct * 100}%` }} transition={{ type: 'spring', stiffness: 120, damping: 16 }} /><span>{Math.round(pct * 100)}%</span></div>
-        <AnimatePresence>{restLeft > 0 && <motion.span className="yl-rest" initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }}>⏱ descanso {restLeft}s</motion.span>}</AnimatePresence>
       </div>
       <div className="yl-game-list">
         {sheet.exercises.map((x) => {
@@ -401,9 +374,16 @@ function LiftGame({ sheet, live, setLive, onClose }: { sheet: YlSheet; live: Liv
           );
         })}
       </div>
-      <div className="btn-row">
+      </div>
+      <aside className="yl-tcard">
+        <span className="yl-k">Tempo de treino</span>
+        <strong className="yl-tcard-c">{clock(Date.now() - live.startedAt)}</strong>
+        <AnimatePresence>{restLeft > 0 && <motion.span className="yl-rest" initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }}>⏱ descanso {restLeft}s</motion.span>}</AnimatePresence>
+        <span className="small muted">{done}/{total} séries</span>
+        <img src={art('i-musculacao')} alt="" className="yl-tcard-img" />
         <DateIn id="lf-d" value={date} onChange={setDate} />
-        <button className="btn btn-primary" disabled={!done} onClick={finish}>🏁 Finalizar treino</button>
+        <button className="btn btn-primary" disabled={!done} onClick={finish}>■ Finalizar treino</button>
+      </aside>
       </div>
     </div>
   );
@@ -420,7 +400,8 @@ function Sport({ kinds, onClose }: { kinds: SportKind[]; onClose: () => void }) 
   const months = useMemo(() => Array.from({ length: 6 }, (_, i) => { const d = new Date(); d.setMonth(d.getMonth() - 5 + i, 1); return d.toISOString().slice(0, 7); }), []);
   return (
     <div>
-      <PanelHead title={isPilates ? '🧘🏻‍♀️ Estúdio de pilates' : '🎾 Quadra'} onClose={onClose} />
+      <PanelHead title={isPilates ? 'Estúdio de pilates' : 'Quadra · beach tennis e tênis'} onClose={onClose} />
+      <img className="yl-banner" src={art(isPilates ? 'c-pilates' : 'c-quadra')} alt="" />
       <form
         className="yl-form"
         onSubmit={(e) => {

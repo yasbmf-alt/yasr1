@@ -3,13 +3,14 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import type { PlaceProps } from '../Yasland';
-import { Hot, Place, PanelHead, Bars, MiniMonth, brl, fmtDate, weekStartOf } from '../ui';
+import { art, Place, PanelHead, Bars, MiniMonth, Ring, HBars, brl, fmtDate, lastDays, weekStartOf } from '../ui';
+import { gauges } from '../logic';
 import { useYl } from '../store';
 import { BADGES, earned, SPECIES } from '../logic';
 import { SPORT_LABEL, HAIR_LABEL, type YlDoc } from '../types';
 import { addDays, today } from '../../logic/dates';
 
-type Spot = 'calendario' | 'relatorios' | 'museu';
+type Spot = 'metricas' | 'calendario' | 'relatorios' | 'museu';
 
 export function Prefeitura({ onBack }: PlaceProps) {
   const yl = useYl();
@@ -17,38 +18,26 @@ export function Prefeitura({ onBack }: PlaceProps) {
   const pick = (id: string) => setSpot((s) => (s === id ? null : (id as Spot)));
   const got = earned(yl.of, yl.cfg.waterGoal);
   const scene = (
-    <svg viewBox="0 0 1000 470" className="yl-room" role="img" aria-label="Prefeitura">
-      <rect width="1000" height="340" fill="#F5F1FA" />
-      {[0, 1, 2, 3, 4, 5].map((i) => <rect key={i} x={40 + i * 170} y="20" width="26" height="320" rx="10" fill="#fff" stroke="#E4DAF2" strokeWidth="3" />)}
-      <rect y="340" width="1000" height="130" fill="#E4DAF2" />
-      {Array.from({ length: 10 }).map((_, i) => <rect key={i} x={i * 100} y="340" width="50" height="130" fill="#DCD0EE" opacity=".6" />)}
-      {/* quadro-calendário */}
-      <Hot id="calendario" label="Calendário geral" on={spot === 'calendario'} onPick={pick}>
-        <rect x="90" y="70" width="230" height="200" rx="12" fill="#fff" stroke="#C9B6EE" strokeWidth="4" />
-        <rect x="90" y="70" width="230" height="40" rx="12" fill="#9C7FE0" />
-        {Array.from({ length: 4 }).map((_, r) => Array.from({ length: 7 }).map((_, c) => <rect key={`${r}${c}`} x={104 + c * 30} y={124 + r * 34} width="22" height="22" rx="5" fill={(r * 7 + c) % 4 === 0 ? '#9FC46A' : (r * 7 + c) % 5 === 0 ? '#6FB0F2' : '#F1EAFB'} />))}
-      </Hot>
-      {/* mesa de relatórios */}
-      <Hot id="relatorios" label="Mesa de relatórios" on={spot === 'relatorios'} onPick={pick}>
-        <rect x="390" y="230" width="240" height="20" rx="8" fill="#B98B64" />
-        <rect x="405" y="250" width="16" height="90" fill="#9C6B45" /><rect x="600" y="250" width="16" height="90" fill="#9C6B45" />
-        <rect x="430" y="150" width="160" height="82" rx="8" fill="#2E4A7F" />
-        {[0, 1, 2, 3, 4].map((i) => <rect key={i} x={448 + i * 28} y={220 - (i * 13 + 14) % 56} width="18" height={(i * 13 + 14) % 56} rx="3" fill={['#F38CB8', '#9FC46A', '#6FB0F2', '#F4C430', '#9C7FE0'][i]} />)}
-        <rect x="500" y="232" width="20" height="10" fill="#2E4A7F" />
-      </Hot>
-      {/* porta do museu */}
-      <Hot id="museu" label="Museu da Yasland" on={spot === 'museu'} onPick={pick}>
-        <path d="M700 340 v-200 a100 100 0 0 1 200 0 v200z" fill="#5A3D99" />
-        <path d="M720 340 v-190 a80 80 0 0 1 160 0 v190z" fill="#7D62C4" />
-        <text x="800" y="210" textAnchor="middle" fontSize="40">🏆</text>
-        <rect x="730" y="104" width="140" height="28" rx="14" fill="#F38CB8" />
-        <text x="800" y="123" textAnchor="middle" className="yl-tag">MUSEU · {got.size}/{BADGES.length}</text>
-      </Hot>
-    </svg>
+    <div className="yl-hero">
+      <motion.img className="yl-hero-img" src={art('b-prefeitura')} alt="" initial={{ scale: 0.92, rotate: -1 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 120, damping: 12 }} />
+      <nav className="yl-menu" aria-label="Prefeitura">
+        {([
+          ['metricas', '📊', 'Métricas gerais', 'como está a sua rotina'],
+          ['calendario', '📅', 'Calendário', 'tudo o que você registrou'],
+          ['relatorios', '🧾', 'Relatórios', 'semana e mês'],
+          ['museu', '🏛️', 'Museu da Yasland', `${got.size} de ${BADGES.length} conquistas`],
+        ] as const).map(([id, e, t, sub], i) => (
+          <motion.button key={id} className={`yl-menu-b ${spot === id ? 'is-on' : ''}`} onClick={() => pick(id)} initial={{ opacity: 0, x: 14 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 + i * 0.07 }}>
+            <span>{e}</span>
+            <span>{t}<small>{sub}</small></span>
+          </motion.button>
+        ))}
+      </nav>
+    </div>
   );
   const close = () => setSpot(null);
-  const panel = spot === 'calendario' ? <Calendar onClose={close} /> : spot === 'relatorios' ? <Reports onClose={close} /> : spot === 'museu' ? <Museum got={got} onClose={close} /> : null;
-  return <Place title="Prefeitura" emoji="🏛️" onBack={onBack} scene={scene} spot={spot} panel={panel} hint="Calendário geral · Relatórios · Museu das conquistas." />;
+  const panel = spot === 'metricas' ? <Metrics onClose={close} /> : spot === 'calendario' ? <Calendar onClose={close} /> : spot === 'relatorios' ? <Reports onClose={close} /> : spot === 'museu' ? <Museum got={got} onClose={close} /> : null;
+  return <Place title="Prefeitura" emoji="🏛️" onBack={onBack} scene={scene} spot={spot} panel={panel} />;
 }
 
 // ── Calendário geral ──────────────────────────────────────────
@@ -217,6 +206,43 @@ function Museum({ got, onClose }: { got: Map<string, string>; onClose: () => voi
         <div className="yl-vitrine-row">
           {SPECIES.map((s) => <span key={s.id} className={`yl-badge is-mini ${harvested.has(s.id) ? 'is-got' : ''}`} title={harvested.has(s.id) ? s.name : '???'}><span className="yl-badge-e">{harvested.has(s.id) ? s.emoji : '?'}</span></span>)}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Métricas gerais ───────────────────────────────────────────
+
+/** um retrato da rotina dos últimos 7 dias: cada barra vai de 0 a 100% */
+function Metrics({ onClose }: { onClose: () => void }) {
+  const yl = useYl();
+  const days = lastDays(7);
+  const water = days.map((d) => yl.of('water').filter((w) => w.date === d).reduce((a, w) => a + w.ml, 0));
+  const hidr = (water.reduce((a, v) => a + Math.min(1, v / yl.cfg.waterGoal), 0) / 7) * 100;
+  const g = gauges(yl.of);
+  const forca = g.find((x) => x.id === 'forca')!.value;
+  const resist = Math.max(g.find((x) => x.id === 'cardio')!.value, g.find((x) => x.id === 'raquete')!.value);
+  const habits = yl.of('habit').filter((h) => !h.archived);
+  const target = habits.reduce((a, h) => a + h.perWeek, 0);
+  const checks = yl.of('hcheck').filter((c) => days.includes(c.date)).length;
+  const skinDays = new Set(yl.of('skin').filter((s) => days.includes(s.date) && s.done.length).map((s) => s.date)).size;
+  const bem = ((target ? Math.min(1, checks / target) : 0) * 0.6 + (skinDays / 7) * 0.4) * 100;
+  const sleep = yl.of('sleep').filter((s) => days.includes(s.date));
+  const sono = sleep.length ? Math.min(1, sleep.reduce((a, s) => a + s.hours, 0) / sleep.length / 8) * 100 : 0;
+  const items = [
+    { label: 'Hidratação', emoji: '💧', value: hidr, color: '#6FB0F2', hint: 'dias com água na meta' },
+    { label: 'Força', emoji: '💪', value: forca, color: '#E46AA5', hint: 'constância na musculação' },
+    { label: 'Resistência', emoji: '❤️', value: resist, color: '#F08C5A', hint: 'cardio e raquete' },
+    { label: 'Bem-estar', emoji: '🪷', value: bem, color: '#9C7FE0', hint: 'hábitos e skincare' },
+    { label: 'Sono', emoji: '🌙', value: sono, color: '#7D97C9', hint: 'média de horas (8 h = 100%)' },
+  ];
+  const overall = items.reduce((a, x) => a + x.value, 0) / items.length;
+  return (
+    <div>
+      <PanelHead title="📊 Métricas gerais" sub="Últimos 7 dias. Não é uma nota: é um retrato para você ver onde está fluindo." onClose={onClose} />
+      <div className="yl-evo-top">
+        <Ring value={overall} label="rotina da semana" emoji="✨" />
+        <HBars items={items} />
       </div>
     </div>
   );

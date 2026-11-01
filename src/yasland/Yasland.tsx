@@ -89,7 +89,17 @@ export function Yasland() {
               </div>
             </header>
             <div className="yl-map-wrap">
-              <CityMap onPick={(p) => go(p)} badges={{ mercadinho: expiring, horta: ripe }} />
+              <CityMap
+                onPick={(p) => go(p)}
+                pins={{
+                  casa: { text: `💧 ${(water / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} L`, tone: water >= yl.cfg.waterGoal ? 'ok' : undefined },
+                  academia: trains ? { text: `🔥 ${trains} na semana`, tone: 'ok' } : null,
+                  mercadinho: expiring ? { text: `⏰ ${expiring} vencendo`, tone: 'alert' } : null,
+                  spa: habits.length ? { text: `✅ ${checked.size}/${habits.length}` } : null,
+                  horta: ripe ? { text: `🧺 ${ripe} pronta${ripe > 1 ? 's' : ''}!`, tone: 'ok' } : null,
+                  prefeitura: { text: `🏆 ${got.size}/${BADGES.length}` },
+                }}
+              />
             </div>
             <nav className="yl-quick" aria-label="Lugares da Yasland">
               {PLACES.map((p) => <button key={p.id} className="yl-quick-b" onClick={() => go(p.id)}><span>{p.emoji}</span>{p.name}</button>)}

@@ -4,9 +4,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { PlaceProps } from '../Yasland';
-import { Hot, Place, PanelHead, F, DateIn, daysUntil, fmtDate, num, weekStartOf } from '../ui';
+import { ImgScene, Place, PanelHead, Tiles, F, DateIn, daysUntil, fmtDate, num, over, weekStartOf } from '../ui';
 import { useYl, ylId, nowIso } from '../store';
-import { WaterPanel, Vessel } from './Water';
+import { WaterPanel } from './Water';
 import { FOOD_CATS, MEAL_SLOTS, type MealSlot, type YlRecipe, type YlStock } from '../types';
 import { useUI, ConfirmButton } from '../../components/ui';
 import { Icon } from '../../components/Icon';
@@ -26,74 +26,49 @@ export function Casa({ onBack }: PlaceProps) {
   const t = today();
   const water = yl.of('water').filter((w) => w.date === t).reduce((a, w) => a + w.ml, 0);
   const pick = (id: string) => setSpot((s) => (s === id ? null : (id as Spot)));
+  const W = 915;
+  const H = 633;
+  const ws = weekStartOf(t);
+  const plan = yl.of('meal').filter((m) => m.date >= ws && m.date < addDays(ws, 7)).sort((x, y) => x.date.localeCompare(y.date));
+  const planLines = [...new Map(plan.map((m) => [m.date, m])).values()].slice(0, 3);
+  const goal = yl.cfg.waterGoal || 2000;
   const scene = (
-    <svg viewBox="0 0 1000 470" className="yl-room" role="img" aria-label="Cozinha">
-      <rect width="1000" height="330" fill="#FFF4EA" />
-      {Array.from({ length: 12 }).map((_, i) => <rect key={i} x={i * 84} y="0" width="42" height="330" fill="#FFEDE0" />)}
-      <rect y="330" width="1000" height="140" fill="#F1D9C4" />
-      {Array.from({ length: 13 }).map((_, i) => <rect key={i} x={i * 80 - 20} y="330" width="40" height="140" fill="#EACDB4" opacity=".6" />)}
-      {/* janela */}
-      <rect x="420" y="40" width="170" height="120" rx="10" fill="#CFE4FF" stroke="#fff" strokeWidth="8" />
-      <line x1="505" y1="40" x2="505" y2="160" stroke="#fff" strokeWidth="5" />
-      <circle cx="560" cy="80" r="14" fill="#FFE08A" />
-
-      {/* porta para o quarto */}
-      <Hot id="porta" label="Porta: ir para o meu quarto" onPick={() => ui.go('quarto')}>
-        <rect x="24" y="80" width="110" height="250" rx="8" fill="#C79A72" />
-        <rect x="36" y="94" width="86" height="100" rx="6" fill="#B98B64" />
-        <rect x="36" y="206" width="86" height="110" rx="6" fill="#B98B64" />
-        <circle cx="116" cy="210" r="6" fill="#FFE08A" />
-        <rect x="40" y="60" width="78" height="22" rx="11" fill="#F38CB8" />
-        <text x="79" y="76" textAnchor="middle" className="yl-tag">Quarto</text>
-      </Hot>
-
-      {/* geladeira */}
-      <Hot id="geladeira" label="Geladeira" on={spot === 'geladeira'} onPick={pick}>
-        <rect x="160" y="70" width="150" height="300" rx="16" fill="#E8F1FB" stroke="#C9D7EA" strokeWidth="4" />
-        <line x1="160" y1="170" x2="310" y2="170" stroke="#C9D7EA" strokeWidth="4" />
-        <rect x="288" y="100" width="8" height="50" rx="4" fill="#9FB4CF" />
-        <rect x="288" y="190" width="8" height="80" rx="4" fill="#9FB4CF" />
-        <rect x="186" y="200" width="44" height="34" rx="4" fill="#fff" transform="rotate(-4 208 217)" />
-        <circle cx="200" cy="96" r="7" fill="#F38CB8" /><circle cx="222" cy="104" r="6" fill="#9FC46A" />
-      </Hot>
-
-      {/* bancada + livro de receitas */}
-      <rect x="330" y="250" width="420" height="20" rx="6" fill="#E6CFB4" />
-      <rect x="340" y="270" width="400" height="100" rx="6" fill="#FFFFFF" stroke="#EBDCCB" strokeWidth="3" />
-      {[0, 1, 2, 3].map((i) => <circle key={i} cx={390 + i * 100} cy="300" r="5" fill="#D9C2A6" />)}
-      <Hot id="receitas" label="Livro de receitas" on={spot === 'receitas'} onPick={pick}>
-        <g className="yl-book">
-          <rect x="356" y="214" width="70" height="38" rx="5" fill="#D9578F" />
-          <rect x="360" y="218" width="62" height="10" rx="3" fill="#FFE3F1" />
-          <text x="391" y="244" textAnchor="middle" className="yl-tag">receitas</text>
-        </g>
-      </Hot>
-
-      {/* pia */}
-      <Hot id="pia" label="Pia" on={spot === 'pia'} onPick={pick}>
-        <rect x="450" y="232" width="130" height="22" rx="8" fill="#C9D7EA" />
-        <path d="M512 232 v-34 q0 -12 14 -12 h8" fill="none" stroke="#9FB4CF" strokeWidth="7" strokeLinecap="round" />
-        <circle className="yl-drip" cx="534" cy="196" r="4" fill="#7FB8F5" />
-        <rect x="462" y="215" width="20" height="18" rx="4" fill="#fff" stroke="#C9D7EA" strokeWidth="2" />
-      </Hot>
-
-      {/* fogão */}
-      <Hot id="fogao" label="Fogão: modo preparo" on={spot === 'fogao'} onPick={pick}>
-        <rect x="610" y="240" width="130" height="14" rx="5" fill="#3B3F52" />
-        <ellipse cx="645" cy="240" rx="20" ry="5" fill="#5B6074" /><ellipse cx="705" cy="240" rx="20" ry="5" fill="#5B6074" />
-        <rect x="630" y="214" width="36" height="24" rx="6" fill="#F38CB8" />
-        <rect x="622" y="214" width="52" height="7" rx="3.5" fill="#D9578F" />
-        <g className="yl-steam"><path d="M640 206 q-6 -10 0 -20 q6 -10 0 -20" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round" /><path d="M656 206 q-6 -10 0 -20" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round" /></g>
-      </Hot>
-
-      {/* bebedouro */}
-      <Hot id="bebedouro" label="Bebedouro" on={spot === 'bebedouro'} onPick={pick}>
-        <rect x="800" y="210" width="90" height="160" rx="12" fill="#E8F1FB" stroke="#C9D7EA" strokeWidth="4" />
-        <rect x="822" y="250" width="46" height="40" rx="6" fill="#C9D7EA" />
-        <rect x="840" y="262" width="10" height="10" rx="2" fill="#4F94E8" />
-        <g transform="translate(808 108) scale(0.75)"><Vessel shape="garrafa" fill={Math.max(0.15, Math.min(1, water / (yl.cfg.waterGoal || 2000)))} size={100} /></g>
-      </Hot>
-    </svg>
+    <ImgScene
+      img="s-casa" w={W} h={H} on={spot} onPick={(id) => (id === 'porta' ? ui.go('quarto') : pick(id))}
+      areas={[
+        { id: 'porta', label: 'Porta: ir para o meu quarto', box: [18, 130, 122, 335] },
+        { id: 'geladeira', label: 'Geladeira', box: [150, 150, 155, 340] },
+        { id: 'receitas', label: 'Livro de receitas', box: [336, 260, 98, 92] },
+        { id: 'pia', label: 'Pia', box: [445, 262, 145, 92] },
+        { id: 'fogao', label: 'Fogão', box: [600, 240, 160, 115] },
+        { id: 'bebedouro', label: 'Bebedouro', box: [783, 245, 117, 250] },
+      ]}
+    >
+      {/* bilhete do cardápio na porta da geladeira */}
+      <motion.div className="yl-note" style={over(W, H, 176, 292, 100, 112)} initial={{ rotate: -8, scale: 0.6, opacity: 0 }} animate={{ rotate: -3, scale: 1, opacity: 1 }} transition={{ delay: 0.4, type: 'spring' }}>
+        <b>Esta semana</b>
+        {planLines.length ? planLines.map((m) => <span key={m.id}>{DIAS_CURTOS[fromKey(m.date).getDay()].slice(0, 3)} – {m.text || 'receita'}</span>) : <span className="muted">toque para planejar</span>}
+      </motion.div>
+      {/* balão de hidratação */}
+      <motion.button className="yl-bubble-water" style={over(W, H, 640, 70)} onClick={() => pick('bebedouro')} initial={{ y: 10, opacity: 0 }} animate={{ y: [0, -4, 0], opacity: 1 }} transition={{ y: { repeat: Infinity, duration: 3, ease: 'easeInOut' }, opacity: { delay: 0.5 } }}>
+        <span className="yl-bw-drop">💧</span>
+        <span className="yl-bw-t"><b>Hidratação</b><small>{water.toLocaleString('pt-BR')} / {goal.toLocaleString('pt-BR')} mL</small></span>
+        <span className="yl-bw-bar"><motion.i animate={{ width: `${Math.min(100, (water / goal) * 100)}%` }} /></span>
+      </motion.button>
+    </ImgScene>
+  );
+  const tiles = (
+    <Tiles
+      on={spot}
+      onPick={pick}
+      items={[
+        { id: 'geladeira', label: 'Geladeira', icon: 'i-geladeira' },
+        { id: 'receitas', label: 'Receitas', icon: 'i-receitas' },
+        { id: 'fogao', label: 'Fogão', icon: 'i-fogao' },
+        { id: 'pia', label: 'Pia', icon: 'i-lavatorio' },
+        { id: 'bebedouro', label: 'Bebedouro', icon: 'i-bebedouro' },
+      ]}
+    />
   );
 
   const panel =
@@ -104,7 +79,7 @@ export function Casa({ onBack }: PlaceProps) {
     : spot === 'pia' ? <Sink onClose={() => setSpot(null)} />
     : null;
 
-  return <Place title="Minha Casa" emoji="🏠" onBack={onBack} scene={scene} spot={spot} panel={panel} hint="Clique na geladeira, no livro de receitas, no fogão, na pia ou no bebedouro. A porta leva ao seu quarto." />;
+  return <Place title="Minha Casa" emoji="🏠" onBack={onBack} scene={scene} tiles={tiles} spot={spot} panel={panel} hint="Toque nos objetos da cozinha. A porta leva ao seu quarto." />;
 }
 
 // ── Geladeira ─────────────────────────────────────────────────

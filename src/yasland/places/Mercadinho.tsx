@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { PlaceProps } from '../Yasland';
-import { Hot, Place, PanelHead, F, DateIn, brl, daysUntil, fmtDate, num } from '../ui';
+import { ImgScene, Place, PanelHead, Tiles, F, DateIn, brl, daysUntil, fmtDate, num, over } from '../ui';
 import { useYl, ylId, nowIso } from '../store';
 import { FOOD_CATS, type YlGrocery, type YlPurchaseItem, type YlWish } from '../types';
 import { expiryClass, expiryText, inStock, StockItem } from './Casa';
@@ -24,69 +24,39 @@ export function Mercadinho({ onBack }: PlaceProps) {
   const list = yl.of('grocery');
   const inBasket = list.filter((g) => g.inBasket).length;
   const soon = yl.of('stock').filter((s) => s.status === 'ok' && s.expiry && daysUntil(s.expiry) <= 3).length;
+  const W = 916;
+  const H = 933;
+  const month = today().slice(0, 7);
+  const spentMonth = yl.of('purchase').filter((p) => p.date.startsWith(month)).reduce((n, p) => n + p.total, 0);
+  const basketTotal = list.filter((g) => g.inBasket).reduce((n, g) => n + (g.price ?? 0) * g.qty, 0);
+  const wishes = yl.of('wish').filter((w) => !w.boughtAt).length;
   const scene = (
-    <svg viewBox="0 0 1000 470" className="yl-room" role="img" aria-label="Mercadinho">
-      <rect width="1000" height="340" fill="#FFF8EC" />
-      <rect y="340" width="1000" height="130" fill="#EADFCF" />
-      {Array.from({ length: 10 }).map((_, i) => <rect key={i} x={i * 100} y="340" width="50" height="130" fill="#E2D4C0" opacity=".6" />)}
-      {/* toldo */}
-      {Array.from({ length: 20 }).map((_, i) => <path key={i} d={`M${i * 50} 0 h50 v34 a25 25 0 0 1 -50 0z`} fill={i % 2 ? '#fff' : '#EE6F87'} />)}
-
-      {/* prateleiras */}
-      <Hot id="cesta" label="Prateleiras e cesta: lista de compras" on={spot === 'cesta'} onPick={pick}>
-        <g transform="translate(40 80)">
-          <rect width="330" height="250" rx="10" fill="#F7E3C3" stroke="#E2C99F" strokeWidth="3" />
-          {[0, 1, 2].map((r) => (
-            <g key={r} transform={`translate(0 ${20 + r * 76})`}>
-              <rect x="10" y="50" width="310" height="10" rx="4" fill="#D9B98B" />
-              {Array.from({ length: 7 }).map((_, k) => {
-                const c = ['#F4C430', '#E8455F', '#8DC26F', '#F08C3A', '#9C7FE0', '#6FB0F2', '#F38CB8'][(k + r * 2) % 7];
-                return k % 2 ? <rect key={k} x={22 + k * 42} y={12 + (k % 3) * 4} width="28" height={38 - (k % 3) * 4} rx="5" fill={c} /> : <circle key={k} cx={36 + k * 42} cy="36" r="14" fill={c} />;
-              })}
-            </g>
-          ))}
-        </g>
-        <g transform="translate(250 330)" className="yl-basket">
-          <path d="M0 20 h110 l-12 60 h-86z" fill="#C79A72" />
-          <path d="M20 20 q35 -40 70 0" fill="none" stroke="#9C6B45" strokeWidth="6" />
-          {Array.from({ length: Math.min(5, inBasket) }).map((_, i) => <circle key={i} cx={22 + i * 17} cy="16" r="9" fill={['#E8455F', '#8DC26F', '#F4C430', '#F08C3A', '#9C7FE0'][i]} />)}
-        </g>
-      </Hot>
-
-      {/* caixa registradora */}
-      <Hot id="caixa" label="Caixa registradora" on={spot === 'caixa'} onPick={pick}>
-        <g transform="translate(430 220)">
-          <rect x="0" y="80" width="200" height="120" rx="10" fill="#9C7FE0" />
-          <rect x="30" y="20" width="120" height="70" rx="10" fill="#E9D8FF" stroke="#9C7FE0" strokeWidth="4" />
-          <rect x="44" y="32" width="92" height="22" rx="4" fill="#2E4A7F" />
-          <text x="90" y="48" textAnchor="middle" className="yl-lcd">{inBasket ? `${inBasket} itens` : 'R$ 0,00'}</text>
-          <rect x="40" y="100" width="120" height="16" rx="5" fill="#fff" opacity=".6" />
-        </g>
-      </Hot>
-
-      {/* validade (cartaz de ofertas/prazo) */}
-      <Hot id="validade" label="Quadro de validade" on={spot === 'validade'} onPick={pick}>
-        <g transform="translate(450 70)">
-          <rect width="160" height="120" rx="10" fill="#fff" stroke="#F4C430" strokeWidth="5" />
-          <text x="80" y="34" textAnchor="middle" className="yl-tag yl-tag-dark">VALIDADE</text>
-          <text x="80" y="82" textAnchor="middle" className="yl-big-n">{soon}</text>
-          <text x="80" y="104" textAnchor="middle" className="yl-tag yl-tag-dark">vencendo</text>
-        </g>
-      </Hot>
-
-      {/* vitrine de desejos */}
-      <Hot id="vitrine" label="Vitrine de desejos" on={spot === 'vitrine'} onPick={pick}>
-        <g transform="translate(680 80)">
-          <rect width="280" height="250" rx="14" fill="#EAF4FF" stroke="#C9D7EA" strokeWidth="4" />
-          <rect x="14" y="14" width="252" height="222" rx="10" fill="url(#yl-glass-m)" />
-          <rect x="30" y="150" width="220" height="10" rx="5" fill="#C9D7EA" />
-          <path d="M70 150 l14 -50 h40 l14 50z" fill="#F38CB8" /><rect x="88" y="90" width="32" height="14" rx="6" fill="#D9578F" />
-          <rect x="160" y="96" width="60" height="54" rx="8" fill="#9FC46A" /><rect x="186" y="96" width="8" height="54" fill="#fff" opacity=".8" />
-          <text x="140" y="214" textAnchor="middle" className="yl-tag yl-tag-dark">desejos ✨</text>
-        </g>
-      </Hot>
-      <defs><linearGradient id="yl-glass-m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#fff" /><stop offset="1" stopColor="#DCEBFB" /></linearGradient></defs>
-    </svg>
+    <ImgScene
+      img="s-mercado" w={W} h={H} on={spot} onPick={pick}
+      areas={[
+        { id: 'cesta', label: 'Prateleiras e cesta: lista de compras', box: [20, 260, 312, 520] },
+        { id: 'validade', label: 'Quadro de validade', box: [362, 268, 226, 175] },
+        { id: 'caixa', label: 'Caixa registradora', box: [318, 470, 322, 320] },
+        { id: 'vitrine', label: 'Vitrine de desejos', box: [610, 250, 300, 510] },
+      ]}
+    >
+      <span className={`yl-sign-n ${soon ? 'is-alert' : ''}`} style={over(W, H, 438, 322, 84, 66)}>{soon}</span>
+      <span className="yl-lcd-o" style={over(W, H, 383, 496, 114, 34)}>{inBasket ? brl(basketTotal) : brl(0)}</span>
+      {inBasket > 0 && <motion.span className="yl-pin" style={over(W, H, 110, 760)} initial={{ scale: 0 }} animate={{ scale: 1 }}>🧺 {inBasket} na cesta</motion.span>}
+      {wishes > 0 && <span className="yl-pin" style={over(W, H, 690, 770)}>✨ {wishes} desejos</span>}
+    </ImgScene>
+  );
+  const tiles = (
+    <Tiles
+      on={spot}
+      onPick={pick}
+      items={[
+        { id: 'cesta', label: 'Lista', icon: 'i-lista', badge: list.length - inBasket > 0 ? list.length - inBasket : null },
+        { id: 'validade', label: 'Validade', icon: 'i-validade', badge: soon || null },
+        { id: 'caixa', label: 'Caixa', icon: 'i-caixa' },
+        { id: 'vitrine', label: 'Desejos', icon: 'i-desejos' },
+      ]}
+    />
   );
   const panel =
     spot === 'cesta' ? <Basket onClose={() => setSpot(null)} onCheckout={() => setSpot('caixa')} />
@@ -94,7 +64,7 @@ export function Mercadinho({ onBack }: PlaceProps) {
     : spot === 'validade' ? <Expiry onClose={() => setSpot(null)} />
     : spot === 'vitrine' ? <Wishlist onClose={() => setSpot(null)} />
     : null;
-  return <Place title="Mercadinho" emoji="🛒" onBack={onBack} scene={scene} spot={spot} panel={panel} hint="Prateleiras: lista de compras · Caixa: finalizar · Quadro: validade · Vitrine: desejos." />;
+  return <Place title="Mercadinho" emoji="🛒" onBack={onBack} scene={scene} tiles={tiles} spot={spot} panel={panel} hint={`Neste mês: ${brl(spentMonth)} em compras.`} />;
 }
 
 // ── Cesta ─────────────────────────────────────────────────────
@@ -135,6 +105,8 @@ function Basket({ onClose, onCheckout }: { onClose: () => void; onCheckout: () =
         <button className="btn btn-secondary btn-sm" type="submit"><Icon name="plus" size={14} /> Pôr na lista</button>
       </form>
       {!list.length && <p className="muted">Lista vazia. Adicione o que precisa comprar.</p>}
+      <div className="yl-chalk">
+      <span className="yl-chalk-t">Lista da semana</span>
       <div className="yl-glist">
         {cats.map((c) => (
           <div key={c} className="yl-gcat">
@@ -154,6 +126,7 @@ function Basket({ onClose, onCheckout }: { onClose: () => void; onCheckout: () =
             </AnimatePresence>
           </div>
         ))}
+      </div>
       </div>
     </div>
   );
