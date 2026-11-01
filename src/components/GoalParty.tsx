@@ -54,7 +54,7 @@ export function GoalParty() {
   return (
     <AnimatePresence>
       {show && (
-        <motion.div className="party" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShow(false)} role="dialog" aria-label="Meta do dia batida">
+        <motion.div className="yparty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShow(false)} role="dialog" aria-label="Meta do dia batida">
           <motion.div className="party-card" initial={{ scale: 0.6, y: 30, rotate: -4 }} animate={{ scale: 1, y: 0, rotate: 0 }} exit={{ scale: 0.8, opacity: 0 }} transition={{ type: 'spring', stiffness: 260, damping: 16 }}>
             <motion.div animate={{ y: [0, -14, 0], rotate: [0, -6, 6, 0] }} transition={{ duration: 0.9, repeat: 2, delay: 0.3 }}>
               <HoursJar minutes={min} goal={goal} size={120} />

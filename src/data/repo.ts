@@ -4,6 +4,7 @@
 //  • MemoryRepo – modo demonstração, nada é salvo
 import type { Collection, DataSnapshot, Settings } from '../types';
 import { DEFAULT_SETTINGS } from '../types';
+import type { YlDoc } from '../yasland/types';
 import { platformKind, supa } from '../platform/platform';
 
 export type RepoMode = 'db' | 'local' | 'demo' | 'cloud';
@@ -47,6 +48,7 @@ export function toSnapshot(cache: Record<Collection, Map<string, Doc>>): DataSna
     macetes: list('macetes'),
     letters: list('letters'),
     vouchers: list('vouchers'),
+    yasland: [...cache.meta.values()].filter((d) => d.id.startsWith('yl:')) as unknown as YlDoc[],
     settings: { ...DEFAULT_SETTINGS, ...(s ?? {}), id: 'settings' },
   };
 }
@@ -62,6 +64,7 @@ export function snapshotToDocs(data: DataSnapshot): { col: Collection; doc: Doc 
     ['errnotes', data.errnotes], ['macetes', data.macetes], ['letters', data.letters], ['vouchers', data.vouchers],
   ];
   for (const [col, arr] of extra) for (const d of arr ?? []) out.push({ col, doc: { ...d } as unknown as Doc });
+  for (const d of data.yasland ?? []) out.push({ col: 'meta', doc: { ...d } as unknown as Doc });
   out.push({ col: 'meta', doc: { ...data.settings } as unknown as Doc });
   return out;
 }

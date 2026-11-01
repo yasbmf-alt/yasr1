@@ -7,13 +7,13 @@ import { resolveAssetUrl, uploadFile } from '../platform/platform';
 
 export const BACKUP_VERSION = 2;
 
-const LISTS = ['chapters', 'missions', 'topics', 'sessions', 'notes', 'events', 'simulados', 'decks', 'cards', 'errnotes', 'macetes', 'letters', 'vouchers'] as const;
+const LISTS = ['chapters', 'missions', 'topics', 'sessions', 'notes', 'events', 'simulados', 'decks', 'cards', 'errnotes', 'macetes', 'letters', 'vouchers', 'yasland'] as const;
 type ListKey = (typeof LISTS)[number];
 
 export const LIST_LABEL: Record<ListKey, string> = {
   chapters: 'Capítulos', missions: 'Missões', topics: 'Temas', sessions: 'Registros de estudo', notes: 'Post-its',
   events: 'Agenda', simulados: 'Simulados', decks: 'Baralhos', cards: 'Flashcards', errnotes: 'Notas da gaveta',
-  macetes: 'Macetes', letters: 'Cartinhas', vouchers: 'Vales de mimos',
+  macetes: 'Macetes', letters: 'Cartinhas', vouchers: 'Vales de mimos', yasland: 'Registros da Yasland',
 };
 
 export interface BackupFile {
@@ -129,6 +129,7 @@ export function checkBackup(raw: unknown): Checked {
     macetes: dedupe((d.macetes ?? []) as DataSnapshot['macetes']),
     letters: dedupe((d.letters ?? []) as DataSnapshot['letters']),
     vouchers: dedupe((d.vouchers ?? []) as DataSnapshot['vouchers']),
+    yasland: dedupe(((d.yasland ?? []) as NonNullable<DataSnapshot['yasland']>).filter((x) => x && typeof x.id === 'string' && x.id.startsWith('yl:'))),
     settings: { ...DEFAULT_SETTINGS, ...((d.settings as Partial<Settings>) ?? {}), id: 'settings' },
   };
   const chapterIds = new Set(norm.chapters.map((c) => c.id));

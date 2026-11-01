@@ -1,3 +1,4 @@
+import type { YlDoc } from './yasland/types';
 // ─────────────────────────────────────────────────────────────
 // Yas R1 · modelo de dados
 // Coleções no banco: chapters, missions, topics, sessions, meta
@@ -409,6 +410,7 @@ export interface DataSnapshot {
   macetes: Macete[];
   letters: Letter[];
   vouchers: Voucher[];
+  yasland?: YlDoc[]; // documentos "yl:" guardados na coleção meta
   settings: Settings;
 }
 

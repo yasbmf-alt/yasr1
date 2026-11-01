@@ -10,7 +10,7 @@ import { EventCard } from './EventDecor';
 
 // ── Contexto de interface: celebrações, bolhas e navegação ────
 
-export type Page = 'trilha' | 'quarto' | 'biblioteca' | 'agenda' | 'evolucao' | 'revisoes' | 'painel' | 'simulados' | 'flashcards' | 'config';
+export type Page = 'trilha' | 'quarto' | 'biblioteca' | 'agenda' | 'evolucao' | 'revisoes' | 'painel' | 'simulados' | 'flashcards' | 'yasland' | 'config';
 
 interface Celebration {
   kind: 'mission' | 'chapter';
@@ -59,7 +59,7 @@ export const useUI = () => {
   return u;
 };
 
-const PAGES: Page[] = ['trilha', 'quarto', 'biblioteca', 'agenda', 'evolucao', 'revisoes', 'painel', 'simulados', 'flashcards', 'config'];
+const PAGES: Page[] = ['trilha', 'quarto', 'biblioteca', 'agenda', 'evolucao', 'revisoes', 'painel', 'simulados', 'flashcards', 'yasland', 'config'];
 const pageFromHash = (): Page => {
   const h = location.hash.replace('#', '') as Page;
   return PAGES.includes(h) ? h : 'trilha';

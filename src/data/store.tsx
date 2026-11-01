@@ -1,3 +1,4 @@
+import type { YlDoc } from '../yasland/types';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { resolveAssetUrl } from '../platform/platform';
 import type { ErrorGroup, Activity, AgendaEvent, Chapter, DataSnapshot, Deck, ErrNote, Flashcard, Letter, Macete, Mission, Note, Session, Settings, Simulado, Topic, Voucher } from '../types';
@@ -46,6 +47,8 @@ interface Store {
   saveSession(s: Session): void;
   deleteSession(id: string): void;
   saveSettings(p: Partial<Settings>): void;
+  saveYl(d: YlDoc): void;
+  deleteYl(id: string): void;
   replaceAll(d: DataSnapshot): Promise<void>;
   saveNote(n: Note): void;
   deleteNote(id: string): void;
@@ -245,6 +248,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         }
       },
       saveSettings: (p) => put('meta', { ...cur().settings, ...p, id: 'settings' }),
+      saveYl: (d) => put('meta', d as unknown as { id: string }),
+      deleteYl: (id) => remove('meta', id),
       replaceAll: async (d) => {
         await repo.current?.replaceAll(d);
       },

@@ -89,6 +89,7 @@ const PATHS: Record<string, React.ReactNode> = {
   chart: <path d="M4 20V10M10 20V4M16 20v-7M21 20H3" />,
   brain: <path d="M9 4a3 3 0 0 0-3 3 3 3 0 0 0-2 5 3 3 0 0 0 2 5 3 3 0 0 0 6 1V5a2 2 0 0 0-3-1zM15 4a3 3 0 0 1 3 3 3 3 0 0 1 2 5 3 3 0 0 1-2 5 3 3 0 0 1-6 1" />,
   room: <path d="M3 11l9-7 9 7v9H3zM9 20v-6h6v6" />,
+  city: <path d="M3 21V10l5-3v14M8 21V4l7 3v14M15 21v-9l6 2v7M2 21h20M11 10h1M11 13h1M11 16h1M5 13h1M5 16h1M18 16h1" />,
   search: (
     <>
       <circle cx="11" cy="11" r="6.5" />
