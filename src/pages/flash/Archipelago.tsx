@@ -6,7 +6,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useStore } from '../../data/store';
 import { Icon } from '../../components/Icon';
 import { ImgScene, over } from '../../yasland/ui';
-import { deckCounts } from '../../logic/flashQueue';
+import { deckCounts, isNewCard } from '../../logic/flashQueue';
+import { toKey } from '../../logic/dates';
 import { play } from '../../logic/sound';
 import type { Deck, Topic } from '../../types';
 import { arquipelago, cardArt, ISLANDS, islandMeta, islandOf, MAP_H, MAP_W, subareaOf, type IslandId } from './islands';
@@ -25,6 +26,9 @@ export interface TopicGroup {
   due: number;
   learning: number;
   studied: number;
+  firstStudied: string | null; // AAAA-MM-DD da primeira resposta
+  lastStudied: string | null;
+  nextReview: string | null; // próxima revisão marcada (cartões já estudados)
 }
 
 /** um item por tema (vários baralhos do mesmo tema viram um cartão só) */
@@ -36,7 +40,19 @@ export function useTopicGroups(): TopicGroup[] {
       const topic = d.topicId ? data.topics.find((t) => t.id === d.topicId) ?? null : null;
       const key = topic?.id ?? `deck:${d.id}`;
       const island = islandOf(d, topic);
-      const g = m.get(key) ?? { key, name: topic?.name ?? d.name, topic, decks: [], island, sub: subareaOf(island, d, topic), total: 0, fresh: 0, due: 0, learning: 0, studied: 0 };
+      const g = m.get(key) ?? { key, name: topic?.name ?? d.name, topic, decks: [], island, sub: subareaOf(island, d, topic), total: 0, fresh: 0, due: 0, learning: 0, studied: 0, firstStudied: null, lastStudied: null, nextReview: null };
+      for (const card of data.cards) {
+        if (card.deckId !== d.id) continue;
+        for (const r of card.log ?? []) {
+          const k = toKey(new Date(r.at));
+          if (!g.firstStudied || k < g.firstStudied) g.firstStudied = k;
+          if (!g.lastStudied || k > g.lastStudied) g.lastStudied = k;
+        }
+        if (!isNewCard(card)) {
+          const k = toKey(new Date(card.fsrs.due));
+          if (!g.nextReview || k < g.nextReview) g.nextReview = k;
+        }
+      }
       const c = deckCounts(d, data.cards);
       g.decks.push(d);
       g.total += c.total;
@@ -226,8 +242,16 @@ export function SpecialtyPage({ island, groups, onBack, onStudy, onOpenDeck }: {
         </>
       )}
 
-      <AnimatePresence>
-        {g && (
+      <AnimatePresence>{g && <StudySheet key={g.key} g={g} onClose={() => setSel(null)} onStudy={onStudy} onOpenDeck={onOpenDeck} />}</AnimatePresence>
+    </motion.div>
+  );
+}
+
+/** gaveta de ações de um tema: estudar tudo, só novos, só revisões, só errados ou rever tudo */
+export function StudySheet({ g, onClose, onStudy, onOpenDeck }: { g: TopicGroup; onClose: () => void; onStudy: (g: TopicGroup, m: StudyMode) => void; onOpenDeck: (id: string) => void }) {
+  const meta = islandMeta(g.island);
+  const setSel = (_: null) => onClose();
+  return (
           <motion.section key={g.key} className="tc-sheet" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 12 }}>
             <header>
               <div>
@@ -256,8 +280,5 @@ export function SpecialtyPage({ island, groups, onBack, onStudy, onOpenDeck }: {
               {g.decks.map((d) => <button key={d.id} className="chip-mini" onClick={() => onOpenDeck(d.id)}><Icon name="edit" size={12} /> {d.name}</button>)}
             </div>
           </motion.section>
-        )}
-      </AnimatePresence>
-    </motion.div>
   );
 }

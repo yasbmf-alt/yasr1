@@ -6,7 +6,7 @@ import { Icon } from './Icon';
 import { StationIcon } from '../assets/art';
 import { areaOf, type Flashcard } from '../types';
 import { addDays, fmtShort, toKey, today, DIAS_CURTOS, fromKey } from '../logic/dates';
-import { DAILY_GOAL } from '../logic/flashQueue';
+import { DAILY_GOAL as GOAL_DEFAULT } from '../logic/flashQueue';
 
 // Estatísticas só de flashcards, com números que ajudam a decidir o que
 // estudar. "Lembrado" = Difícil, Bom ou Fácil. Nada disso entra no acerto
@@ -33,6 +33,7 @@ function answersIn(cards: Flashcard[], from: number, to: number) {
 
 export function FlashStats() {
   const { data } = useStore();
+  const DAILY_GOAL = data.settings.flashGoal ?? GOAL_DEFAULT;
   const ui = useUI();
   const now = Date.now();
   const t0 = today();

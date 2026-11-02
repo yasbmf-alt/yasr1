@@ -8,20 +8,25 @@ export const DAILY_GOAL = 30; // meta do dia (não é limite)
 export const TURBO_SIZE = 30;
 
 const DAY = 86400000;
+
+/** novo = nunca respondido. Um cartão com histórico nunca volta a ser "novo", mesmo que o estado diga o contrário */
+export const isNewCard = (c: Flashcard) => c.fsrs.phase === 'new' && !c.log?.length && !c.fsrs.lastReview;
+/** revisão pendente: já estudado e vencido pela repetição espaçada */
+export const isDueReview = (c: Flashcard, now = new Date()) => !isNewCard(c) && isDue(c.fsrs, now);
 const againRecent = (c: Flashcard, now: number, days = 14) => (c.log ?? []).filter((r) => r.g === 1 && now - new Date(r.at).getTime() < days * DAY).length;
 
 /** baralho inteiro: todos os vencidos e todos os novos (sem limite de novos) */
 export function deckQueue(deckId: string, cards: Flashcard[], now = new Date()) {
   const mine = cards.filter((c) => c.deckId === deckId);
-  const due = mine.filter((c) => c.fsrs.phase !== 'new' && isDue(c.fsrs, now)).sort((a, b) => a.fsrs.due.localeCompare(b.fsrs.due));
-  const fresh = mine.filter((c) => c.fsrs.phase === 'new').sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const due = mine.filter((c) => isDueReview(c, now)).sort((a, b) => a.fsrs.due.localeCompare(b.fsrs.due));
+  const fresh = mine.filter(isNewCard).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   return [...due, ...fresh].map((c) => c.id);
 }
 
 export function deckCounts(deck: Deck, cards: Flashcard[], now = new Date()) {
   const mine = cards.filter((c) => c.deckId === deck.id);
-  const fresh = mine.filter((c) => c.fsrs.phase === 'new').length;
-  const dueCards = mine.filter((c) => c.fsrs.phase !== 'new' && isDue(c.fsrs, now));
+  const fresh = mine.filter(isNewCard).length;
+  const dueCards = mine.filter((c) => isDueReview(c, now));
   const due = dueCards.length;
   const learning = dueCards.filter((c) => c.fsrs.phase === 'learning' || c.fsrs.phase === 'relearning').length;
   return { total: mine.length, fresh, due, learning, ready: due + fresh, studied: mine.length - fresh };
@@ -66,3 +71,17 @@ export function answeredToday(cards: Flashcard[], sessionsToday: number) {
   const logged = cards.reduce((a, c) => a + (c.log ?? []).filter((r) => toKey(new Date(r.at)) === t).length, 0);
   return Math.max(logged, sessionsToday);
 }
+
+export type TurboMode = 'novos' | 'revisoes' | 'misto';
+
+/** filas do Turbo: só novos (mais antigos primeiro), só revisões vencidas (mais atrasadas primeiro) ou misto (novos antes), sem repetir cartão */
+export function turboPick(cards: Flashcard[], mode: TurboMode, size: number | null, now = new Date()) {
+  const fresh = cards.filter(isNewCard).sort((a, b) => a.createdAt.localeCompare(b.createdAt)).map((c) => c.id);
+  const due = cards.filter((c) => isDueReview(c, now)).sort((a, b) => a.fsrs.due.localeCompare(b.fsrs.due)).map((c) => c.id);
+  const list = mode === 'novos' ? fresh : mode === 'revisoes' ? due : [...fresh, ...due];
+  const unique = [...new Set(list)];
+  return size ? unique.slice(0, size) : unique;
+}
+export const countNew = (cards: Flashcard[]) => cards.filter(isNewCard).length;
+export const countDue = (cards: Flashcard[], now = new Date()) => cards.filter((c) => isDueReview(c, now)).length;
+export const countOverdue = (cards: Flashcard[], now = new Date()) => cards.filter((c) => isDueReview(c, now) && new Date(c.fsrs.due).getTime() < now.getTime() - DAY).length;

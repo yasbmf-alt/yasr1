@@ -5,15 +5,15 @@ import { Modal, Field, ConfirmButton, LazyInput, useUI } from '../components/ui'
 import { Icon } from '../components/Icon';
 import { AREAS, areaOf, type Area, type Deck, type Flashcard } from '../types';
 import { newCardState, previewLabel, RATING_LABEL, schedule, type Rating } from '../logic/fsrs';
-import { deckCounts, deckQueue, mistakesQueue, TURBO_SIZE, turboQueue } from '../logic/flashQueue';
-import { Archipelago, SpecialtyPage, useTopicGroups, type StudyMode } from './flash/Archipelago';
-import type { IslandId } from './flash/islands';
+import { countDue, countNew, countOverdue, DAILY_GOAL, deckCounts, deckQueue, isNewCard, mistakesQueue, turboPick, type TurboMode } from '../logic/flashQueue';
+import { StationIcon } from '../assets/art';
+import { Archipelago, SpecialtyPage, StudySheet, useTopicGroups, type StudyMode, type TopicGroup } from './flash/Archipelago';
+import { ISLANDS, type IslandId } from './flash/islands';
 import fcIcon from '../assets/fc/fc-icon.webp';
-import fcTree from '../assets/fc/fc-arvore.webp';
 import type { CardState } from '../types';
 import { parseAny, type RawCard } from '../logic/cardImport';
 import { addDays, relDay, today, toKey, uid } from '../logic/dates';
-import { catchUpDays, dayPlan, isLearning, topicWeights } from '../logic/dailyPlan';
+import { isLearning } from '../logic/dailyPlan';
 import { play } from '../logic/sound';
 import { burst } from '../logic/fx';
 import { isActive as isFocusActive } from '../components/focus';
@@ -21,14 +21,51 @@ import { isActive as isFocusActive } from '../components/focus';
 // mais que isso parado num cartão (app esquecido aberto) não conta como estudo
 const IDLE_CAP_MS = 3 * 60000;
 
+const VIEW_KEY = 'yasr1-fc-view';
+const SESSION_KEY = 'yasr1-fc-session';
+type View = 'mapa' | 'temas';
+interface SavedSession { plan: StudyPlan; done: string[] }
+const loadSession = (): SavedSession | null => {
+  try {
+    const s = JSON.parse(localStorage.getItem(SESSION_KEY) ?? 'null') as SavedSession | null;
+    return s?.plan?.ids?.length ? s : null;
+  } catch {
+    return null;
+  }
+};
+const saveSessionLS = (s: SavedSession | null) => {
+  try {
+    if (s) localStorage.setItem(SESSION_KEY, JSON.stringify(s));
+    else localStorage.removeItem(SESSION_KEY);
+  } catch {
+    /* ignore */
+  }
+};
+
 export function Flashcards() {
   const { data } = useStore();
   const [deckId, setDeckId] = useState<string | null>(null);
   const [plan, setPlan] = useState<StudyPlan | null>(null);
   const [importing, setImporting] = useState<string | 'any' | null>(null);
   const [newDeck, setNewDeck] = useState(false);
+  const [turbo, setTurbo] = useState(false);
   const deck = data.decks.find((d) => d.id === deckId) ?? null;
   const ui = useUI();
+  const [view, setViewS] = useState<View>(() => {
+    try {
+      return (localStorage.getItem(VIEW_KEY) as View) || 'mapa';
+    } catch {
+      return 'mapa';
+    }
+  });
+  const setView = (v: View) => {
+    setViewS(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      /* ignore */
+    }
+  };
   const [island, setIslandS] = useState<IslandId | null>(() => {
     try {
       return (sessionStorage.getItem('yasr1-fc-island') as IslandId | null) || null;
@@ -48,6 +85,15 @@ export function Flashcards() {
     setTimeout(() => document.querySelector(i ? '.spec' : '.arq')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 90);
   };
   const groups = useTopicGroups();
+  /** começa uma sessão (sem cartões repetidos) e guarda o progresso para poder retomar */
+  const start = (p: Omit<StudyPlan, 'key'>) => {
+    const ids = [...new Set(p.ids)];
+    if (!ids.length) return ui.toast('Nada para estudar aqui agora. 🌿');
+    const full = { ...p, ids, key: `${p.kind}-${Date.now()}` };
+    saveSessionLS({ plan: full, done: [] });
+    play('pop');
+    setPlan(full);
+  };
   /** estuda um ou mais baralhos (os de um tema) no modo escolhido; sem limite de novos */
   const studyDecks = (deckIds: string[], mode: StudyMode, title: string) => {
     const set = new Set(deckIds);
@@ -55,28 +101,34 @@ export function Flashcards() {
     const queue = deckIds.flatMap((id) => deckQueue(id, data.cards));
     const byId = new Map(mine.map((c) => [c.id, c]));
     let ids: string[];
-    if (mode === 'novos') ids = queue.filter((x) => byId.get(x)?.fsrs.phase === 'new');
-    else if (mode === 'revisar') ids = queue.filter((x) => byId.get(x)?.fsrs.phase !== 'new');
+    if (mode === 'novos') ids = queue.filter((x) => { const c = byId.get(x); return !!c && isNewCard(c); });
+    else if (mode === 'revisar') ids = queue.filter((x) => { const c = byId.get(x); return !!c && !isNewCard(c); });
     else if (mode === 'errados') ids = queue.filter((x) => { const c = byId.get(x); return !!c && isLearning(c); });
-    else if (mode === 'baralho') ids = mine.filter((c) => c.fsrs.phase !== 'new').sort((a, b) => a.fsrs.due.localeCompare(b.fsrs.due)).map((c) => c.id);
+    else if (mode === 'baralho') ids = mine.filter((c) => !isNewCard(c)).sort((a, b) => a.fsrs.due.localeCompare(b.fsrs.due)).map((c) => c.id);
     else ids = queue;
     if (!ids.length) {
       if (deckIds[0]) setDeckId(deckIds[0]); // nada para estudar: mostra os cartões
       return;
     }
     const label = mode === 'novos' ? ' · novos' : mode === 'revisar' ? ' · revisões' : mode === 'errados' ? ' · errados' : mode === 'baralho' ? ' · rever tudo' : '';
-    setPlan({ key: `${deckIds.join('-')}-${Date.now()}`, title: title + label, ids, kind: 'deck' });
+    start({ title: title + label, ids, kind: 'deck' });
   };
   const studyDeck = (id: string, mode: StudyMode = 'tudo') => {
     const d = data.decks.find((x) => x.id === id);
     if (d) studyDecks([id], mode, d.name);
   };
+  const resume = () => {
+    const s = loadSession();
+    if (!s) return;
+    const done = new Set(s.done);
+    const ids = s.plan.ids.filter((x) => !done.has(x) && data.cards.some((c) => c.id === x));
+    if (!ids.length) return saveSessionLS(null);
+    setPlan({ ...s.plan, ids, key: `${s.plan.key}-r${Date.now()}` });
+  };
   useEffect(() => {
     if (!ui.pendingStudy) return;
-    if (ui.pendingStudy === '__erros__') {
-      const ids = mistakesQueue(data.cards);
-      if (ids.length) setPlan({ key: `erros-${Date.now()}`, title: 'Revisar meus erros', ids, kind: 'erros' });
-    } else studyDeck(ui.pendingStudy);
+    if (ui.pendingStudy === '__erros__') start({ title: 'Treinar erros', ids: mistakesQueue(data.cards), kind: 'erros' });
+    else studyDeck(ui.pendingStudy);
     ui.clearPendingStudy();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ui.pendingStudy]);
@@ -94,140 +146,150 @@ export function Flashcards() {
               <button className="btn btn-primary" onClick={() => setNewDeck(true)}><Icon name="plus" size={18} /> Novo baralho</button>
             </div>
           </header>
-          <div className={data.cards.length ? 'fc-layout' : ''}>
-            <div className="fc-main">
-              <DayPlanCard onStart={(ids, title) => setPlan({ key: `dia-${Date.now()}`, title, ids, kind: 'dia' })} />
-              {!data.decks.length ? (
-                <div className="empty-big">
-                  <h2>Nenhum baralho ainda</h2>
-                  <p>Importe um CSV ou JSON (frente e verso) ou crie um baralho. Ligue cada baralho a um tema para ele morar na ilha da especialidade.</p>
-                  <button className="btn btn-primary" onClick={() => setImporting('any')}><Icon name="upload" size={18} /> Importar baralho</button>
-                </div>
-              ) : (
-                <AnimatePresence mode="wait">
-                  {island ? (
-                    <SpecialtyPage
-                      key={island}
-                      island={island}
-                      groups={groups}
-                      onBack={() => setIsland(null)}
-                      onStudy={(g, m) => studyDecks(g.decks.map((d) => d.id), m, g.name)}
-                      onOpenDeck={setDeckId}
-                    />
-                  ) : (
-                    <motion.div key="arq" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 1.03 }}>
-                      <Archipelago groups={groups} onIsland={(i) => { play('page'); setIsland(i); }} />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              )}
-              <FlashHub
-                onTurbo={() => { const ids = turboQueue(data.cards); if (ids.length) setPlan({ key: `turbo-${Date.now()}`, title: 'Turbo', ids, kind: 'turbo' }); }}
-                onMistakes={() => { const ids = mistakesQueue(data.cards); if (ids.length) setPlan({ key: `erros-${Date.now()}`, title: 'Revisar meus erros', ids, kind: 'erros' }); }}
-              />
+          {data.cards.length > 0 && (
+            <StudyHub
+              onNew={() => start({ title: 'Estudar novos', ids: turboPick(data.cards, 'novos', null), kind: 'novos' })}
+              onDue={() => start({ title: 'Revisar pendentes', ids: turboPick(data.cards, 'revisoes', null), kind: 'revisoes' })}
+              onErrors={() => start({ title: 'Treinar erros', ids: mistakesQueue(data.cards), kind: 'erros' })}
+              onTurbo={() => setTurbo(true)}
+              onResume={resume}
+              studying={!!plan}
+            />
+          )}
+          {!data.decks.length ? (
+            <div className="empty-big">
+              <h2>Nenhum baralho ainda</h2>
+              <p>Importe um CSV ou JSON (frente e verso) ou crie um baralho. Ligue cada baralho a um tema para ele morar na ilha da especialidade.</p>
+              <button className="btn btn-primary" onClick={() => setImporting('any')}><Icon name="upload" size={18} /> Importar baralho</button>
             </div>
-            {data.cards.length > 0 && <FlashSide />}
-          </div>
+          ) : (
+            <>
+              <div className="fc-views seg" role="tablist" aria-label="Como ver os temas">
+                <button role="tab" aria-selected={view === 'mapa'} className={view === 'mapa' ? 'is-on' : ''} onClick={() => setView('mapa')}>🏝️ Mapa das Ilhas</button>
+                <button role="tab" aria-selected={view === 'temas'} className={view === 'temas' ? 'is-on' : ''} onClick={() => setView('temas')}>🗂️ Meus Temas</button>
+              </div>
+              <AnimatePresence mode="wait">
+                {view === 'temas' ? (
+                  <MyTopics key="temas" groups={groups} onStudy={(g, m) => studyDecks(g.decks.map((d) => d.id), m, g.name)} onOpenDeck={setDeckId} />
+                ) : island ? (
+                  <SpecialtyPage
+                    key={island}
+                    island={island}
+                    groups={groups}
+                    onBack={() => setIsland(null)}
+                    onStudy={(g, m) => studyDecks(g.decks.map((d) => d.id), m, g.name)}
+                    onOpenDeck={setDeckId}
+                  />
+                ) : (
+                  <motion.div key="arq" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 1.03 }}>
+                    <Archipelago groups={groups} onIsland={(i) => { play('page'); setIsland(i); }} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </>
+          )}
         </>
       )}
       <ImportModal target={importing} onClose={() => setImporting(null)} onDone={(id) => { setImporting(null); setDeckId(id); }} />
       <DeckForm open={newDeck} onClose={() => setNewDeck(false)} onCreated={(id) => { setNewDeck(false); setDeckId(id); }} />
-      <AnimatePresence>{plan && <Study key={plan.key} plan={plan} onClose={() => setPlan(null)} />}</AnimatePresence>
+      <TurboModal open={turbo} onClose={() => setTurbo(false)} onStart={(mode, size) => { setTurbo(false); start({ title: `Turbo · ${TURBO_LABEL[mode]}`, ids: turboPick(data.cards, mode, size), kind: 'turbo' }); }} />
+      <AnimatePresence>
+        {plan && (
+          <Study
+            key={plan.key}
+            plan={plan}
+            onDone={(id) => { const s = loadSession(); if (s && s.plan.title === plan.title) saveSessionLS({ ...s, done: [...new Set([...s.done, id])] }); }}
+            onFinish={() => saveSessionLS(null)}
+            onMore={() => { setPlan(null); setTurbo(true); }}
+            onClose={() => setPlan(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-// ── Meta do dia, Turbo e erros ────────────────────────────────
+// ── Painel de estudo: três ações + Turbo + meta ───────────────
 
-function FlashHub({ onTurbo, onMistakes }: { onTurbo: () => void; onMistakes: () => void }) {
-  const { data } = useStore();
-  const turboN = Math.min(TURBO_SIZE, data.cards.filter((c) => c.fsrs.phase !== 'new').length);
-  const errN = mistakesQueue(data.cards).length;
-  if (!data.cards.length) return null;
+const TURBO_LABEL: Record<TurboMode, string> = { novos: 'somente novos', revisoes: 'revisões', misto: 'misto' };
+
+/** respostas de hoje (todas as notas contam para a meta) */
+const answeredTodayCount = (cards: Flashcard[]) => {
+  const t = today();
+  return cards.reduce((n, c) => n + (c.log ?? []).filter((r) => toKey(new Date(r.at)) === t).length, 0);
+};
+
+function StudyHub({ onNew, onDue, onErrors, onTurbo, onResume, studying }: { onNew: () => void; onDue: () => void; onErrors: () => void; onTurbo: () => void; onResume: () => void; studying: boolean }) {
+  const { data, saveSettings } = useStore();
+  const goal = data.settings.flashGoal ?? DAILY_GOAL;
+  const nNew = countNew(data.cards);
+  const nDue = countDue(data.cards);
+  const nLate = countOverdue(data.cards);
+  const nErr = mistakesQueue(data.cards).length;
+  const doneToday = answeredTodayCount(data.cards);
+  const pct = Math.min(1, doneToday / Math.max(1, goal));
+  const saved = studying ? null : loadSession();
+  const left = saved ? saved.plan.ids.filter((x) => !saved.done.includes(x) && data.cards.some((c) => c.id === x)).length : 0;
+  const R = 34;
+  const C = 2 * Math.PI * R;
+  const acts = [
+    { id: 'new', n: nNew, title: 'Estudar novos', sub: 'nunca vistos', emoji: '🌱', cls: 'is-new', on: onNew },
+    { id: 'due', n: nDue, title: 'Revisar pendentes', sub: nLate ? `${nLate} atrasado${nLate > 1 ? 's' : ''}` : 'para hoje', emoji: '🔁', cls: 'is-due', on: onDue },
+    { id: 'err', n: nErr, title: 'Treinar erros', sub: 'que você errou', emoji: '🎯', cls: 'is-err', on: onErrors },
+  ];
   return (
-    <section className="fhub">
-      <span className="fhub-k">Extras, se sobrar fôlego:</span>
-      <motion.button className="turbo" onClick={onTurbo} disabled={!turboN} whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }} title="30 cartões misturados dos temas que você já estudou, priorizando atrasados, errados e difíceis">
-        <span className="turbo-bolt" aria-hidden="true">
-          <svg viewBox="0 0 24 32"><path d="M14 1 L3 18 h8 l-3 13 L21 12 h-8 z" /></svg>
-        </span>
-        <span className="turbo-txt"><strong>Modo Turbo</strong><span>{turboN ? `${turboN} cartões misturados` : 'estude um tema primeiro'}</span></span>
-      </motion.button>
-      <button className="btn btn-secondary fhub-err" onClick={onMistakes} disabled={!errN}>
-        <Icon name="restore" size={16} /> Revisar meus erros{errN ? ` · ${errN}` : ''}
-      </button>
+    <section className="hub">
+      <div className="hub-acts">
+        {acts.map((a, i) => (
+          <motion.button
+            key={a.id}
+            className={`hub-act ${a.cls}`}
+            disabled={!a.n}
+            onClick={a.on}
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.07, type: 'spring', stiffness: 220, damping: 18 }}
+            whileHover={a.n ? { y: -6 } : undefined}
+            whileTap={a.n ? { scale: 0.96 } : undefined}
+          >
+            <span className="hub-emoji" aria-hidden="true">{a.emoji}</span>
+            <b className="hub-n">{a.n}</b>
+            <strong>{a.title}</strong>
+            <small>{a.n ? a.sub : 'nada agora ✓'}</small>
+            {a.n > 0 && <span className="hub-go">Começar ›</span>}
+          </motion.button>
+        ))}
+        <div className="hub-side">
+          <div className={`hub-goal ${doneToday >= goal ? 'is-hit' : ''}`} title="Meta diária: só um incentivo, nunca um limite">
+            <svg viewBox="0 0 80 80" aria-hidden="true">
+              <circle cx="40" cy="40" r={R} className="hub-ring-bg" />
+              <motion.circle cx="40" cy="40" r={R} className="hub-ring-fg" strokeDasharray={C} initial={{ strokeDashoffset: C }} animate={{ strokeDashoffset: C * (1 - pct) }} transition={{ duration: 0.9 }} transform="rotate(-90 40 40)" />
+            </svg>
+            <div>
+              <b>{doneToday}<small>/{goal}</small></b>
+              <span>{doneToday >= goal ? (doneToday > goal ? `meta + ${doneToday - goal} ✨` : 'meta batida! 🎉') : 'cartões hoje'}</span>
+              <span className="hub-goal-ctl">
+                <button onClick={() => saveSettings({ flashGoal: Math.max(5, goal - 5) })} aria-label="Diminuir meta">−</button>
+                <button onClick={() => saveSettings({ flashGoal: Math.min(500, goal + 5) })} aria-label="Aumentar meta">+</button>
+              </span>
+            </div>
+          </div>
+          <motion.button className="hub-turbo" onClick={onTurbo} whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}>
+            <span className="turbo-bolt" aria-hidden="true"><svg viewBox="0 0 24 32"><path d="M14 1 L3 18 h8 l-3 13 L21 12 h-8 z" /></svg></span>
+            <span><strong>Modo Turbo</strong><small>sessão rápida</small></span>
+          </motion.button>
+          {left > 0 && saved && (
+            <button className="hub-resume" onClick={onResume}>▶ Continuar “{saved.plan.title}” · {left}</button>
+          )}
+        </div>
+      </div>
+      <Performance />
     </section>
   );
 }
 
-// ── Plano de hoje ─────────────────────────────────────────────
-
-function DayPlanCard({ onStart }: { onStart: (ids: string[], title: string) => void }) {
+function Performance() {
   const { data } = useStore();
-  const p = useMemo(() => dayPlan(data), [data]);
-  if (!data.cards.length) return null;
-  const extraNew = (n: number) => {
-    // bônus: mais novos dos temas mais importantes
-    const w = topicWeights(data);
-    const deckTopic = new Map(data.decks.map((x) => [x.id, x.topicId]));
-    const ids = data.cards
-      .filter((c) => c.fsrs.phase === 'new')
-      .sort((a, b) => (w.get(deckTopic.get(b.deckId) ?? '') ?? 0) - (w.get(deckTopic.get(a.deckId) ?? '') ?? 0) || a.createdAt.localeCompare(b.createdAt))
-      .slice(0, n)
-      .map((c) => c.id);
-    if (ids.length) onStart(ids, 'Novos bônus ✨');
-  };
-  const days = catchUpDays(p);
-  return (
-    <motion.section className={`dplan ${p.doneForToday ? 'is-done' : ''}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-      <img src={fcTree} alt="" className="dplan-tree" aria-hidden="true" />
-      <span className="dplan-cloud" aria-hidden="true" />
-      {p.doneForToday ? (
-        <div className="dplan-main">
-          <span className="dplan-k">Plano de hoje</span>
-          <strong className="dplan-big">Meta cumprida! 🎉</strong>
-          <p>{p.doneToday} cartões hoje{p.newToday > p.newLimit ? ` · ${p.newToday - p.newLimit} novos além da meta, que orgulho! ✨` : ''}. Quer mais? Tudo agora é bônus.</p>
-          <div className="btn-row">
-            {p.waiting > 0 && <button className="btn btn-primary btn-sm" onClick={() => extraNew(10)}>+10 novos</button>}
-            {p.waiting > 10 && <button className="btn btn-secondary btn-sm" onClick={() => extraNew(25)}>+25 novos</button>}
-          </div>
-        </div>
-      ) : (
-        <div className="dplan-main">
-          <span className="dplan-k">Plano de hoje · cabe em {p.budget} min</span>
-          <strong className="dplan-big">
-            {p.reviewIds.length > 0 && <span className="c-rev-t">{p.reviewIds.length} revisões</span>}
-            {p.reviewIds.length > 0 && p.newIds.length > 0 && ' + '}
-            {p.newIds.length > 0 && <span className="c-new-t">{p.newIds.length} novos</span>}
-          </strong>
-          <p>≈ {Math.max(1, p.estMinutes)} min. Primeiro o que está para vencer, depois os novos dos temas que mais caem errado.</p>
-          <button className="btn btn-primary btn-lg" onClick={() => { play('pop'); onStart(p.queue, 'Plano de hoje'); }}>
-            {p.doneToday ? 'Continuar o plano de hoje' : 'Começar o plano de hoje'}
-          </button>
-          <span className="muted small">Pode parar quando quiser: o que faltar fica guardado.</span>
-        </div>
-      )}
-      <ul className="dplan-notes">
-        {p.carried > 0 && (
-          <li>
-            <b className="c-rev-t">{p.carried}</b> revisões atrasadas não cabem hoje e entram nos próximos dias, as mais urgentes primeiro{days > 1 ? ` (zera em uns ${days} dias)` : ''}.
-          </li>
-        )}
-        {p.waiting > 0 && (
-          <li>
-            <b className="c-new-t">{p.waiting}</b> novos ainda não vistos. O plano sugere {p.newLimit} por dia (a sua meta), mas você pode fazer quantos quiser: abra um baralho em "Só novos".
-          </li>
-        )}
-      </ul>
-    </motion.section>
-  );
-}
-
-// ── Painel lateral ────────────────────────────────────────────
-
-function FlashSide() {
-  const { data, saveSettings } = useStore();
-  const p = useMemo(() => dayPlan(data), [data]);
   const now = Date.now();
   const logs = data.cards.flatMap((c) => (c.log ?? []).map((r) => ({ ...r, deckId: c.deckId })));
   const wk = logs.filter((r) => now - new Date(r.at).getTime() < 7 * 86400000);
@@ -235,7 +297,9 @@ function FlashSide() {
   const days = new Set(logs.map((r) => toKey(new Date(r.at))));
   let streak = 0;
   for (let d = days.has(today()) ? today() : addDays(today(), -1); days.has(d); d = addDays(d, -1)) streak++;
-  // baralhos onde mais erro (14 dias)
+  const seen = data.cards.filter((c) => !isNewCard(c)).length;
+  const total = data.cards.length;
+  const minutesToday = data.sessions.filter((s) => s.type === 'flashcards' && s.date === today()).reduce((a, s) => a + (s.minutes ?? 0), 0);
   const per = new Map<string, { n: number; bad: number }>();
   for (const r of logs) {
     if (now - new Date(r.at).getTime() > 14 * 86400000) continue;
@@ -244,67 +308,209 @@ function FlashSide() {
     if (r.g <= 2) x.bad++;
     per.set(r.deckId, x);
   }
-  const worst = [...per.entries()].filter(([, x]) => x.n >= 5).map(([id, x]) => ({ id, rate: x.bad / x.n, n: x.n })).sort((a, b) => b.rate - a.rate).slice(0, 4);
-  const total = p.doneToday + p.queue.length;
-  const pct = total ? Math.min(1, p.doneToday / total) : 1;
-  const learning = data.cards.filter(isLearning).length;
-  const setMin = (v: number) => saveSettings({ flashMinutes: Math.max(10, Math.min(180, v)) });
-  const setNew = (v: number) => saveSettings({ flashNewPerDay: Math.max(0, Math.min(80, v)) });
+  const worst = [...per.entries()].filter(([, x]) => x.n >= 5).map(([id, x]) => ({ id, rate: x.bad / x.n })).sort((a, b) => b.rate - a.rate).slice(0, 4);
   return (
-    <aside className="fside">
-      <div className="fside-ring">
-        <svg viewBox="0 0 44 44" aria-hidden="true">
-          <circle cx="22" cy="22" r="18" className="fhub-ring-bg" />
-          <circle cx="22" cy="22" r="18" className="fhub-ring-fg" strokeDasharray={`${pct * 113.1} 113.1`} />
-        </svg>
-        <div>
-          <strong>{p.doneToday}<span className="muted">/{total}</span></strong>
-          <span className="muted small">cartões do plano hoje</span>
-        </div>
+    <details className="perf-box">
+      <summary>📈 Meu desempenho</summary>
+      <div className="perf-grid">
+        <div><span>Lembrei (7 dias)</span><b>{acc == null ? '—' : `${acc}%`}</b></div>
+        <div><span>Dias seguidos</span><b>{streak} 🔥</b></div>
+        <div><span>Cartões vistos</span><b>{seen}<small>/{total}</small></b><i style={{ width: `${total ? (seen / total) * 100 : 0}%` }} /></div>
+        <div><span>Tempo hoje</span><b>{minutesToday} min</b></div>
       </div>
-      <dl className="fside-stats">
-        <div><dt>Tempo hoje</dt><dd>{p.minutesToday}<small>/{p.budget} min</small></dd></div>
-        <div className={p.newToday > p.newLimit ? 'is-bonus' : ''}><dt>Novos hoje</dt><dd className="c-new-t">{p.newToday}<small>/{p.newLimit}</small>{p.newToday > p.newLimit && <em> +{p.newToday - p.newLimit} ✨</em>}</dd></div>
-        <div><dt>Lembrei (7 dias)</dt><dd>{acc == null ? '—' : `${acc}%`}</dd></div>
-        <div><dt>Dias seguidos</dt><dd>{streak}</dd></div>
-        <div><dt>Para revisar</dt><dd className="c-rev-t">{p.reviewsDue}</dd></div>
-        <div><dt>Errados</dt><dd className="c-err-t">{learning}</dd></div>
-        <div><dt>Novos para ver</dt><dd className="c-new-t">{p.waiting}</dd></div>
-      </dl>
       {worst.length > 0 && (
-        <div className="fside-worst">
-          <span className="fside-h">Onde mais erro (14 dias)</span>
-          <ul>
-            {worst.map((w) => (
-              <li key={w.id}>
-                <span>{data.decks.find((d) => d.id === w.id)?.name ?? 'Baralho'}</span>
-                <b className={w.rate >= 0.4 ? 'c-err-t' : ''}>{Math.round(w.rate * 100)}%</b>
-              </li>
-            ))}
-          </ul>
-          <span className="muted small">% de respostas "De novo" ou "Difícil"</span>
+        <div className="perf-worst">
+          <span>Onde mais erro (14 dias)</span>
+          {worst.map((w) => <span key={w.id} className="chip-mini">{data.decks.find((d) => d.id === w.id)?.name ?? 'Baralho'} · {Math.round(w.rate * 100)}%</span>)}
         </div>
       )}
-      <div className="fside-cfg">
-        <span className="fside-h">Meu ritmo</span>
-        <div className="fside-ctl">
-          <span>Tempo por dia</span>
-          <span className="pn-goal-ctl">
-            <button className="icon-btn icon-btn-sm" onClick={() => setMin(p.budget - 5)} aria-label="Menos tempo">−</button>
-            <b>{p.budget} min</b>
-            <button className="icon-btn icon-btn-sm" onClick={() => setMin(p.budget + 5)} aria-label="Mais tempo">+</button>
-          </span>
+    </details>
+  );
+}
+
+function TurboModal({ open, onClose, onStart }: { open: boolean; onClose: () => void; onStart: (mode: TurboMode, size: number | null) => void }) {
+  const { data } = useStore();
+  const [mode, setMode] = useState<TurboMode>('misto');
+  const [size, setSize] = useState<number | null>(30);
+  const avail = turboPick(data.cards, mode, null).length;
+  const modes: { id: TurboMode; t: string; s: string; e: string }[] = [
+    { id: 'novos', t: 'Somente novos', s: `${countNew(data.cards)} nunca vistos`, e: '🌱' },
+    { id: 'revisoes', t: 'Revisões', s: `${countDue(data.cards)} vencidas`, e: '🔁' },
+    { id: 'misto', t: 'Misto', s: 'novos primeiro, depois revisões', e: '🍹' },
+  ];
+  return (
+    <Modal open={open} onClose={onClose} title="⚡ Modo Turbo">
+      <div className="turbo-pick">
+        <div className="turbo-modes" role="radiogroup" aria-label="Tipo de sessão">
+          {modes.map((m) => (
+            <button key={m.id} role="radio" aria-checked={mode === m.id} className={`turbo-mode ${mode === m.id ? 'is-on' : ''}`} onClick={() => setMode(m.id)}>
+              <span>{m.e}</span>
+              <strong>{m.t}</strong>
+              <small>{m.s}</small>
+            </button>
+          ))}
         </div>
-        <div className="fside-ctl">
-          <span>Meta de novos</span>
-          <span className="pn-goal-ctl">
-            <button className="icon-btn icon-btn-sm" onClick={() => setNew(p.newLimit - 1)} aria-label="Menos novos">−</button>
-            <b>{p.newLimit}</b>
-            <button className="icon-btn icon-btn-sm" onClick={() => setNew(p.newLimit + 1)} aria-label="Mais novos">+</button>
-          </span>
+        <span className="muted small">Quantos cartões?</span>
+        <div className="turbo-sizes" role="radiogroup" aria-label="Tamanho">
+          {[15, 30, 50, null].map((n) => (
+            <button key={String(n)} role="radio" aria-checked={size === n} className={`chip-mini ${size === n ? 'is-on' : ''}`} onClick={() => setSize(n)}>
+              {n ?? `Todos (${avail})`}
+            </button>
+          ))}
         </div>
+        <button className="btn btn-primary btn-lg" disabled={!avail} onClick={() => onStart(mode, size)}>
+          ⚡ Começar · {size ? Math.min(size, avail) : avail} cartões
+        </button>
+        {!avail && <p className="muted small">Nada nesta categoria agora. Tente outra. 🌿</p>}
       </div>
-    </aside>
+    </Modal>
+  );
+}
+
+// ── Meus Temas: todos os temas juntos, em ordem de estudo ─────
+
+type TSort = 'primeiro-antigo' | 'primeiro-novo' | 'ultimo' | 'proxima';
+const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+
+function MyTopics({ groups, onStudy, onOpenDeck }: { groups: TopicGroup[]; onStudy: (g: TopicGroup, m: StudyMode) => void; onOpenDeck: (id: string) => void }) {
+  const [sort, setSortS] = useState<TSort>(() => {
+    try {
+      return (localStorage.getItem('yasr1-fc-tsort') as TSort) || 'primeiro-antigo';
+    } catch {
+      return 'primeiro-antigo';
+    }
+  });
+  const setSort = (v: TSort) => {
+    setSortS(v);
+    try {
+      localStorage.setItem('yasr1-fc-tsort', v);
+    } catch {
+      /* ignore */
+    }
+  };
+  const [spec, setSpec] = useState<string>('todas');
+  const [prog, setProg] = useState<'todos' | 'nao' | 'andamento' | 'completo'>('todos');
+  const [status, setStatus] = useState<'todos' | 'revisar' | 'erros' | 'novos' | 'emdia'>('todos');
+  const [q, setQ] = useState('');
+  const [sel, setSel] = useState<string | null>(null);
+  const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const dateOf = (g: TopicGroup) => (sort === 'ultimo' ? g.lastStudied : sort === 'proxima' ? g.nextReview : g.firstStudied);
+  const shown = groups
+    .filter((g) => spec === 'todas' || g.island === spec)
+    .filter((g) => (prog === 'nao' ? g.studied === 0 : prog === 'andamento' ? g.studied > 0 && g.fresh > 0 : prog === 'completo' ? g.total > 0 && g.fresh === 0 : true))
+    .filter((g) => (status === 'revisar' ? g.due - g.learning > 0 : status === 'erros' ? g.learning > 0 : status === 'novos' ? g.fresh > 0 : status === 'emdia' ? g.due + g.fresh === 0 : true))
+    .filter((g) => !q.trim() || norm(g.name).includes(norm(q.trim())))
+    .sort((a, b) => {
+      const da = dateOf(a);
+      const db = dateOf(b);
+      if (!da && !db) return a.name.localeCompare(b.name, 'pt-BR');
+      if (!da) return 1;
+      if (!db) return -1;
+      return sort === 'primeiro-novo' || sort === 'ultimo' ? db.localeCompare(da) : da.localeCompare(db);
+    });
+  // separadores por mês (ou "ainda não estudados")
+  const blocks: { label: string; list: TopicGroup[] }[] = [];
+  for (const g of shown) {
+    const d = dateOf(g);
+    const label = d ? `${MESES[Number(d.slice(5, 7)) - 1]} ${d.slice(0, 4)}` : sort === 'proxima' ? 'Sem revisão marcada' : 'Ainda não estudados';
+    const last = blocks.at(-1);
+    if (last && last.label === label) last.list.push(g);
+    else blocks.push({ label, list: [g] });
+  }
+  const g = groups.find((x) => x.key === sel) ?? null;
+  const sub = (x: TopicGroup) => {
+    const d = dateOf(x);
+    if (!d) return null;
+    return sort === 'proxima' ? `revisão ${relDay(d)}` : sort === 'ultimo' ? `último estudo ${relDay(d)}` : `1º estudo ${d.slice(8, 10)}/${d.slice(5, 7)}`;
+  };
+  let idx = 0;
+  return (
+    <motion.section className="mytopics" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+      <div className="mt-tools">
+        <label className="spec-search"><Icon name="search" size={16} /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar tema" aria-label="Buscar tema" /></label>
+        <select value={sort} onChange={(e) => setSort(e.target.value as TSort)} aria-label="Ordenar">
+          <option value="primeiro-antigo">1º estudo · mais antigos</option>
+          <option value="primeiro-novo">1º estudo · mais recentes</option>
+          <option value="ultimo">Último estudo</option>
+          <option value="proxima">Próxima revisão</option>
+        </select>
+        <select value={spec} onChange={(e) => setSpec(e.target.value)} aria-label="Especialidade">
+          <option value="todas">Todas as especialidades</option>
+          {ISLANDS.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+        </select>
+        <select value={prog} onChange={(e) => setProg(e.target.value as typeof prog)} aria-label="Progresso">
+          <option value="todos">Qualquer progresso</option><option value="nao">Não iniciados</option><option value="andamento">Em andamento</option><option value="completo">Todos vistos</option>
+        </select>
+        <select value={status} onChange={(e) => setStatus(e.target.value as typeof status)} aria-label="Revisão">
+          <option value="todos">Qualquer situação</option><option value="revisar">Para revisar</option><option value="erros">Com erros</option><option value="novos">Com novos</option><option value="emdia">Em dia</option>
+        </select>
+      </div>
+      {!shown.length && <p className="muted">Nenhum tema com esses filtros.</p>}
+      {blocks.map((b) => (
+        <div key={b.label} className="mt-block">
+          <h3 className="mt-month"><span>{b.label}</span><small>{b.list.length} tema{b.list.length > 1 ? 's' : ''}</small></h3>
+          <div className="tokens">
+            {b.list.map((x) => {
+              const area = x.topic?.area ?? x.decks[0]?.area ?? 'geral';
+              return <Token key={x.key} i={idx++} name={x.name} sub={sub(x)} area={area} on={sel === x.key} counts={{ fresh: x.fresh, due: x.due, learning: x.learning, total: x.total, ready: x.due + x.fresh }} onStudy={() => setSel(sel === x.key ? null : x.key)} onOpen={() => onOpenDeck(x.decks[0].id)} />;
+            })}
+          </div>
+        </div>
+      ))}
+      <AnimatePresence>{g && <StudySheet key={g.key} g={g} onClose={() => setSel(null)} onStudy={onStudy} onOpenDeck={onOpenDeck} />}</AnimatePresence>
+    </motion.section>
+  );
+}
+
+function Token({ i, name, sub, area, counts, on, onStudy, onOpen }: {
+  i: number; name: string; sub: string | null; area: Area; on: boolean; counts: { fresh: number; due: number; learning: number; total: number; ready: number }; onStudy: () => void; onOpen: () => void;
+}) {
+  const a = areaOf(area);
+  const ref = useRef<HTMLDivElement>(null);
+  const ready = counts.ready > 0;
+  // inclina a ficha na direção do mouse (efeito 3D leve)
+  const tilt = (e: React.MouseEvent) => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    el.style.setProperty('--rx', `${((e.clientY - r.top) / r.height - 0.5) * -16}deg`);
+    el.style.setProperty('--ry', `${((e.clientX - r.left) / r.width - 0.5) * 18}deg`);
+  };
+  const reset = () => {
+    ref.current?.style.setProperty('--rx', '0deg');
+    ref.current?.style.setProperty('--ry', '0deg');
+  };
+  return (
+    <motion.div
+      className={`token-wrap ${ready ? 'is-ready' : 'is-done'} ${on ? 'is-sel' : ''}`}
+      style={{ ['--c' as string]: a.color, ['--i' as string]: a.ink, ['--d' as string]: `${(i % 5) * -1.1}s`, ['--dur' as string]: `${5.5 + (i % 4) * 0.7}s` }}
+      initial={{ opacity: 0, scale: 0.6, y: 20 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      transition={{ delay: Math.min(i, 14) * 0.04, type: 'spring', stiffness: 260, damping: 16 }}
+    >
+      <div className="token-float">
+        <div className="token" ref={ref} onMouseMove={tilt} onMouseLeave={reset}>
+          <button className="token-face" onClick={onStudy} aria-label={`${name}: ${ready ? `${counts.ready} cartões para estudar` : 'tudo em dia'}`}>
+            <span className="token-rim" aria-hidden="true" />
+            <span className="token-icon" aria-hidden="true"><StationIcon area={area} /></span>
+            <span className="token-count">{ready ? counts.ready : '✓'}</span>
+          </button>
+          <button className="token-edit" onClick={onOpen} aria-label={`Ver cartões de ${name}`} title="Ver e editar cartões"><Icon name="edit" size={13} /></button>
+        </div>
+        <span className="token-shadow" aria-hidden="true" />
+      </div>
+      <strong className="token-name">{name}</strong>
+      <span className="token-sub">
+        {ready ? (
+          <span className="token-counts">
+            {counts.fresh > 0 && <b className="c-new-t" title="novos">{counts.fresh}</b>}
+            {counts.due - counts.learning > 0 && <b className="c-rev-t" title="para revisar">{counts.due - counts.learning}</b>}
+            {counts.learning > 0 && <b className="c-err-t" title="errados">{counts.learning}</b>}
+          </span>
+        ) : `${counts.total} cartões · em dia`}
+      </span>
+      {sub && <span className="token-date">{sub}</span>}
+    </motion.div>
   );
 }
 
@@ -567,10 +773,10 @@ export interface StudyPlan {
   key: string;
   title: string;
   ids: string[]; // fila fixada no início; o que não for respondido continua pendente
-  kind: 'deck' | 'turbo' | 'erros' | 'dia';
+  kind: 'deck' | 'turbo' | 'erros' | 'dia' | 'novos' | 'revisoes';
 }
 
-function Study({ plan, onClose }: { plan: StudyPlan; onClose: () => void }) {
+function Study({ plan, onClose, onDone, onFinish, onMore }: { plan: StudyPlan; onClose: () => void; onDone: (cardId: string) => void; onFinish: () => void; onMore: () => void }) {
   const { data, saveCard, saveSession, snapshot } = useStore();
   const ui = useUI();
   const [queue, setQueue] = useState<string[]>(plan.ids);
@@ -582,12 +788,9 @@ function Study({ plan, onClose }: { plan: StudyPlan; onClose: () => void }) {
   const [back, setBack] = useState(0); // 0 = cartão atual; 1 = o último respondido; …
   // tempo ativo: só conta com a tela visível e sem longas pausas paradas
   const active = useRef({ ms: 0, last: Date.now(), hidden: false });
-  // novos vistos hoje (para comemorar quando passar da meta: fazer mais é bônus, nunca proibido)
-  const newSeen = useRef<{ base: number; goal: number; n: number } | null>(null);
-  if (!newSeen.current) {
-    const p0 = dayPlan(snapshot());
-    newSeen.current = { base: p0.newToday, goal: p0.newLimit, n: 0 };
-  }
+  // respostas de hoje (para comemorar a meta diária: passar dela é bônus, nunca proibido)
+  const goalSeen = useRef<{ base: number; goal: number; n: number } | null>(null);
+  if (!goalSeen.current) goalSeen.current = { base: answeredTodayCount(snapshot().cards), goal: snapshot().settings.flashGoal ?? DAILY_GOAL, n: 0 };
   const tick = () => {
     const a = active.current;
     const now = Date.now();
@@ -637,7 +840,7 @@ function Study({ plan, onClose }: { plan: StudyPlan; onClose: () => void }) {
       saveSession({
         id: ref.id, date: today(), topicId, missionId: null, activityId: null, type: 'flashcards',
         minutes: minutes == null ? null : Math.max(1, Math.round((minutes * x.n) / history.length)), questions: x.n, correct: x.ok,
-        errorTopics: [], notes: `${plan.kind === 'turbo' ? 'Turbo' : plan.kind === 'erros' ? 'Revisar meus erros' : plan.kind === 'dia' ? 'Plano de hoje' : 'Baralho'}: ${names}`, createdAt: ref.createdAt,
+        errorTopics: [], notes: `${plan.kind === 'turbo' ? 'Turbo' : plan.kind === 'erros' ? 'Revisar meus erros' : plan.kind === 'novos' ? 'Novos' : plan.kind === 'revisoes' ? 'Revisões' : 'Baralho'}: ${names}`, createdAt: ref.createdAt,
       });
     }
   };
@@ -657,6 +860,7 @@ function Study({ plan, onClose }: { plan: StudyPlan; onClose: () => void }) {
   }, []);
   useEffect(() => {
     if (finished) {
+      onFinish();
       logSession();
       if (reviewed) play('mission');
     }
@@ -704,18 +908,19 @@ function Study({ plan, onClose }: { plan: StudyPlan; onClose: () => void }) {
       return go(back - 1);
     }
     const at = new Date().toISOString();
-    if (card.fsrs.phase === 'new' && newSeen.current) {
-      const ns = newSeen.current;
-      ns.n++;
-      const total = ns.base + ns.n;
-      if (total === ns.goal) {
-        ui.toast(`Meta de ${ns.goal} novos batida! 🎉 Daqui pra frente é bônus.`, 'diva');
+    if (goalSeen.current) {
+      const gs = goalSeen.current;
+      gs.n++;
+      const total = gs.base + gs.n;
+      if (total === gs.goal) {
+        ui.toast(`Meta do dia batida: ${gs.goal} cartões! 🎉 Daqui pra frente é bônus.`, 'diva');
         burst({ x: window.innerWidth / 2, y: window.innerHeight / 3 }, 'confete', 22);
-      } else if (total > ns.goal && (total - ns.goal) % 10 === 0) {
-        ui.toast(`+${total - ns.goal} novos além da meta! Que dedicação ✨`, 'diva');
-        burst({ x: window.innerWidth / 2, y: window.innerHeight / 3 }, 'brilho', 16);
+      } else if (total > gs.goal && (total - gs.goal) % 15 === 0) {
+        ui.toast(`+${total - gs.goal} além da meta! Que dedicação ✨`, 'diva');
+        burst({ x: window.innerWidth / 2, y: window.innerHeight / 3 }, 'brilho', 14);
       }
     }
+    if (g >= 2) onDone(card.id); // cartão concluído nesta sessão: não volta se ela for retomada
     saveCard({ ...card, fsrs: schedule(card.fsrs, g), log: [...(card.log ?? []), { at, g }].slice(-40) });
     setHistory((h) => [...h, { id: card.id, prev: card.fsrs, rating: g, at }]);
     setQueue((q) => (g === 1 ? [...q.slice(1), q[0]] : q.slice(1)));
@@ -750,11 +955,12 @@ function Study({ plan, onClose }: { plan: StudyPlan; onClose: () => void }) {
 
       {finished ? (
         <motion.div className="study-end" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
-          <h2 className="h1">{plan.kind === 'turbo' ? 'Turbo feito!' : plan.kind === 'dia' ? 'Plano de hoje feito! 🎉' : 'Sessão feita'}</h2>
+          <h2 className="h1">{plan.kind === 'turbo' ? 'Turbo feito! ⚡' : 'Sessão feita! 🎉'}</h2>
           <p>{reviewed} respostas · {ok} lembradas{again ? ` · ${again} para rever` : ''}</p>
           <p className="muted">Os cartões respondidos entraram no registro de estudos de cada tema.</p>
           <div className="btn-row">
             {history.length > 0 && <button className="btn btn-quiet btn-lg" onClick={() => go(1)}><Icon name="chevronL" size={18} /> Rever cartões</button>}
+            <button className="btn btn-secondary btn-lg" onClick={() => { logSession(); onMore(); }}>⚡ Continuar estudando</button>
             <button className="btn btn-primary btn-lg" onClick={() => { ui.toast('Até a próxima rodada!', 'diva'); onClose(); }}>Fechar</button>
           </div>
         </motion.div>

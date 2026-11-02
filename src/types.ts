@@ -226,7 +226,8 @@ export interface Settings {
   streakBreakSeen?: string; // último dia da sequência perdida cuja animação triste já foi mostrada
   dailyGoalMinutes?: number; // meta de estudo por dia (padrão: 4h)
   flashMinutes?: number; // tempo do plano diário de flashcards (padrão: 40 min)
-  flashNewPerDay?: number; // limite de cartões novos por dia (padrão: 21)
+  flashNewPerDay?: number; // (antigo) meta de novos por dia
+  flashGoal?: number; // meta diária de cartões respondidos (só incentivo, nunca limite)
 }
 
 export interface RewardImage {
