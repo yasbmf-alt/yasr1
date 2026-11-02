@@ -12,12 +12,11 @@ import { parseAny, type RawCard } from '../logic/cardImport';
 import { addDays, relDay, today, toKey, uid } from '../logic/dates';
 import { catchUpDays, dayPlan, isLearning, topicWeights } from '../logic/dailyPlan';
 import { play } from '../logic/sound';
+import { burst } from '../logic/fx';
 import { isActive as isFocusActive } from '../components/focus';
 
 // mais que isso parado num cartão (app esquecido aberto) não conta como estudo
 const IDLE_CAP_MS = 3 * 60000;
-// novos extras ao abrir um baralho depois do limite do dia
-const EXTRA_NEW = 20;
 
 export function Flashcards() {
   const { data } = useStore();
@@ -33,26 +32,14 @@ export function Flashcards() {
     const mine = data.cards.filter((c) => c.deckId === id);
     const queue = deckQueue(id, data.cards);
     const byId = new Map(mine.map((c) => [c.id, c]));
-    const p = dayPlan(data);
-    const quota = Math.max(0, p.newLimit - p.newToday);
     const newIds = queue.filter((x) => byId.get(x)?.fsrs.phase === 'new');
-    // novos: o que cabe no limite do dia; se já acabou, até 20 como extra (abrir o baralho é escolha sua)
-    const pickNew = () => {
-      if (quota > 0) return newIds.slice(0, quota);
-      const extra = newIds.slice(0, EXTRA_NEW);
-      if (extra.length) ui.toast(`O limite de novos de hoje já foi atingido. Estes ${extra.length} entram como extra, fora do plano.`);
-      return extra;
-    };
+    // sem limite: a meta de novos é só uma meta; fazer mais é bônus
     let ids: string[];
-    if (mode === 'novos') ids = pickNew();
+    if (mode === 'novos') ids = newIds;
     else if (mode === 'revisar') ids = queue.filter((x) => byId.get(x)?.fsrs.phase !== 'new');
     else if (mode === 'errados') ids = queue.filter((x) => { const c = byId.get(x); return !!c && isLearning(c); });
     else if (mode === 'baralho') ids = mine.filter((c) => c.fsrs.phase !== 'new').sort((a, b) => a.fsrs.due.localeCompare(b.fsrs.due)).map((c) => c.id);
-    else {
-      let left = quota;
-      ids = queue.filter((x) => byId.get(x)?.fsrs.phase !== 'new' || left-- > 0);
-      if (!ids.length) ids = pickNew();
-    }
+    else ids = queue;
     if (!ids.length) return setDeckId(id); // nada para estudar: mostra os cartões do baralho
     const label = mode === 'novos' ? ' · novos' : mode === 'revisar' ? ' · revisar' : mode === 'errados' ? ' · errados' : mode === 'baralho' ? ' · baralho inteiro' : '';
     setPlan({ key: `${id}-${Date.now()}`, title: d.name + label, ids, kind: 'deck' });
@@ -136,16 +123,16 @@ function DayPlanCard({ onStart }: { onStart: (ids: string[], title: string) => v
   const { data } = useStore();
   const p = useMemo(() => dayPlan(data), [data]);
   if (!data.cards.length) return null;
-  const extraNew = () => {
-    // adiantar: mais 10 novos dos temas mais importantes, fora do plano
+  const extraNew = (n: number) => {
+    // bônus: mais novos dos temas mais importantes
     const w = topicWeights(data);
     const deckTopic = new Map(data.decks.map((x) => [x.id, x.topicId]));
     const ids = data.cards
       .filter((c) => c.fsrs.phase === 'new')
       .sort((a, b) => (w.get(deckTopic.get(b.deckId) ?? '') ?? 0) - (w.get(deckTopic.get(a.deckId) ?? '') ?? 0) || a.createdAt.localeCompare(b.createdAt))
-      .slice(0, 10)
+      .slice(0, n)
       .map((c) => c.id);
-    if (ids.length) onStart(ids, 'Novos extras');
+    if (ids.length) onStart(ids, 'Novos bônus ✨');
   };
   const days = catchUpDays(p);
   return (
@@ -153,10 +140,11 @@ function DayPlanCard({ onStart }: { onStart: (ids: string[], title: string) => v
       {p.doneForToday ? (
         <div className="dplan-main">
           <span className="dplan-k">Plano de hoje</span>
-          <strong className="dplan-big">Feito! 🎉</strong>
-          <p>{p.doneToday} cartões hoje. Você está liberada dos flashcards por hoje.</p>
+          <strong className="dplan-big">Meta cumprida! 🎉</strong>
+          <p>{p.doneToday} cartões hoje{p.newToday > p.newLimit ? ` · ${p.newToday - p.newLimit} novos além da meta, que orgulho! ✨` : ''}. Quer mais? Tudo agora é bônus.</p>
           <div className="btn-row">
-            {p.waiting > 0 && <button className="btn btn-quiet btn-sm" onClick={extraNew}>Adiantar 10 novos</button>}
+            {p.waiting > 0 && <button className="btn btn-primary btn-sm" onClick={() => extraNew(10)}>+10 novos</button>}
+            {p.waiting > 10 && <button className="btn btn-secondary btn-sm" onClick={() => extraNew(25)}>+25 novos</button>}
           </div>
         </div>
       ) : (
@@ -182,7 +170,7 @@ function DayPlanCard({ onStart }: { onStart: (ids: string[], title: string) => v
         )}
         {p.waiting > 0 && (
           <li>
-            <b className="c-new-t">{p.waiting}</b> novos estão na <b>fila de espera</b>: entram até {p.newLimit} por dia, pelos temas mais importantes. Não precisa se preocupar com eles agora.
+            <b className="c-new-t">{p.waiting}</b> novos ainda não vistos. O plano sugere {p.newLimit} por dia (a sua meta), mas você pode fazer quantos quiser: abra um baralho em "Só novos".
           </li>
         )}
       </ul>
@@ -231,12 +219,12 @@ function FlashSide() {
       </div>
       <dl className="fside-stats">
         <div><dt>Tempo hoje</dt><dd>{p.minutesToday}<small>/{p.budget} min</small></dd></div>
-        <div><dt>Novos hoje</dt><dd className="c-new-t">{p.newToday}<small>/{p.newLimit}</small></dd></div>
+        <div className={p.newToday > p.newLimit ? 'is-bonus' : ''}><dt>Novos hoje</dt><dd className="c-new-t">{p.newToday}<small>/{p.newLimit}</small>{p.newToday > p.newLimit && <em> +{p.newToday - p.newLimit} ✨</em>}</dd></div>
         <div><dt>Lembrei (7 dias)</dt><dd>{acc == null ? '—' : `${acc}%`}</dd></div>
         <div><dt>Dias seguidos</dt><dd>{streak}</dd></div>
         <div><dt>Para revisar</dt><dd className="c-rev-t">{p.reviewsDue}</dd></div>
         <div><dt>Errados</dt><dd className="c-err-t">{learning}</dd></div>
-        <div><dt>Fila de espera</dt><dd className="c-new-t">{p.waiting}</dd></div>
+        <div><dt>Novos para ver</dt><dd className="c-new-t">{p.waiting}</dd></div>
       </dl>
       {worst.length > 0 && (
         <div className="fside-worst">
@@ -263,7 +251,7 @@ function FlashSide() {
           </span>
         </div>
         <div className="fside-ctl">
-          <span>Novos por dia</span>
+          <span>Meta de novos</span>
           <span className="pn-goal-ctl">
             <button className="icon-btn icon-btn-sm" onClick={() => setNew(p.newLimit - 1)} aria-label="Menos novos">−</button>
             <b>{p.newLimit}</b>
@@ -289,12 +277,55 @@ function TokenField({ onOpen, onStudy, onImport }: { onOpen: (id: string) => voi
         <button className="btn btn-primary" onClick={onImport}><Icon name="upload" size={18} /> Importar baralho</button>
       </div>
     );
+  // organizar: por especialidade (do tema ligado; senão a grande área), por grande área ou A–Z
+  const [order, setOrderS] = useState<'especialidade' | 'area' | 'az'>(() => {
+    try {
+      return (localStorage.getItem('yasr1-fc-order') as 'especialidade' | 'area' | 'az') || 'especialidade';
+    } catch {
+      return 'especialidade';
+    }
+  });
+  const setOrder = (o: typeof order) => {
+    setOrderS(o);
+    try {
+      localStorage.setItem('yasr1-fc-order', o);
+    } catch {
+      /* ignore */
+    }
+  };
+  const info = (d: Deck) => {
+    const topic = d.topicId ? data.topics.find((t) => t.id === d.topicId) : null;
+    const area = topic?.area ?? d.area;
+    return { topic, area, spec: topic?.specialty?.trim() || areaOf(area).label };
+  };
+  const groups = new Map<string, Deck[]>();
+  for (const d of decks) {
+    const k = order === 'az' ? '' : order === 'area' ? areaOf(info(d).area).label : info(d).spec;
+    groups.set(k, [...(groups.get(k) ?? []), d]);
+  }
+  const keys = [...groups.keys()].sort((x, y) => x.localeCompare(y, 'pt-BR'));
+  let idx = 0;
   return (
-    <div className="tokens">
-      {decks.map((d, i) => {
-        const topic = d.topicId ? data.topics.find((t) => t.id === d.topicId) : null;
-        const area = topic?.area ?? d.area;
-        return <Token key={d.id} i={i} name={topic?.name ?? d.name} sub={topic && topic.name !== d.name ? d.name : null} area={area} counts={deckCounts(d, data.cards)} onStudy={() => setChoose(d.id)} onOpen={() => onOpen(d.id)} />;
+    <div className="tokens-wrap">
+      <div className="fc-order seg" role="radiogroup" aria-label="Organizar baralhos">
+        {([['especialidade', 'Especialidade'], ['area', 'Grande área'], ['az', 'A–Z']] as const).map(([k, l]) => (
+          <button key={k} role="radio" aria-checked={order === k} className={order === k ? 'is-on' : ''} onClick={() => setOrder(k)}>{l}</button>
+        ))}
+      </div>
+      {keys.map((k) => {
+        const list = groups.get(k)!;
+        const ready = list.reduce((n, d) => n + deckCounts(d, data.cards).ready, 0);
+        return (
+          <section key={k || 'all'} className="tok-group">
+            {k && <h3 className="tok-group-h"><span>{k}</span><small>{list.length} baralho{list.length > 1 ? 's' : ''}{ready ? ` · ${ready} para estudar` : ' · em dia ✓'}</small></h3>}
+            <div className="tokens">
+              {list.map((d) => {
+                const { topic, area } = info(d);
+                return <Token key={d.id} i={idx++} name={topic?.name ?? d.name} sub={topic && topic.name !== d.name ? d.name : null} area={area} counts={deckCounts(d, data.cards)} onStudy={() => setChoose(d.id)} onOpen={() => onOpen(d.id)} />;
+              })}
+            </div>
+          </section>
+        );
       })}
       <StudyChooser deckId={choose} onClose={() => setChoose(null)} onPick={(id, m) => { setChoose(null); onStudy(id, m); }} onOpen={(id) => { setChoose(null); onOpen(id); }} />
     </div>
@@ -312,8 +343,8 @@ function StudyChooser({ deckId, onClose, onPick, onOpen }: { deckId: string | nu
   const quota = Math.max(0, p.newLimit - p.newToday);
   const opts: { m: StudyMode; label: string; n: number; cls: string; hint: string }[] = c
     ? [
-        { m: 'tudo', label: 'Tudo', n: c.due + Math.min(c.fresh, quota), cls: '', hint: 'revisões vencidas + novos dentro do limite do dia' },
-        { m: 'novos', label: 'Só novos', n: c.fresh, cls: 'c-new-t', hint: quota ? `até ${Math.min(quota, c.fresh)} hoje pelo limite` : 'limite do dia atingido: entram como extra' },
+        { m: 'tudo', label: 'Tudo', n: c.due + c.fresh, cls: '', hint: 'revisões vencidas + todos os novos' },
+        { m: 'novos', label: 'Só novos', n: c.fresh, cls: 'c-new-t', hint: quota ? `a meta de hoje pede mais ${quota}; o resto é bônus ✨` : 'meta de hoje já batida: tudo agora é bônus ✨' },
         { m: 'revisar', label: 'Só revisões', n: c.due, cls: 'c-rev-t', hint: 'os que venceram, inclusive os que você errou' },
         { m: 'errados', label: 'Só os errados', n: c.learning, cls: 'c-err-t', hint: 'os que você marcou "De novo" e ainda estão aprendendo' },
         { m: 'baralho', label: 'Rever o baralho inteiro', n: c.total - c.fresh, cls: '', hint: 'todos os já estudados, mesmo os que não venceram' },
@@ -663,6 +694,12 @@ function Study({ plan, onClose }: { plan: StudyPlan; onClose: () => void }) {
   const [back, setBack] = useState(0); // 0 = cartão atual; 1 = o último respondido; …
   // tempo ativo: só conta com a tela visível e sem longas pausas paradas
   const active = useRef({ ms: 0, last: Date.now(), hidden: false });
+  // novos vistos hoje (para comemorar quando passar da meta: fazer mais é bônus, nunca proibido)
+  const newSeen = useRef<{ base: number; goal: number; n: number } | null>(null);
+  if (!newSeen.current) {
+    const p0 = dayPlan(snapshot());
+    newSeen.current = { base: p0.newToday, goal: p0.newLimit, n: 0 };
+  }
   const tick = () => {
     const a = active.current;
     const now = Date.now();
@@ -779,6 +816,18 @@ function Study({ plan, onClose }: { plan: StudyPlan; onClose: () => void }) {
       return go(back - 1);
     }
     const at = new Date().toISOString();
+    if (card.fsrs.phase === 'new' && newSeen.current) {
+      const ns = newSeen.current;
+      ns.n++;
+      const total = ns.base + ns.n;
+      if (total === ns.goal) {
+        ui.toast(`Meta de ${ns.goal} novos batida! 🎉 Daqui pra frente é bônus.`, 'diva');
+        burst({ x: window.innerWidth / 2, y: window.innerHeight / 3 }, 'confete', 22);
+      } else if (total > ns.goal && (total - ns.goal) % 10 === 0) {
+        ui.toast(`+${total - ns.goal} novos além da meta! Que dedicação ✨`, 'diva');
+        burst({ x: window.innerWidth / 2, y: window.innerHeight / 3 }, 'brilho', 16);
+      }
+    }
     saveCard({ ...card, fsrs: schedule(card.fsrs, g), log: [...(card.log ?? []), { at, g }].slice(-40) });
     setHistory((h) => [...h, { id: card.id, prev: card.fsrs, rating: g, at }]);
     setQueue((q) => (g === 1 ? [...q.slice(1), q[0]] : q.slice(1)));

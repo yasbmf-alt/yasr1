@@ -2787,3 +2787,9 @@ html.corr-wide .corr-log .corr-timer-state { display: none; }
 .pn-notime { font-style: normal; display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; background: var(--manteiga); color: var(--manteiga-ink); font-size: 10px; font-weight: 900; }
 .pn-notime-hint { margin-top: 10px; line-height: 1.6; }
 .pn-notime-hint .pn-notime { margin-right: 4px; vertical-align: 1px; }
+.tokens-wrap { display: flex; flex-direction: column; gap: 10px; }
+.fc-order { align-self: flex-start; }
+.tok-group-h { display: flex; align-items: baseline; gap: 10px; margin: 6px 0 0; font-family: var(--font-display); font-size: 18px; }
+.tok-group-h small { font-family: var(--font-body); font-size: 12.5px; color: var(--muted); font-weight: 700; }
+.fside-stats .is-bonus { background: #FFF3C4; }
+.fside-stats dd em { font-style: normal; font-size: 13px; color: #B07A00; }
