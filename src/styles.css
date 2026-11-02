@@ -2979,3 +2979,10 @@ html.corr-wide .corr-log .corr-timer-state { display: none; }
   .perf-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .turbo-modes { grid-template-columns: minmax(0, 1fr); }
 }
+.arq .yl-iscene { width: min(100%, 640px); align-self: center; }
+.arq-chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 4px; }
+.arq-chip { display: inline-flex; align-items: center; gap: 6px; border: 0; background: var(--ic); color: var(--ii); border-radius: 999px; padding: 6px 8px 6px 12px; font: inherit; font-size: 13.5px; cursor: pointer; box-shadow: 0 6px 14px -10px rgba(46, 74, 127, .6); transition: transform .15s; }
+.arq-chip:hover { transform: translateY(-2px); }
+.arq-chip b { background: #fff; color: var(--fg); border-radius: 999px; padding: 1px 9px; font-size: 12.5px; }
+.arq-chip b.is-ok { color: var(--ok); }
+.arq-chip i { font-style: normal; background: var(--fc-err); color: #fff; border-radius: 999px; padding: 1px 7px; font-size: 11.5px; font-weight: 800; }

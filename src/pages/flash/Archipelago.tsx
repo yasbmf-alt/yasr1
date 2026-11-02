@@ -80,24 +80,33 @@ export function Archipelago({ groups, onIsland }: { groups: TopicGroup[]; onIsla
         h={MAP_H}
         sparkles={7}
         onPick={(id) => onIsland(id as IslandId)}
-        areas={ISLANDS.map((i) => ({ id: i.id, label: `${i.name}: ${per(i.id).length} tema${per(i.id).length === 1 ? '' : 's'}`, box: i.box }))}
+        areas={ISLANDS.map((i) => {
+          const list = per(i.id);
+          const ready = list.reduce((n, g) => n + g.due + g.fresh, 0);
+          return { id: i.id, label: `${i.name} · ${list.length} tema${list.length === 1 ? '' : 's'}${ready ? ` · ${ready} para estudar` : list.length ? ' · em dia ✓' : ''}`, box: i.box };
+        })}
       >
         <span className="arq-boat" aria-hidden="true">⛵</span>
         <span className="arq-wave w1" aria-hidden="true" />
         <span className="arq-wave w2" aria-hidden="true" />
         <span className="arq-wave w3" aria-hidden="true" />
-        {ISLANDS.map((i, k) => {
+      </ImgScene>
+      <div className="arq-chips">
+        {ISLANDS.map((i) => {
           const list = per(i.id);
           if (!list.length) return null;
           const ready = list.reduce((n, g) => n + g.due + g.fresh, 0);
           const err = list.reduce((n, g) => n + g.learning, 0);
           return (
-            <motion.span key={i.id} className={`arq-pin ${ready ? '' : 'is-ok'}`} style={over(MAP_W, MAP_H, i.pin[0], i.pin[1])} initial={{ scale: 0, y: 8 }} animate={{ scale: 1, y: 0 }} transition={{ delay: 0.25 + k * 0.06, type: 'spring', stiffness: 320, damping: 14 }}>
-              {ready ? <>{ready}<small>{err ? ` · ${err}❗` : ''}</small></> : '✓'}
-            </motion.span>
+            <button key={i.id} className="arq-chip" style={{ ['--ic' as string]: i.color, ['--ii' as string]: i.ink }} onClick={() => { play('pop'); onIsland(i.id); }}>
+              <span>{i.emoji}</span>
+              <strong>{i.name}</strong>
+              {ready ? <b>{ready}</b> : <b className="is-ok">✓</b>}
+              {err > 0 && <i title="errados">{err}</i>}
+            </button>
           );
         })}
-      </ImgScene>
+      </div>
     </section>
   );
 }
