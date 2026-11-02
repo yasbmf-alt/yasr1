@@ -6,7 +6,10 @@ import { Icon } from '../components/Icon';
 import { AREAS, areaOf, type Area, type Deck, type Flashcard } from '../types';
 import { newCardState, previewLabel, RATING_LABEL, schedule, type Rating } from '../logic/fsrs';
 import { deckCounts, deckQueue, mistakesQueue, TURBO_SIZE, turboQueue } from '../logic/flashQueue';
-import { StationIcon } from '../assets/art';
+import { Archipelago, SpecialtyPage, useTopicGroups, type StudyMode } from './flash/Archipelago';
+import type { IslandId } from './flash/islands';
+import fcIcon from '../assets/fc/fc-icon.webp';
+import fcTree from '../assets/fc/fc-arvore.webp';
 import type { CardState } from '../types';
 import { parseAny, type RawCard } from '../logic/cardImport';
 import { addDays, relDay, today, toKey, uid } from '../logic/dates';
@@ -26,23 +29,47 @@ export function Flashcards() {
   const [newDeck, setNewDeck] = useState(false);
   const deck = data.decks.find((d) => d.id === deckId) ?? null;
   const ui = useUI();
-  const studyDeck = (id: string, mode: StudyMode = 'tudo') => {
-    const d = data.decks.find((x) => x.id === id);
-    if (!d) return;
-    const mine = data.cards.filter((c) => c.deckId === id);
-    const queue = deckQueue(id, data.cards);
+  const [island, setIslandS] = useState<IslandId | null>(() => {
+    try {
+      return (sessionStorage.getItem('yasr1-fc-island') as IslandId | null) || null;
+    } catch {
+      return null;
+    }
+  });
+  const setIsland = (i: IslandId | null) => {
+    setIslandS(i);
+    try {
+      if (i) sessionStorage.setItem('yasr1-fc-island', i);
+      else sessionStorage.removeItem('yasr1-fc-island');
+    } catch {
+      /* ignore */
+    }
+    // leva até a ilha aberta (ou de volta ao mapa)
+    setTimeout(() => document.querySelector(i ? '.spec' : '.arq')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 90);
+  };
+  const groups = useTopicGroups();
+  /** estuda um ou mais baralhos (os de um tema) no modo escolhido; sem limite de novos */
+  const studyDecks = (deckIds: string[], mode: StudyMode, title: string) => {
+    const set = new Set(deckIds);
+    const mine = data.cards.filter((c) => set.has(c.deckId));
+    const queue = deckIds.flatMap((id) => deckQueue(id, data.cards));
     const byId = new Map(mine.map((c) => [c.id, c]));
-    const newIds = queue.filter((x) => byId.get(x)?.fsrs.phase === 'new');
-    // sem limite: a meta de novos é só uma meta; fazer mais é bônus
     let ids: string[];
-    if (mode === 'novos') ids = newIds;
+    if (mode === 'novos') ids = queue.filter((x) => byId.get(x)?.fsrs.phase === 'new');
     else if (mode === 'revisar') ids = queue.filter((x) => byId.get(x)?.fsrs.phase !== 'new');
     else if (mode === 'errados') ids = queue.filter((x) => { const c = byId.get(x); return !!c && isLearning(c); });
     else if (mode === 'baralho') ids = mine.filter((c) => c.fsrs.phase !== 'new').sort((a, b) => a.fsrs.due.localeCompare(b.fsrs.due)).map((c) => c.id);
     else ids = queue;
-    if (!ids.length) return setDeckId(id); // nada para estudar: mostra os cartões do baralho
-    const label = mode === 'novos' ? ' · novos' : mode === 'revisar' ? ' · revisar' : mode === 'errados' ? ' · errados' : mode === 'baralho' ? ' · baralho inteiro' : '';
-    setPlan({ key: `${id}-${Date.now()}`, title: d.name + label, ids, kind: 'deck' });
+    if (!ids.length) {
+      if (deckIds[0]) setDeckId(deckIds[0]); // nada para estudar: mostra os cartões
+      return;
+    }
+    const label = mode === 'novos' ? ' · novos' : mode === 'revisar' ? ' · revisões' : mode === 'errados' ? ' · errados' : mode === 'baralho' ? ' · rever tudo' : '';
+    setPlan({ key: `${deckIds.join('-')}-${Date.now()}`, title: title + label, ids, kind: 'deck' });
+  };
+  const studyDeck = (id: string, mode: StudyMode = 'tudo') => {
+    const d = data.decks.find((x) => x.id === id);
+    if (d) studyDecks([id], mode, d.name);
   };
   useEffect(() => {
     if (!ui.pendingStudy) return;
@@ -60,8 +87,8 @@ export function Flashcards() {
         <DeckView deck={deck} onBack={() => setDeckId(null)} onStudy={() => studyDeck(deck.id)} onImport={() => setImporting(deck.id)} />
       ) : (
         <>
-          <header className="ag-head">
-            <h1 className="h1">Flashcards</h1>
+          <header className="ag-head fc-head">
+            <h1 className="h1 fc-title"><motion.img src={fcIcon} alt="" className="fc-icon" whileHover={{ rotate: -10, scale: 1.08 }} /> Flashcards</h1>
             <div className="btn-row wrap">
               <button className="btn btn-quiet" onClick={() => setImporting('any')}><Icon name="upload" size={17} /> Importar CSV ou JSON</button>
               <button className="btn btn-primary" onClick={() => setNewDeck(true)}><Icon name="plus" size={18} /> Novo baralho</button>
@@ -70,18 +97,34 @@ export function Flashcards() {
           <div className={data.cards.length ? 'fc-layout' : ''}>
             <div className="fc-main">
               <DayPlanCard onStart={(ids, title) => setPlan({ key: `dia-${Date.now()}`, title, ids, kind: 'dia' })} />
+              {!data.decks.length ? (
+                <div className="empty-big">
+                  <h2>Nenhum baralho ainda</h2>
+                  <p>Importe um CSV ou JSON (frente e verso) ou crie um baralho. Ligue cada baralho a um tema para ele morar na ilha da especialidade.</p>
+                  <button className="btn btn-primary" onClick={() => setImporting('any')}><Icon name="upload" size={18} /> Importar baralho</button>
+                </div>
+              ) : (
+                <AnimatePresence mode="wait">
+                  {island ? (
+                    <SpecialtyPage
+                      key={island}
+                      island={island}
+                      groups={groups}
+                      onBack={() => setIsland(null)}
+                      onStudy={(g, m) => studyDecks(g.decks.map((d) => d.id), m, g.name)}
+                      onOpenDeck={setDeckId}
+                    />
+                  ) : (
+                    <motion.div key="arq" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, scale: 1.03 }}>
+                      <Archipelago groups={groups} onIsland={(i) => { play('page'); setIsland(i); }} />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              )}
               <FlashHub
                 onTurbo={() => { const ids = turboQueue(data.cards); if (ids.length) setPlan({ key: `turbo-${Date.now()}`, title: 'Turbo', ids, kind: 'turbo' }); }}
                 onMistakes={() => { const ids = mistakesQueue(data.cards); if (ids.length) setPlan({ key: `erros-${Date.now()}`, title: 'Revisar meus erros', ids, kind: 'erros' }); }}
               />
-              {data.cards.length > 0 && (
-                <p className="fc-legend">
-                  <span><i className="c-new" /> novos</span>
-                  <span><i className="c-rev" /> para revisar</span>
-                  <span><i className="c-err" /> errados / aprendendo</span>
-                </p>
-              )}
-              <TokenField onOpen={setDeckId} onStudy={studyDeck} onImport={() => setImporting('any')} />
             </div>
             {data.cards.length > 0 && <FlashSide />}
           </div>
@@ -137,6 +180,8 @@ function DayPlanCard({ onStart }: { onStart: (ids: string[], title: string) => v
   const days = catchUpDays(p);
   return (
     <motion.section className={`dplan ${p.doneForToday ? 'is-done' : ''}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+      <img src={fcTree} alt="" className="dplan-tree" aria-hidden="true" />
+      <span className="dplan-cloud" aria-hidden="true" />
       {p.doneForToday ? (
         <div className="dplan-main">
           <span className="dplan-k">Plano de hoje</span>
@@ -260,163 +305,6 @@ function FlashSide() {
         </div>
       </div>
     </aside>
-  );
-}
-
-// ── Fichas dos temas (flutuando) ──────────────────────────────
-
-function TokenField({ onOpen, onStudy, onImport }: { onOpen: (id: string) => void; onStudy: (id: string, mode: StudyMode) => void; onImport: () => void }) {
-  const { data } = useStore();
-  const [choose, setChoose] = useState<string | null>(null);
-  const decks = [...data.decks].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
-  if (!decks.length)
-    return (
-      <div className="empty-big">
-        <h2>Nenhum baralho ainda</h2>
-        <p>Importe um CSV ou JSON (frente e verso) ou crie um baralho e escreva os cartões. Cada baralho pode ser ligado a um tema da trilha.</p>
-        <button className="btn btn-primary" onClick={onImport}><Icon name="upload" size={18} /> Importar baralho</button>
-      </div>
-    );
-  // organizar: por especialidade (do tema ligado; senão a grande área), por grande área ou A–Z
-  const [order, setOrderS] = useState<'especialidade' | 'area' | 'az'>(() => {
-    try {
-      return (localStorage.getItem('yasr1-fc-order') as 'especialidade' | 'area' | 'az') || 'especialidade';
-    } catch {
-      return 'especialidade';
-    }
-  });
-  const setOrder = (o: typeof order) => {
-    setOrderS(o);
-    try {
-      localStorage.setItem('yasr1-fc-order', o);
-    } catch {
-      /* ignore */
-    }
-  };
-  const info = (d: Deck) => {
-    const topic = d.topicId ? data.topics.find((t) => t.id === d.topicId) : null;
-    const area = topic?.area ?? d.area;
-    return { topic, area, spec: topic?.specialty?.trim() || areaOf(area).label };
-  };
-  const groups = new Map<string, Deck[]>();
-  for (const d of decks) {
-    const k = order === 'az' ? '' : order === 'area' ? areaOf(info(d).area).label : info(d).spec;
-    groups.set(k, [...(groups.get(k) ?? []), d]);
-  }
-  const keys = [...groups.keys()].sort((x, y) => x.localeCompare(y, 'pt-BR'));
-  let idx = 0;
-  return (
-    <div className="tokens-wrap">
-      <div className="fc-order seg" role="radiogroup" aria-label="Organizar baralhos">
-        {([['especialidade', 'Especialidade'], ['area', 'Grande área'], ['az', 'A–Z']] as const).map(([k, l]) => (
-          <button key={k} role="radio" aria-checked={order === k} className={order === k ? 'is-on' : ''} onClick={() => setOrder(k)}>{l}</button>
-        ))}
-      </div>
-      {keys.map((k) => {
-        const list = groups.get(k)!;
-        const ready = list.reduce((n, d) => n + deckCounts(d, data.cards).ready, 0);
-        return (
-          <section key={k || 'all'} className="tok-group">
-            {k && <h3 className="tok-group-h"><span>{k}</span><small>{list.length} baralho{list.length > 1 ? 's' : ''}{ready ? ` · ${ready} para estudar` : ' · em dia ✓'}</small></h3>}
-            <div className="tokens">
-              {list.map((d) => {
-                const { topic, area } = info(d);
-                return <Token key={d.id} i={idx++} name={topic?.name ?? d.name} sub={topic && topic.name !== d.name ? d.name : null} area={area} counts={deckCounts(d, data.cards)} onStudy={() => setChoose(d.id)} onOpen={() => onOpen(d.id)} />;
-              })}
-            </div>
-          </section>
-        );
-      })}
-      <StudyChooser deckId={choose} onClose={() => setChoose(null)} onPick={(id, m) => { setChoose(null); onStudy(id, m); }} onOpen={(id) => { setChoose(null); onOpen(id); }} />
-    </div>
-  );
-}
-
-type StudyMode = 'tudo' | 'novos' | 'revisar' | 'errados' | 'baralho';
-
-/** escolher o que estudar no baralho: tudo, só novos, só revisões, só errados */
-function StudyChooser({ deckId, onClose, onPick, onOpen }: { deckId: string | null; onClose: () => void; onPick: (id: string, m: StudyMode) => void; onOpen: (id: string) => void }) {
-  const { data } = useStore();
-  const d = deckId ? data.decks.find((x) => x.id === deckId) : null;
-  const c = d ? deckCounts(d, data.cards) : null;
-  const p = useMemo(() => dayPlan(data), [data]);
-  const quota = Math.max(0, p.newLimit - p.newToday);
-  const opts: { m: StudyMode; label: string; n: number; cls: string; hint: string }[] = c
-    ? [
-        { m: 'tudo', label: 'Tudo', n: c.due + c.fresh, cls: '', hint: 'revisões vencidas + todos os novos' },
-        { m: 'novos', label: 'Só novos', n: c.fresh, cls: 'c-new-t', hint: quota ? `a meta de hoje pede mais ${quota}; o resto é bônus ✨` : 'meta de hoje já batida: tudo agora é bônus ✨' },
-        { m: 'revisar', label: 'Só revisões', n: c.due, cls: 'c-rev-t', hint: 'os que venceram, inclusive os que você errou' },
-        { m: 'errados', label: 'Só os errados', n: c.learning, cls: 'c-err-t', hint: 'os que você marcou "De novo" e ainda estão aprendendo' },
-        { m: 'baralho', label: 'Rever o baralho inteiro', n: c.total - c.fresh, cls: '', hint: 'todos os já estudados, mesmo os que não venceram' },
-      ]
-    : [];
-  return (
-    <Modal open={!!d} onClose={onClose} title={d ? `Estudar ${d.name}` : ''}>
-      <div className="schoose">
-        {opts.map((o) => (
-          <button key={o.m} className="schoose-opt" disabled={!o.n} onClick={() => d && onPick(d.id, o.m)}>
-            <span className="schoose-main">
-              <strong>{o.label}</strong>
-              <span className="muted small">{o.hint}</span>
-            </span>
-            <b className={`schoose-n ${o.cls}`}>{o.n}</b>
-          </button>
-        ))}
-        {d && <button className="link small" onClick={() => onOpen(d.id)}>Ver e editar os cartões</button>}
-      </div>
-    </Modal>
-  );
-}
-
-function Token({ i, name, sub, area, counts, onStudy, onOpen }: {
-  i: number; name: string; sub: string | null; area: Area; counts: ReturnType<typeof deckCounts>; onStudy: () => void; onOpen: () => void;
-}) {
-  const a = areaOf(area);
-  const ref = useRef<HTMLDivElement>(null);
-  const ready = counts.ready > 0;
-  // inclina a ficha na direção do mouse (efeito 3D leve)
-  const tilt = (e: React.MouseEvent) => {
-    const el = ref.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    el.style.setProperty('--rx', `${((e.clientY - r.top) / r.height - 0.5) * -16}deg`);
-    el.style.setProperty('--ry', `${((e.clientX - r.left) / r.width - 0.5) * 18}deg`);
-  };
-  const reset = () => {
-    ref.current?.style.setProperty('--rx', '0deg');
-    ref.current?.style.setProperty('--ry', '0deg');
-  };
-  return (
-    <motion.div
-      className={`token-wrap ${ready ? 'is-ready' : 'is-done'}`}
-      style={{ ['--c' as string]: a.color, ['--i' as string]: a.ink, ['--d' as string]: `${(i % 5) * -1.1}s`, ['--dur' as string]: `${5.5 + (i % 4) * 0.7}s` }}
-      initial={{ opacity: 0, scale: 0.6, y: 20 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      transition={{ delay: i * 0.05, type: 'spring', stiffness: 260, damping: 16 }}
-    >
-      <div className="token-float">
-        <div className="token" ref={ref} onMouseMove={tilt} onMouseLeave={reset}>
-          <button className="token-face" onClick={ready ? onStudy : onOpen} aria-label={`${name}: ${ready ? `${counts.ready} cartões para estudar` : 'tudo em dia'}`}>
-            <span className="token-rim" aria-hidden="true" />
-            <span className="token-icon" aria-hidden="true"><StationIcon area={area} /></span>
-            <span className="token-count">{ready ? counts.ready : '✓'}</span>
-          </button>
-          <button className="token-edit" onClick={onOpen} aria-label={`Ver cartões de ${name}`} title="Ver e editar cartões"><Icon name="edit" size={13} /></button>
-        </div>
-        <span className="token-shadow" aria-hidden="true" />
-      </div>
-      <strong className="token-name">{name}</strong>
-      <span className="token-sub">
-        {ready ? (
-          <span className="token-counts">
-            {counts.fresh > 0 && <b className="c-new-t" title="novos">{counts.fresh}</b>}
-            {counts.due - counts.learning > 0 && <b className="c-rev-t" title="para revisar">{counts.due - counts.learning}</b>}
-            {counts.learning > 0 && <b className="c-err-t" title="errados / aprendendo">{counts.learning}</b>}
-          </span>
-        ) : `${counts.total} cartões · em dia`}
-        {sub ? <span className="muted"> · {sub}</span> : null}
-      </span>
-    </motion.div>
   );
 }
 

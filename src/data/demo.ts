@@ -191,6 +191,14 @@ export function makeDemo(): DataSnapshot {
       });
     }
   };
+  for (const [id, name, area, fresh, due, re] of [
+    ['dd4', 'Exemplo · Endometriose', 'go', 12, 8, 1], ['dd5', 'Exemplo · Bronquiolite', 'pediatria', 15, 4, 0], ['dd6', 'Exemplo · Depressão', 'clinica', 10, 6, 2],
+    ['dd7', 'Exemplo · Choque séptico', 'clinica', 9, 12, 3], ['dd8', 'Exemplo · Indicadores de saúde', 'preventiva', 20, 0, 0], ['dd9', 'Exemplo · Pneumonia', 'clinica', 6, 10, 1],
+    ['dd10', 'Exemplo · Parto e puerpério', 'go', 18, 5, 0], ['dd11', 'Exemplo · Diabetes', 'clinica', 0, 0, 0],
+  ] as const) {
+    decks.push({ id, name, area, topicId: null, createdAt: new Date().toISOString() });
+    pile(id, name.replace('Exemplo · ', ''), fresh, due, re);
+  }
   pile('dd2', 'Colecistite', 70, 120, 8);
   pile('dd3', 'Pré-eclâmpsia', 50, 90, 6);
   return { chapters, missions, topics, sessions, notes: [{ id: 'dn1', text: 'Exemplo de lembrete dentro do livro', color: 'manteiga', x: 7, y: 140, rot: -3, chapterId: null, createdAt: new Date().toISOString(), topicId: 'd1', onTrail: false, bx: 8, by: 10 }], events, simulados, decks, cards, errnotes: [{ id: 'den1', area: 'clinica', topicId: 'd1', subject: '', subtema: 'tratamento', text: 'Exemplo: confundo a ordem dos degraus do tratamento.', createdAt: new Date().toISOString() }],

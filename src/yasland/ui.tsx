@@ -31,13 +31,13 @@ export const art = (name: string) => ART[`./art/${name}.webp`] ?? '';
 export interface Area { id: string; label: string; box: [number, number, number, number] } // x, y, largura, altura em px da imagem
 
 /** cena ilustrada: a imagem é o cenário e cada objeto tem uma área clicável por cima */
-export function ImgScene({ img, w, h, areas, on, onPick, children, sparkles = 8 }: {
-  img: string; w: number; h: number; areas: Area[]; on?: string | null; onPick: (id: string) => void; children?: React.ReactNode; sparkles?: number;
+export function ImgScene({ img, src, w, h, areas, on, onPick, children, sparkles = 8 }: {
+  img?: string; src?: string; w: number; h: number; areas: Area[]; on?: string | null; onPick: (id: string) => void; children?: React.ReactNode; sparkles?: number;
 }) {
   const pct = (v: number, t: number) => `${(v / t) * 100}%`;
   return (
     <div className="yl-iscene" style={{ aspectRatio: `${w} / ${h}` }}>
-      <img src={art(img)} alt="" draggable={false} className="yl-iscene-img" />
+      <img src={src ?? art(img ?? '')} alt="" draggable={false} className="yl-iscene-img" />
       {Array.from({ length: sparkles }).map((_, i) => (
         <i key={i} className="yl-spark" style={{ left: `${(i * 37 + 11) % 92 + 4}%`, top: `${(i * 53 + 7) % 70 + 6}%`, animationDelay: `${(i * 0.7) % 4}s` }} aria-hidden="true" />
       ))}
