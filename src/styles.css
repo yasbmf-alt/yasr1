@@ -3061,3 +3061,19 @@ html.corr-wide .corr-log .corr-timer-state { display: none; }
   .fc-head .btn { font-size: 13px; padding: 7px 12px; }
 }
 .piles { width: 100%; max-width: 680px; margin: 0 auto; padding-bottom: 16px; }
+/* montinhos na paleta do site: pastéis + azul-marinho */
+.dhub { background: linear-gradient(180deg, var(--surface), #FDF3FA); }
+.dhub::after { background: rgba(248, 201, 241, .35); }
+.pile.p-new { --main: var(--azul); --ink: var(--azul-ink); --soft: var(--azul-claro); --back: #B9D3F5; --band: #9EC1EE; }
+.pile.p-due { --main: var(--azul); --ink: var(--lima-ink); --soft: var(--lima); --back: #CFE36B; --band: #BFD65A; }
+.pile.p-err { --main: var(--azul); --ink: var(--rosa-ink); --soft: var(--rosa); --back: #F2B6E8; --band: var(--rosa-medio); }
+.pile-card { background: repeating-linear-gradient(180deg, transparent 0 21px, rgba(46, 74, 127, .07) 21px 22px), linear-gradient(180deg, #fff 35%, var(--soft)); }
+.pile-card::before { background: var(--band); opacity: 1; }
+.pile-card::after { background: rgba(243, 140, 184, .35); }
+.pile-n { color: var(--ink); }
+.pile-art i { color: var(--rosa-medio); }
+.pile-go { background: var(--azul); box-shadow: 0 3px 0 var(--azul-esc); }
+.dhub-turbo { background: var(--lilas); color: var(--lilas-ink); box-shadow: 0 8px 18px -12px rgba(90, 61, 153, .6); }
+.dhub-turbo small { color: var(--lilas-ink); opacity: .8; }
+.dhub-bolt { background: var(--manteiga); }
+.dhub-resume { border-color: #C9B6EE; }
