@@ -192,7 +192,7 @@ export function Flashcards() {
       )}
       <ImportModal target={importing} onClose={() => setImporting(null)} onDone={(id) => { setImporting(null); setDeckId(id); }} />
       <DeckForm open={newDeck} onClose={() => setNewDeck(false)} onCreated={(id) => { setNewDeck(false); setDeckId(id); }} />
-      <TurboModal open={turbo} onClose={() => setTurbo(false)} onStart={(mode, size) => { setTurbo(false); start({ title: `Turbo · ${TURBO_LABEL[mode]}`, ids: turboPick(data.cards, mode, size), kind: 'turbo' }); }} />
+      <TurboModal open={turbo} onClose={() => setTurbo(false)} onStart={(mode, size) => { setTurbo(false); start({ title: `Turbo · ${TURBO_LABEL[mode]}`, ids: turboPick(data.cards, mode, size, new Date(), true), kind: 'turbo' }); }} />
       <AnimatePresence>
         {plan && (
           <Study

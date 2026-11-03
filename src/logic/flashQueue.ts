@@ -74,10 +74,24 @@ export function answeredToday(cards: Flashcard[], sessionsToday: number) {
 
 export type TurboMode = 'novos' | 'revisoes' | 'misto';
 
+const shuffle = <T,>(list: T[]) => {
+  const a = [...list];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+};
+
 /** filas do Turbo: só novos (mais antigos primeiro), só revisões vencidas (mais atrasadas primeiro) ou misto (novos antes), sem repetir cartão */
-export function turboPick(cards: Flashcard[], mode: TurboMode, size: number | null, now = new Date()) {
-  const fresh = cards.filter(isNewCard).sort((a, b) => a.createdAt.localeCompare(b.createdAt)).map((c) => c.id);
-  const due = cards.filter((c) => isDueReview(c, now)).sort((a, b) => a.fsrs.due.localeCompare(b.fsrs.due)).map((c) => c.id);
+export function turboPick(cards: Flashcard[], mode: TurboMode, size: number | null, now = new Date(), random = false) {
+  let fresh = cards.filter(isNewCard).sort((a, b) => a.createdAt.localeCompare(b.createdAt)).map((c) => c.id);
+  let due = cards.filter((c) => isDueReview(c, now)).sort((a, b) => a.fsrs.due.localeCompare(b.fsrs.due)).map((c) => c.id);
+  // Turbo: sorteia entre todos os temas (senão um baralho grande vem inteiro na frente)
+  if (random) {
+    fresh = shuffle(fresh);
+    due = shuffle(due);
+  }
   const list = mode === 'novos' ? fresh : mode === 'revisoes' ? due : [...fresh, ...due];
   const unique = [...new Set(list)];
   return size ? unique.slice(0, size) : unique;
