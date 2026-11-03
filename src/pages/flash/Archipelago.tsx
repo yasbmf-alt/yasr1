@@ -74,6 +74,7 @@ export function Archipelago({ groups, onIsland }: { groups: TopicGroup[]; onIsla
     <section className="arq">
       <h2 className="arq-t">Escolha uma especialidade</h2>
       <p className="arq-hint"><span>✦</span> Ao tocar, abre os temas da especialidade.</p>
+      <div className="arq-float">
       <ImgScene
         src={arquipelago}
         w={MAP_W}
@@ -91,6 +92,7 @@ export function Archipelago({ groups, onIsland }: { groups: TopicGroup[]; onIsla
         <span className="arq-wave w2" aria-hidden="true" />
         <span className="arq-wave w3" aria-hidden="true" />
       </ImgScene>
+      </div>
       <div className="arq-chips">
         {ISLANDS.map((i) => {
           const list = per(i.id);

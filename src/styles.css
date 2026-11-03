@@ -3077,3 +3077,13 @@ html.corr-wide .corr-log .corr-timer-state { display: none; }
 .dhub-turbo small { color: var(--lilas-ink); opacity: .8; }
 .dhub-bolt { background: var(--manteiga); }
 .dhub-resume { border-color: #C9B6EE; }
+/* arquipélago flutua de leve (o conjunto inteiro, para não soltar as ilhas do mar) */
+.arq-float { animation: arqFloat 6.5s ease-in-out infinite; }
+@keyframes arqFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+.arq-float .yl-area:hover { transform: translateY(-6px); }
+.reduce-motion .arq-float { animation: none; }
+/* contagem de erros em âmbar pastel (em vez de vermelho forte) */
+.arq-chip i { background: var(--manteiga); color: var(--manteiga-ink); }
+.arq-chip b { color: var(--azul-ink); }
+.arq-float { align-self: center; width: min(100%, 640px); }
+.arq-float .yl-iscene { width: 100%; }
