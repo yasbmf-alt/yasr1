@@ -7,6 +7,7 @@ import { AREAS, areaOf, type Area, type Deck, type Flashcard } from '../types';
 import { newCardState, previewLabel, RATING_LABEL, schedule, type Rating } from '../logic/fsrs';
 import { countDue, countNew, countOverdue, DAILY_GOAL, deckCounts, deckQueue, isNewCard, mistakesQueue, turboPick, type TurboMode } from '../logic/flashQueue';
 import { StationIcon } from '../assets/art';
+import { HoursJar } from '../components/HoursJar';
 import { Archipelago, SpecialtyPage, StudySheet, useTopicGroups, type StudyMode, type TopicGroup } from './flash/Archipelago';
 import { ISLANDS, type IslandId } from './flash/islands';
 import fcIcon from '../assets/fc/fc-icon.webp';
@@ -227,61 +228,80 @@ function StudyHub({ onNew, onDue, onErrors, onTurbo, onResume, studying }: { onN
   const nLate = countOverdue(data.cards);
   const nErr = mistakesQueue(data.cards).length;
   const doneToday = answeredTodayCount(data.cards);
-  const pct = Math.min(1, doneToday / Math.max(1, goal));
   const saved = studying ? null : loadSession();
   const left = saved ? saved.plan.ids.filter((x) => !saved.done.includes(x) && data.cards.some((c) => c.id === x)).length : 0;
-  const R = 34;
-  const C = 2 * Math.PI * R;
-  const acts = [
-    { id: 'new', n: nNew, title: 'Estudar novos', sub: 'nunca vistos', emoji: '🌱', cls: 'is-new', on: onNew },
-    { id: 'due', n: nDue, title: 'Revisar pendentes', sub: nLate ? `${nLate} atrasado${nLate > 1 ? 's' : ''}` : 'para hoje', emoji: '🔁', cls: 'is-due', on: onDue },
-    { id: 'err', n: nErr, title: 'Treinar erros', sub: 'que você errou', emoji: '🎯', cls: 'is-err', on: onErrors },
+  const [dealing, setDealing] = useState<string | null>(null);
+  const piles = [
+    { id: 'new', n: nNew, title: 'Novos', sub: 'nunca vistos', emoji: '🌱', cls: 'p-new', on: onNew },
+    { id: 'due', n: nDue, title: 'Revisar', sub: nLate ? `${nLate} atrasado${nLate > 1 ? 's' : ''}` : 'pendentes', emoji: '⏳', cls: 'p-due', on: onDue },
+    { id: 'err', n: nErr, title: 'Erros', sub: 'para treinar', emoji: '🎯', cls: 'p-err', on: onErrors },
   ];
+  // a carta de cima "sai voando" e a sessão começa
+  const deal = (id: string, on: () => void) => {
+    if (dealing) return;
+    setDealing(id);
+    play('flip');
+    setTimeout(() => {
+      setDealing(null);
+      on();
+    }, 380);
+  };
+  const hit = doneToday >= goal;
   return (
-    <section className="hub">
-      <div className="hub-acts">
-        {acts.map((a, i) => (
-          <motion.button
-            key={a.id}
-            className={`hub-act ${a.cls}`}
-            disabled={!a.n}
-            onClick={a.on}
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.07, type: 'spring', stiffness: 220, damping: 18 }}
-            whileHover={a.n ? { y: -6 } : undefined}
-            whileTap={a.n ? { scale: 0.96 } : undefined}
-          >
-            <span className="hub-emoji" aria-hidden="true">{a.emoji}</span>
-            <b className="hub-n">{a.n}</b>
-            <strong>{a.title}</strong>
-            <small>{a.n ? a.sub : 'nada agora ✓'}</small>
-            {a.n > 0 && <span className="hub-go">Começar ›</span>}
-          </motion.button>
-        ))}
-        <div className="hub-side">
-          <div className={`hub-goal ${doneToday >= goal ? 'is-hit' : ''}`} title="Meta diária: só um incentivo, nunca um limite">
-            <svg viewBox="0 0 80 80" aria-hidden="true">
-              <circle cx="40" cy="40" r={R} className="hub-ring-bg" />
-              <motion.circle cx="40" cy="40" r={R} className="hub-ring-fg" strokeDasharray={C} initial={{ strokeDashoffset: C }} animate={{ strokeDashoffset: C * (1 - pct) }} transition={{ duration: 0.9 }} transform="rotate(-90 40 40)" />
-            </svg>
-            <div>
-              <b>{doneToday}<small>/{goal}</small></b>
-              <span>{doneToday >= goal ? (doneToday > goal ? `meta + ${doneToday - goal} ✨` : 'meta batida! 🎉') : 'cartões hoje'}</span>
-              <span className="hub-goal-ctl">
-                <button onClick={() => saveSettings({ flashGoal: Math.max(5, goal - 5) })} aria-label="Diminuir meta">−</button>
-                <button onClick={() => saveSettings({ flashGoal: Math.min(500, goal + 5) })} aria-label="Aumentar meta">+</button>
-              </span>
-            </div>
-          </div>
-          <motion.button className="hub-turbo" onClick={onTurbo} whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}>
-            <span className="turbo-bolt" aria-hidden="true"><svg viewBox="0 0 24 32"><path d="M14 1 L3 18 h8 l-3 13 L21 12 h-8 z" /></svg></span>
-            <span><strong>Modo Turbo</strong><small>sessão rápida</small></span>
-          </motion.button>
-          {left > 0 && saved && (
-            <button className="hub-resume" onClick={onResume}>▶ Continuar “{saved.plan.title}” · {left}</button>
-          )}
+    <section className="dhub">
+      <div className="dhub-top">
+        <h2 className="dhub-t">O que vamos estudar?</h2>
+        <div className={`dhub-goal ${hit ? 'is-hit' : ''}`} title="Meta diária: só um incentivo, nunca um limite">
+          <HoursJar minutes={doneToday} goal={goal} size={40} />
+          <span>
+            <b>{doneToday}<small>/{goal}</small></b>
+            <em>{hit ? (doneToday > goal ? `+${doneToday - goal} bônus ✨` : 'meta batida! 🎉') : 'hoje'}</em>
+          </span>
+          <span className="dhub-goal-ctl">
+            <button onClick={() => saveSettings({ flashGoal: Math.max(5, goal - 5) })} aria-label="Diminuir meta">−</button>
+            <button onClick={() => saveSettings({ flashGoal: Math.min(500, goal + 5) })} aria-label="Aumentar meta">+</button>
+          </span>
         </div>
+      </div>
+      <div className="piles">
+        {piles.map((p, i) => {
+          const layers = Math.min(3, Math.ceil(p.n / 15));
+          return (
+            <motion.button
+              key={p.id}
+              className={`pile ${p.cls} ${p.n ? '' : 'is-empty'} ${dealing === p.id ? 'is-dealing' : ''}`}
+              disabled={!p.n}
+              onClick={() => deal(p.id, p.on)}
+              initial={{ opacity: 0, y: 20, rotate: -4 }}
+              animate={{ opacity: 1, y: 0, rotate: 0 }}
+              transition={{ delay: 0.05 + i * 0.08, type: 'spring', stiffness: 200, damping: 15 }}
+              aria-label={`${p.title}: ${p.n} cartões`}
+            >
+              {Array.from({ length: layers }).map((_, k) => <span key={k} className={`pile-back b${k}`} aria-hidden="true" />)}
+              <span className="pile-card">
+                <span className="pile-art" aria-hidden="true">
+                  <i className="s1">✦</i><i className="s2">✧</i>
+                  <span>{p.emoji}</span>
+                </span>
+                <b className="pile-n">{p.n}</b>
+                <strong>{p.title}</strong>
+                <small>{p.n ? p.sub : 'tudo em dia ✓'}</small>
+                {p.n > 0 && <span className="pile-go">Começar</span>}
+              </span>
+            </motion.button>
+          );
+        })}
+      </div>
+      <div className="dhub-bottom">
+        <motion.button className="dhub-turbo" onClick={onTurbo} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.96 }}>
+          <span className="dhub-bolt" aria-hidden="true">⚡</span>
+          <span><strong>Modo Turbo</strong><small>sorteia entre todos os temas</small></span>
+        </motion.button>
+        {left > 0 && saved && (
+          <button className="dhub-resume" onClick={onResume}>
+            <span>▶</span> Continuar <b>{saved.plan.title.replace(/^Turbo · /, 'Turbo ')}</b> <em>{left}</em>
+          </button>
+        )}
       </div>
       <Performance />
     </section>
