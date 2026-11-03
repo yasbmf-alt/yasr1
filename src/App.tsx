@@ -100,6 +100,23 @@ function Main() {
     document.documentElement.classList.toggle('reduce-motion', rm === 'on' || (rm === 'system' && matchMedia('(prefers-reduced-motion: reduce)').matches));
   }, [rm]);
   // Halloween e Natal trocam a paleta do app inteiro enquanto durarem (some sozinho depois)
+  // conserto único: atividades de missão concluídas sem tempo ganham a duração prevista (antes ficavam fora das horas)
+  const { saveSession } = useStore();
+  React.useEffect(() => {
+    if (!ready || mode === 'loading' || mode === 'demo') return;
+    try {
+      if (localStorage.getItem('yasr1-fix-mission-min') === '1') return;
+      for (const s of data.sessions) {
+        if (s.minutes || !s.missionId || !s.activityId) continue;
+        const a = data.missions.find((m) => m.id === s.missionId)?.activities.find((x) => x.id === s.activityId);
+        if (a?.plannedMinutes) saveSession({ ...s, minutes: a.plannedMinutes });
+      }
+      localStorage.setItem('yasr1-fix-mission-min', '1');
+    } catch {
+      /* ignore */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, mode]);
   const ev = useActiveEvents();
   const season = ev.seasonal?.theme === 'halloween' ? 'halloween' : ev.seasonal?.theme === 'natal' ? 'natal' : null;
   React.useEffect(() => {

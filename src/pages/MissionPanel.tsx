@@ -199,7 +199,7 @@ function PanelBody({ m, onClose }: { m: Mission; onClose: () => void }) {
                 <AnimatePresence initial={false}>
                   {registering === a.id && !a.done && (
                     <motion.div className="act-expand" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
-                      <RegisterForm type={a.type} plannedQuestions={a.plannedQuestions} showNotes onCancel={() => setRegistering(null)} onSubmit={(d) => onComplete(a, d)} />
+                      <RegisterForm type={a.type} plannedQuestions={a.plannedQuestions} plannedMinutes={a.plannedMinutes} showNotes onCancel={() => setRegistering(null)} onSubmit={(d) => onComplete(a, d)} />
                     </motion.div>
                   )}
                   {unchecking === a.id && a.done && (

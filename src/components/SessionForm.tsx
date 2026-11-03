@@ -32,18 +32,19 @@ const TYPE_HINT: Partial<Record<ActivityType, string>> = {
 };
 
 /** Formulário de registro. Os campos mudam conforme o tipo de atividade. */
-export function RegisterForm({ type, initial, onSubmit, onCancel, submitLabel = 'Concluir atividade', plannedQuestions, showNotes = false }: {
+export function RegisterForm({ type, initial, onSubmit, onCancel, submitLabel = 'Concluir atividade', plannedQuestions, plannedMinutes, showNotes = false }: {
   type: ActivityType;
   initial?: Partial<SessionDraft>;
   onSubmit: (d: SessionDraft) => void;
   onCancel: () => void;
   submitLabel?: string;
   plannedQuestions?: number | null;
+  plannedMinutes?: number | null;
   showNotes?: boolean;
 }) {
   const fid = useId();
   const [date, setDate] = useState(initial?.date ?? today());
-  const [minutes, setMinutes] = useState(initial?.minutes?.toString() ?? '');
+  const [minutes, setMinutes] = useState(initial?.minutes?.toString() ?? plannedMinutes?.toString() ?? '');
   const [questions, setQuestions] = useState(initial?.questions?.toString() ?? plannedQuestions?.toString() ?? '');
   const [correct, setCorrect] = useState(initial?.correct?.toString() ?? '');
   const [groups, setGroups] = useState<ErrorGroup[]>(initial?.errors ?? []);
@@ -57,7 +58,8 @@ export function RegisterForm({ type, initial, onSubmit, onCancel, submitLabel = 
   const [err, setErr] = useState<string | null>(null);
   const focus = useFocusPrefill();
   useEffect(() => {
-    if (!initial?.minutes && focus && !minutes) setMinutes(String(focus));
+    // o cronômetro do Cantinho tem prioridade sobre a duração prevista (assim ele é zerado e nada conta duas vezes)
+    if (!initial?.minutes && focus && (!minutes || minutes === plannedMinutes?.toString())) setMinutes(String(focus));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const withQ = type === 'questoes' || type === 'flashcards' || (type === 'revisao' && revQ);

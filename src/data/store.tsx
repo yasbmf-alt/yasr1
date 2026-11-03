@@ -181,7 +181,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           missionId: m.id,
           activityId: act.id,
           type: act.type,
-          minutes: draft.minutes,
+          // sem tempo digitado, vale a duração prevista da atividade (senão a aula não entra nas horas)
+          minutes: draft.minutes ?? act.plannedMinutes ?? null,
           questions: draft.questions,
           correct: draft.correct,
           errorTopics: draft.errorTopics.filter((e) => e.trim()).slice(0, 2),
