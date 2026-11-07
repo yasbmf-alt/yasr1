@@ -2182,12 +2182,12 @@ h5.sum-h { font-size: 14px; }
 .corr-timer { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: var(--surface-2); border-radius: 14px; padding: 10px 14px; }
 .corr-clock { font-family: var(--font-display); font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; min-width: 92px; }
 .corr-timer.is-running { background: #fdeef6; }
-.corr-timer.is-running .corr-clock { color: var(--rosa-ink); }
-.corr-timer.is-running .corr-clock::before { content: ''; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--rosa-medio); margin-right: 8px; vertical-align: middle; animation: corrPulse 1.4s ease-in-out infinite; }
+.corr-timer.is-running .corr-clock { color: var(--fg); }
+.corr-timer.is-running .corr-tsession .corr-sclock::before { content: ''; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--rosa-medio); margin-right: 8px; vertical-align: middle; animation: corrPulse 1.4s ease-in-out infinite; }
 @keyframes corrPulse { 50% { opacity: 0.25; } }
 .corr-timer-state { flex: 1 1 160px; }
 .corr-finish { background: #fffbe8; border-radius: 14px; padding: 10px 14px; }
-.reduce-motion .corr-timer.is-running .corr-clock::before { animation: none; }
+.reduce-motion .corr-timer.is-running .corr-tsession .corr-sclock::before { animation: none; }
 
 /* ── Flashcards · fichas flutuantes ────────────────────────── */
 .fhub { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
@@ -3119,3 +3119,24 @@ html.corr-wide .corr-log .corr-timer-state { display: none; }
 .corr-float.is-min { padding: 0; width: auto; max-width: calc(100% - 24px); overflow: hidden; border-radius: 999px; }
 .corr-float.is-min .corr-float-toggle { position: static; padding: 6px 14px; height: auto; background: var(--rosa); color: var(--rosa-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 @media (max-width: 700px) { .corr-float { top: auto; bottom: 10px; right: 10px; max-height: 55%; } }
+
+/* correção: temas já anotados no mapa */
+.corr-topic { row-gap: 2px; }
+.corr-noted { grid-column: 2 / 4; justify-self: start; font-size: 11px; font-weight: 700; color: var(--muted); background: var(--surface-2); border-radius: 999px; padding: 1px 8px; }
+.corr-noted.is-on { background: var(--lima); color: var(--lima-ink, #4B5C0E); }
+.corr-topic.is-on .corr-noted:not(.is-on) { background: rgba(255, 255, 255, .7); }
+.corr-area-n.is-full { background: var(--lima); color: var(--lima-ink, #4B5C0E); }
+
+/* cronômetro da correção: total dedicado · sessão atual · hoje */
+.corr-timer { gap: 10px 22px; }
+.corr-tblock { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+.corr-tlabel { font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.corr-tsub { font-size: 12px; color: var(--muted); }
+.corr-sclock { font-family: var(--font-display); font-size: 21px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--fg); }
+.corr-tsession { padding-left: 18px; border-left: 2px dashed var(--line); }
+.corr-timer.is-running .corr-tsession .corr-sclock { color: var(--rosa-ink); }
+.corr-ttoday .corr-sclock { font-size: 17px; }
+.corr-timer .btn-row { margin-left: auto; }
+.corr-log-cap { margin-bottom: -2px; }
+html.corr-wide .corr-log .corr-tlabel, html.corr-wide .corr-log .corr-tsub, html.corr-wide .corr-log .corr-ttoday { display: none; }
+@media (max-width: 600px) { .corr-tsession { padding-left: 0; border-left: 0; } .corr-timer .btn-row { margin-left: 0; width: 100%; } }

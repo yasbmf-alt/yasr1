@@ -59,19 +59,12 @@ export function fmtClock(ms: number) {
 
 
 /**
- * Para e passa o tempo contado para o registro: devolve os minutos inteiros de
- * cada dia e um cronômetro parado só com as sobras de segundos (que entram no
- * próximo registro). Assim nada conta duas vezes e nada se perde.
+ * Para e passa o tempo da sessão para o registro: devolve os minutos de cada dia
+ * (arredondados) e um cronômetro zerado para a próxima sessão começar do 0:00.
  */
 export function commitTimer(t: CorrectionTimer | undefined, now = Date.now()): { rows: [string, number][]; timer: CorrectionTimer } {
   const paused = pauseTimer(t, now);
-  const rows: [string, number][] = [];
-  const rest: Record<string, number> = {};
-  for (const [d, ms] of Object.entries(paused.days)) {
-    const m = Math.floor(ms / 60000);
-    if (m > 0) rows.push([d, m]);
-    if (ms - m * 60000 > 0) rest[d] = ms - m * 60000;
-  }
+  const rows = Object.entries(paused.days).map(([d, ms]) => [d, Math.round(ms / 60000)] as [string, number]).filter(([, m]) => m > 0);
   rows.sort(([a], [b]) => a.localeCompare(b));
-  return { rows, timer: { runningSince: null, days: rest } };
+  return { rows, timer: emptyTimer() };
 }

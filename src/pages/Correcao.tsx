@@ -4,7 +4,7 @@ import { Icon } from '../components/Icon';
 import { SimMapEditor } from '../components/ConceptMap';
 import { MapSummary } from '../components/TopicStudy';
 import { syncSimMap } from '../logic/conceptMap';
-import { BIG_AREAS, CORRECTION_STATUS, REASONS, type BigArea, type CorrectionStatus, type ErrorGroup, type Simulado } from '../types';
+import { BIG_AREAS, CORRECTION_STATUS, REASONS, type BigArea, type CorrectionStatus, type ErrorGroup, type MapNode, type Simulado } from '../types';
 import { fmtMinutes, fmtShort, today, uid } from '../logic/dates';
 import { commitTimer, fmtClock, startTimer, timerMs } from '../logic/corrTimer';
 import { play } from '../logic/sound';
@@ -57,6 +57,21 @@ function entriesOf(sim: Simulado, area: BigArea, topicName: (id: string) => stri
     e.status = st.every((s) => s === 'corrigido') ? 'corrigido' : st.some((s) => s !== 'nao') ? 'estudo' : 'nao';
   }
   return [...m.values()].sort((a, b) => b.mistakes - a.mistakes || a.name.localeCompare(b.name, 'pt-BR'));
+}
+
+/** quanto já foi escrito no mapa sobre o tema: conteúdo do próprio balão + ramos criados embaixo dele */
+function notedCount(sim: Simulado, key: string) {
+  const nodes = sim.map?.nodes ?? [];
+  const node = nodes.find((n) => n.ref === key);
+  if (!node) return 0;
+  const has = (n: MapNode) => !!(n.notes?.trim() || n.explanation?.trim() || n.list?.some((x) => x.trim()) || n.images?.length || n.links?.length);
+  let count = has(node) ? 1 : 0;
+  const stack = [node.id];
+  while (stack.length) {
+    const id = stack.pop()!;
+    for (const c of nodes) if (c.parentId === id) { count++; stack.push(c.id); }
+  }
+  return count;
 }
 
 const reasonLong = (r: string | null | undefined) => REASONS.find((x) => x.id === r)?.label;
@@ -147,7 +162,9 @@ export function Correcao({ onEdit }: { onEdit: (s: Simulado) => void }) {
             const sc = sim.areas?.[a];
             const w = areaWrong(sim, a);
             const list = a === area ? entries : [];
-            const nTopics = new Set((sim.errors ?? []).filter((g) => g.area === a).map((g) => g.topicId ?? g.id)).size;
+            const areaEntries = entriesOf(sim, a, topicName);
+            const nTopics = areaEntries.length;
+            const nNoted = areaEntries.filter((e) => notedCount(sim, e.key) > 0).length;
             return (
               <div key={a} className={`corr-area ${a === area ? 'is-on' : ''}`}>
                 <button className="corr-area-btn" onClick={() => { setArea(a); setKey(null); setTick((t) => t + 1); }} aria-expanded={a === area}>
@@ -156,7 +173,7 @@ export function Correcao({ onEdit }: { onEdit: (s: Simulado) => void }) {
                   <span className="corr-area-meta">
                     {sc?.total ? `${sc.correct ?? '—'}/${sc.total}` : ''}{w ? ` · ${w} erro${w > 1 ? 's' : ''}` : ''}
                   </span>
-                  {nTopics > 0 && <span className="corr-area-n">{nTopics}</span>}
+                  {nTopics > 0 && <span className={`corr-area-n ${nNoted === nTopics ? 'is-full' : ''}`} title={`${nNoted} de ${nTopics} temas com anotações`}>{nNoted}/{nTopics}</span>}
                 </button>
                 {a === area && (
                   <div className="corr-topics">
@@ -166,6 +183,7 @@ export function Correcao({ onEdit }: { onEdit: (s: Simulado) => void }) {
                         <span className={`corr-dot st-${e.status}`} title={CORRECTION_STATUS.find((x) => x.id === e.status)?.label} />
                         <span className="corr-topic-name">{e.name}</span>
                         <span className="corr-topic-n">{e.mistakes ? `${e.mistakes} erro${e.mistakes > 1 ? 's' : ''}` : 'revisar'}</span>
+                        {(() => { const n = notedCount(sim, e.key); return <span className={`corr-noted ${n ? 'is-on' : ''}`}>{n ? `✎ ${n} anotaç${n > 1 ? 'ões' : 'ão'}` : 'falta anotar'}</span>; })()}
                       </button>
                     ))}
                   </div>
@@ -311,8 +329,11 @@ function CorrectionLog({ sim }: { sim: Simulado }) {
   }, [running]);
   const logs = data.sessions.filter((s) => s.type === 'correcao' && s.simuladoId === sim.id).sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
   const logged = logs.reduce((a, s) => a + (s.minutes ?? 0), 0);
-  // o relógio mostra o acumulado da correção: o que já foi registrado + o que está contando
-  const ms = logged * 60000 + timerMs(timer, now);
+  // sessão atual: desde o último Iniciar/Continuar (vai para as horas do dia ao parar)
+  const sessionMs = timerMs(timer, now);
+  // total dedicado: tudo o que já foi registrado nesta correção + a sessão atual
+  const ms = logged * 60000 + sessionMs;
+  const todayLogged = logs.filter((l) => l.date === today()).reduce((a, s) => a + (s.minutes ?? 0), 0);
   const done = !!sim.correctionDoneAt;
   // sempre grava em cima da versão mais nova do simulado
   const update = (p: Partial<Simulado>) => {
@@ -341,7 +362,7 @@ function CorrectionLog({ sim }: { sim: Simulado }) {
   const stop = () => {
     const m = stopAndSave();
     play('check');
-    ui.toast(m ? `+${fmtMinutes(m)} registrados nas horas de hoje.` : 'Parado. Menos de 1 minuto — entra no próximo registro.');
+    ui.toast(m ? `Sessão de ${fmtMinutes(m)} registrada nas horas de hoje.` : 'Parado. A sessão teve menos de 1 minuto.');
   };
   const finish = () => {
     const m = stopAndSave({ correctionDoneAt: today() });
@@ -372,16 +393,28 @@ function CorrectionLog({ sim }: { sim: Simulado }) {
         </label>
       </div>
       <div className={`corr-timer ${running ? 'is-running' : ''}`}>
-        <span className="corr-clock" aria-live="off" title="Tempo acumulado desta correção">{fmtClock(ms)}</span>
-        <span className="muted small corr-timer-state">
-          {done ? 'correção finalizada' : running ? 'contando…' : logged ? 'parado · o tempo fica acumulado aqui' : 'cronômetro da correção'}
-        </span>
+        <div className="corr-tblock">
+          <span className="corr-tlabel">Total dedicado</span>
+          <span className="corr-clock" aria-live="off">{fmtClock(ms)}</span>
+          <span className="corr-tsub">{done ? 'correção finalizada' : 'somando todas as sessões'}</span>
+        </div>
+        <div className="corr-tblock corr-tsession">
+          <span className="corr-tlabel">Sessão atual</span>
+          <span className="corr-sclock" aria-live="off">{fmtClock(sessionMs)}</span>
+          <span className="corr-tsub">{running ? 'contando · entra no dia ao parar' : 'parado'}</span>
+        </div>
+        <div className="corr-tblock corr-ttoday">
+          <span className="corr-tlabel">Hoje</span>
+          <span className="corr-sclock">{fmtMinutes(todayLogged)}</span>
+          <span className="corr-tsub">já nas horas do dia</span>
+        </div>
         <div className="btn-row">
           {!running && <button className="btn btn-primary btn-sm" onClick={start}><Icon name="clock" size={15} /> {ms > 0 ? 'Continuar' : 'Iniciar'}</button>}
           {running && <button className="btn btn-secondary btn-sm" onClick={stop}>Parar e registrar</button>}
           {ms > 0 && !done && <button className="btn btn-quiet btn-sm" onClick={finish}>Finalizar</button>}
         </div>
       </div>
+      {logs.length > 0 && <span className="muted small corr-log-cap">Registros desta correção por dia · toque no tempo para ajustar</span>}
       {logs.length > 0 && (
         <ul className="corr-log-list">
           {logs.map((l) => (
