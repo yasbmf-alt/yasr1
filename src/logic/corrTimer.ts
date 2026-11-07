@@ -57,3 +57,21 @@ export function fmtClock(ms: number) {
   return `${h ? `${h}:` : ''}${String(m).padStart(h ? 2 : 1, '0')}:${String(ss).padStart(2, '0')}`;
 }
 
+
+/**
+ * Para e passa o tempo contado para o registro: devolve os minutos inteiros de
+ * cada dia e um cronômetro parado só com as sobras de segundos (que entram no
+ * próximo registro). Assim nada conta duas vezes e nada se perde.
+ */
+export function commitTimer(t: CorrectionTimer | undefined, now = Date.now()): { rows: [string, number][]; timer: CorrectionTimer } {
+  const paused = pauseTimer(t, now);
+  const rows: [string, number][] = [];
+  const rest: Record<string, number> = {};
+  for (const [d, ms] of Object.entries(paused.days)) {
+    const m = Math.floor(ms / 60000);
+    if (m > 0) rows.push([d, m]);
+    if (ms - m * 60000 > 0) rest[d] = ms - m * 60000;
+  }
+  rows.sort(([a], [b]) => a.localeCompare(b));
+  return { rows, timer: { runningSince: null, days: rest } };
+}

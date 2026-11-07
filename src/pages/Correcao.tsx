@@ -6,7 +6,7 @@ import { MapSummary } from '../components/TopicStudy';
 import { syncSimMap } from '../logic/conceptMap';
 import { BIG_AREAS, CORRECTION_STATUS, REASONS, type BigArea, type CorrectionStatus, type ErrorGroup, type Simulado } from '../types';
 import { fmtMinutes, fmtShort, today, uid } from '../logic/dates';
-import { emptyTimer, fmtClock, minutesByDay, pauseTimer, startTimer, timerMs } from '../logic/corrTimer';
+import { commitTimer, fmtClock, startTimer, timerMs } from '../logic/corrTimer';
 import { play } from '../logic/sound';
 import { ConfirmButton, numOrNull, useUI } from '../components/ui';
 import type { Session } from '../types';
@@ -75,6 +75,7 @@ export function Correcao({ onEdit }: { onEdit: (s: Simulado) => void }) {
   // tela ampla: esconde o menu do app e a lista de temas (sem ir para tela cheia)
   const [wide, setWide] = useState(() => recall(KEY_WIDE) === '1');
   const [navOpen, setNavOpen] = useState(false);
+  const [factsMin, setFactsMin] = useState(false);
   useEffect(() => {
     document.documentElement.classList.toggle('corr-wide', wide);
     remember(KEY_WIDE, wide ? '1' : '0');
@@ -182,7 +183,7 @@ export function Correcao({ onEdit }: { onEdit: (s: Simulado) => void }) {
               <button className="btn btn-primary btn-sm" onClick={() => onEdit(sim)}><Icon name="edit" size={15} /> Detalhar erros</button>
             </div>
           )}
-          {entry && <TopicFacts entry={entry} sim={sim} onStatus={(st) => setStatus(entry, st)} />}
+          {entry && !(sim.map && view === 'mapa') && <TopicFacts entry={entry} sim={sim} onStatus={(st) => setStatus(entry, st)} />}
           <div className="corr-viewbar">
             {wide && (
               <button className={`btn btn-sm ${navOpen ? 'btn-secondary' : 'btn-quiet'}`} onClick={() => setNavOpen(!navOpen)} aria-expanded={navOpen}>
@@ -199,10 +200,12 @@ export function Correcao({ onEdit }: { onEdit: (s: Simulado) => void }) {
             </div>
           </div>
           {sim.map && view === 'mapa' && (
+            <div className="corr-stage">
             <SimMapEditor
               sim={sim}
               focusNodeId={tick ? focusId : null} // ao abrir, mostra o mapa inteiro
               focusTick={tick}
+              reserveRight={entry && !factsMin ? 410 : 0}
               height={wide ? 'calc(100vh - 92px)' : 'min(680px, 74vh)'}
               onSelect={(n) => {
                 if (!n || !sim.map) return;
@@ -216,6 +219,16 @@ export function Correcao({ onEdit }: { onEdit: (s: Simulado) => void }) {
                 }
               }}
             />
+            {/* o tema aberto flutua por cima do mapa: o mapa não sai do lugar */}
+            {entry && (
+              <aside className={`corr-float ${factsMin ? 'is-min' : ''}`} aria-label="Tema aberto">
+                <button className="corr-float-toggle" onClick={() => setFactsMin(!factsMin)} title={factsMin ? 'Mostrar o tema' : 'Esconder para ver o mapa'}>
+                  {factsMin ? <><Icon name="chevronD" size={14} /> {entry.name}</> : <Icon name="close" size={14} />}
+                </button>
+                {!factsMin && <TopicFacts entry={entry} sim={sim} onStatus={(st) => setStatus(entry, st)} />}
+              </aside>
+            )}
+            </div>
           )}
           {sim.map && view === 'resumo' && (
             <MapSummary sections={[{ key: sim.id, map: sim.map }]} onNode={(_, id) => { setView('mapa'); setKey(sim.map!.nodes.find((n) => n.id === id)?.ref ?? key); setTick((t) => t + 1); }} />
@@ -291,37 +304,28 @@ function CorrectionLog({ sim }: { sim: Simulado }) {
   const running = !!timer?.runningSince;
   const [now, setNow] = useState(Date.now());
   const [editing, setEditing] = useState<{ id: string; hh: string; mm: string } | null>(null);
-  const [saving, setSaving] = useState<{ hh: string; mm: string } | null>(null);
   useEffect(() => {
     if (!running) return undefined;
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, [running]);
-  // tempo desta sessão (ainda não registrado)
-  const ms = timerMs(timer, now);
   const logs = data.sessions.filter((s) => s.type === 'correcao' && s.simuladoId === sim.id).sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
   const logged = logs.reduce((a, s) => a + (s.minutes ?? 0), 0);
+  // o relógio mostra o acumulado da correção: o que já foi registrado + o que está contando
+  const ms = logged * 60000 + timerMs(timer, now);
   const done = !!sim.correctionDoneAt;
   // sempre grava em cima da versão mais nova do simulado
   const update = (p: Partial<Simulado>) => {
     const cur = snapshot().simulados.find((x) => x.id === sim.id);
     if (cur) saveSimulado({ ...cur, ...p });
   };
-  const setDone = (v: boolean) => update({ correctionDoneAt: v ? today() : null });
-  const start = () => { update({ correctionTimer: startTimer(timer) }); play('pop'); };
-  const pause = () => { update({ correctionTimer: pauseTimer(timer) }); play('pop'); };
-  /** abre o registro com o tempo contado (dá para ajustar antes de salvar) */
-  const askSave = () => {
-    const m = Math.round(timerMs(pauseTimer(timer)) / 60000);
-    setSaving({ hh: String(Math.floor(m / 60)), mm: String(m % 60) });
-  };
-  /** salva no registro do dia (soma no registro do mesmo dia, se já houver) e zera o cronômetro */
-  const save = () => {
-    if (!saving) return;
+  /** para o cronômetro e registra o tempo no dia (somando no registro do mesmo dia) */
+  const stopAndSave = (extra: Partial<Simulado> = {}) => {
     const snap = snapshot();
-    const t = pauseTimer(snap.simulados.find((x) => x.id === sim.id)?.correctionTimer);
-    const wanted = (numOrNull(saving.hh) ?? 0) * 60 + (numOrNull(saving.mm) ?? 0);
-    for (const [date, minutes] of minutesByDay(t, wanted)) {
+    const { rows, timer: next } = commitTimer(snap.simulados.find((x) => x.id === sim.id)?.correctionTimer);
+    let added = 0;
+    for (const [date, minutes] of rows) {
+      added += minutes;
       const prev = snap.sessions.find((s) => s.type === 'correcao' && s.simuladoId === sim.id && s.date === date);
       if (prev) saveSession({ ...prev, minutes: (prev.minutes ?? 0) + minutes });
       else saveSession({
@@ -329,12 +333,21 @@ function CorrectionLog({ sim }: { sim: Simulado }) {
         questions: null, correct: null, errorTopics: [], notes: '', createdAt: new Date().toISOString(), simuladoId: sim.id,
       } as Session);
     }
-    update({ correctionTimer: emptyTimer() });
-    setSaving(null);
-    play('check');
-    ui.toast(wanted ? `+${fmtMinutes(wanted)} de correção nas horas do dia. Total: ${fmtMinutes(logged + wanted)}.` : 'Cronômetro zerado.');
+    update({ correctionTimer: next, ...extra });
+    return added;
   };
-  const discard = () => { update({ correctionTimer: emptyTimer() }); setSaving(null); };
+  const setDone = (v: boolean) => update({ correctionDoneAt: v ? today() : null });
+  const start = () => { update({ correctionTimer: startTimer(timer), correctionDoneAt: null }); play('pop'); };
+  const stop = () => {
+    const m = stopAndSave();
+    play('check');
+    ui.toast(m ? `+${fmtMinutes(m)} registrados nas horas de hoje.` : 'Parado. Menos de 1 minuto — entra no próximo registro.');
+  };
+  const finish = () => {
+    const m = stopAndSave({ correctionDoneAt: today() });
+    play('check');
+    ui.toast(`Correção de ${sim.name} finalizada · ${fmtMinutes(logged + m)} no total.`);
+  };
   const saveEdit = () => {
     if (!editing) return;
     const s = logs.find((l) => l.id === editing.id);
@@ -359,32 +372,16 @@ function CorrectionLog({ sim }: { sim: Simulado }) {
         </label>
       </div>
       <div className={`corr-timer ${running ? 'is-running' : ''}`}>
-        <span className="corr-clock" aria-live="off">{fmtClock(ms)}</span>
+        <span className="corr-clock" aria-live="off" title="Tempo acumulado desta correção">{fmtClock(ms)}</span>
         <span className="muted small corr-timer-state">
-          {running ? 'contando — pause quando parar de corrigir' : ms ? 'pausado · registre quando terminar a sessão' : 'cronômetro da correção'}
-          {logged > 0 && <> · <b>total {fmtMinutes(logged)}</b></>}
+          {done ? 'correção finalizada' : running ? 'contando…' : logged ? 'parado · o tempo fica acumulado aqui' : 'cronômetro da correção'}
         </span>
         <div className="btn-row">
-          {!running && !ms && <button className="btn btn-primary btn-sm" onClick={start}><Icon name="clock" size={15} /> Iniciar</button>}
-          {running && <button className="btn btn-secondary btn-sm" onClick={pause}>Pausar</button>}
-          {!running && ms > 0 && <button className="btn btn-quiet btn-sm" onClick={start}>Retomar</button>}
-          {!running && ms > 0 && <button className="btn btn-primary btn-sm" onClick={askSave}>Registrar</button>}
+          {!running && <button className="btn btn-primary btn-sm" onClick={start}><Icon name="clock" size={15} /> {ms > 0 ? 'Continuar' : 'Iniciar'}</button>}
+          {running && <button className="btn btn-secondary btn-sm" onClick={stop}>Parar e registrar</button>}
+          {ms > 0 && !done && <button className="btn btn-quiet btn-sm" onClick={finish}>Finalizar</button>}
         </div>
       </div>
-      {saving && (
-        <form className="corr-log-form corr-finish" onSubmit={(e) => { e.preventDefault(); save(); }}>
-          <label>
-            <span>Tempo desta sessão (pode ajustar)</span>
-            <span className="time-pair">
-              <input id="corr-h" inputMode="numeric" value={saving.hh} onChange={(e) => setSaving({ ...saving, hh: e.target.value.replace(/\D/g, '') })} aria-label="Horas" /> h
-              <input id="corr-m" inputMode="numeric" value={saving.mm} onChange={(e) => setSaving({ ...saving, mm: e.target.value.replace(/\D/g, '') })} aria-label="Minutos" /> min
-            </span>
-          </label>
-          <button type="submit" className="btn btn-primary btn-sm">Salvar no registro</button>
-          <button type="button" className="btn btn-quiet btn-sm" onClick={() => setSaving(null)}>Voltar</button>
-          <ConfirmButton className="btn btn-quiet btn-sm" label="Descartar" question="Zerar sem registrar?" confirmLabel="Zerar" onConfirm={discard} />
-        </form>
-      )}
       {logs.length > 0 && (
         <ul className="corr-log-list">
           {logs.map((l) => (

@@ -27,13 +27,14 @@ const SHAPES: { id: MapShape; label: string; icon: string }[] = [
 ];
 const nextShape = (s: MapShape | undefined) => SHAPES[(SHAPES.findIndex((x) => x.id === (s ?? 'balao')) + 1) % SHAPES.length];
 
-export function ConceptMapEditor({ mapKey, map, makeMap, onSave, focusNodeId, focusTick, onSelect, height }: {
+export function ConceptMapEditor({ mapKey, map, makeMap, onSave, focusNodeId, focusTick, onSelect, height, reserveRight = 0 }: {
   mapKey: string; // identidade do mapa (troca = carrega outro)
   map: ConceptMap | undefined;
   makeMap?: () => ConceptMap; // mapa inicial quando ainda não existe
   onSave: (m: ConceptMap) => void;
   focusNodeId?: string | null;
   focusTick?: number; // muda para centralizar de novo no mesmo nó
+  reserveRight?: number; // px à direita cobertos por algo flutuando por cima (centraliza no espaço livre)
   onSelect?: (n: MapNode | null) => void;
   height?: number | string;
 }) {
@@ -223,11 +224,13 @@ export function ConceptMapEditor({ mapKey, map, makeMap, onSave, focusNodeId, fo
   });
 
   const panelRef = useRef(false);
+  const reserveRef = useRef(0);
+  reserveRef.current = reserveRight;
   panelRef.current = panel && !!sel;
   // área útil do quadro (sem o painel de detalhes, quando ele está ao lado)
   const vpSize = () => {
     const w = vp.current?.clientWidth ?? 800;
-    const side = panelRef.current && w > 760 ? 320 : 0;
+    const side = Math.max(panelRef.current && w > 760 ? 320 : 0, w - reserveRef.current >= 280 ? reserveRef.current : 0);
     return { w: w - side, h: vp.current?.clientHeight ?? 500 };
   };
   const fit = () => {
@@ -926,7 +929,7 @@ export function TopicMapEditor({ topicId, ...rest }: { topicId: string; focusNod
 }
 
 /** mapa de correção do simulado: simulado → grandes áreas → temas */
-export function SimMapEditor({ sim, ...rest }: { sim: Simulado; focusNodeId?: string | null; focusTick?: number; onSelect?: (n: MapNode | null) => void; height?: number | string }) {
+export function SimMapEditor({ sim, ...rest }: { sim: Simulado; focusNodeId?: string | null; focusTick?: number; onSelect?: (n: MapNode | null) => void; height?: number | string; reserveRight?: number }) {
   const store = useStore();
   if (!sim.map) return null;
   return (
