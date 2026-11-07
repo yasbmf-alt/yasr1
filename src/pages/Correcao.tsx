@@ -4,7 +4,7 @@ import { Icon } from '../components/Icon';
 import { SimMapEditor } from '../components/ConceptMap';
 import { MapSummary } from '../components/TopicStudy';
 import { syncSimMap } from '../logic/conceptMap';
-import { BIG_AREAS, CORRECTION_STATUS, REASONS, type BigArea, type CorrectionStatus, type ErrorGroup, type MapNode, type Simulado } from '../types';
+import { BIG_AREAS, REASONS, type BigArea, type CorrectionStatus, type ErrorGroup, type MapNode, type Simulado } from '../types';
 import { fmtMinutes, fmtShort, today, uid } from '../logic/dates';
 import { commitTimer, fmtClock, startTimer, timerMs } from '../logic/corrTimer';
 import { play } from '../logic/sound';
@@ -164,7 +164,7 @@ export function Correcao({ onEdit }: { onEdit: (s: Simulado) => void }) {
             const list = a === area ? entries : [];
             const areaEntries = entriesOf(sim, a, topicName);
             const nTopics = areaEntries.length;
-            const nNoted = areaEntries.filter((e) => notedCount(sim, e.key) > 0).length;
+            const nDone = areaEntries.filter((e) => e.status === 'corrigido').length;
             return (
               <div key={a} className={`corr-area ${a === area ? 'is-on' : ''}`}>
                 <button className="corr-area-btn" onClick={() => { setArea(a); setKey(null); setTick((t) => t + 1); }} aria-expanded={a === area}>
@@ -173,19 +173,33 @@ export function Correcao({ onEdit }: { onEdit: (s: Simulado) => void }) {
                   <span className="corr-area-meta">
                     {sc?.total ? `${sc.correct ?? '—'}/${sc.total}` : ''}{w ? ` · ${w} erro${w > 1 ? 's' : ''}` : ''}
                   </span>
-                  {nTopics > 0 && <span className={`corr-area-n ${nNoted === nTopics ? 'is-full' : ''}`} title={`${nNoted} de ${nTopics} temas com anotações`}>{nNoted}/{nTopics}</span>}
+                  {nTopics > 0 && <span className={`corr-area-n ${nDone === nTopics ? 'is-full' : ''}`} title={`${nDone} de ${nTopics} temas corrigidos`}>{nDone === nTopics ? '✓ ' : ''}{nDone}/{nTopics}</span>}
                 </button>
                 {a === area && (
                   <div className="corr-topics">
                     {list.length === 0 && <p className="muted small corr-empty">Nenhum tema anotado nesta área.</p>}
-                    {list.map((e) => (
-                      <button key={e.key} className={`corr-topic ${e.key === entry?.key ? 'is-on' : ''}`} onClick={() => { setKey(e.key); setTick((t) => t + 1); setNavOpen(false); }}>
-                        <span className={`corr-dot st-${e.status}`} title={CORRECTION_STATUS.find((x) => x.id === e.status)?.label} />
-                        <span className="corr-topic-name">{e.name}</span>
-                        <span className="corr-topic-n">{e.mistakes ? `${e.mistakes} erro${e.mistakes > 1 ? 's' : ''}` : 'revisar'}</span>
-                        {(() => { const n = notedCount(sim, e.key); return <span className={`corr-noted ${n ? 'is-on' : ''}`}>{n ? `✎ ${n} anotaç${n > 1 ? 'ões' : 'ão'}` : 'falta anotar'}</span>; })()}
-                      </button>
-                    ))}
+                    {list.map((e) => {
+                      const ok = e.status === 'corrigido';
+                      const n = notedCount(sim, e.key);
+                      return (
+                        <div key={e.key} className={`corr-todo ${ok ? 'is-done' : ''} ${e.key === entry?.key ? 'is-on' : ''}`}>
+                          <button
+                            className="corr-check"
+                            role="checkbox"
+                            aria-checked={ok}
+                            aria-label={`${e.name}: ${ok ? 'corrigido' : 'marcar como corrigido'}`}
+                            title={ok ? 'Corrigido! Toque para desmarcar' : 'Marcar como corrigido'}
+                            onClick={() => { setStatus(e, ok ? 'nao' : 'corrigido'); if (!ok) play('check'); }}
+                          >
+                            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 10.5l3.2 3.2L15 7" /></svg>
+                          </button>
+                          <button className="corr-topic" onClick={() => { setKey(e.key); setTick((t) => t + 1); setNavOpen(false); }}>
+                            <span className="corr-topic-name">{e.name}</span>
+                            <span className="corr-topic-n">{e.mistakes ? `${e.mistakes} erro${e.mistakes > 1 ? 's' : ''}` : 'revisar'}{n > 0 ? ` · ✎ ${n}` : ''}</span>
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -201,7 +215,7 @@ export function Correcao({ onEdit }: { onEdit: (s: Simulado) => void }) {
               <button className="btn btn-primary btn-sm" onClick={() => onEdit(sim)}><Icon name="edit" size={15} /> Detalhar erros</button>
             </div>
           )}
-          {entry && !(sim.map && view === 'mapa') && <TopicFacts entry={entry} sim={sim} onStatus={(st) => setStatus(entry, st)} />}
+          {entry && !(sim.map && view === 'mapa') && <TopicFacts entry={entry} sim={sim} />}
           <div className="corr-viewbar">
             {wide && (
               <button className={`btn btn-sm ${navOpen ? 'btn-secondary' : 'btn-quiet'}`} onClick={() => setNavOpen(!navOpen)} aria-expanded={navOpen}>
@@ -243,7 +257,7 @@ export function Correcao({ onEdit }: { onEdit: (s: Simulado) => void }) {
                 <button className="corr-float-toggle" onClick={() => setFactsMin(!factsMin)} title={factsMin ? 'Mostrar o tema' : 'Esconder para ver o mapa'}>
                   {factsMin ? <><Icon name="chevronD" size={14} /> {entry.name}</> : <Icon name="close" size={14} />}
                 </button>
-                {!factsMin && <TopicFacts entry={entry} sim={sim} onStatus={(st) => setStatus(entry, st)} />}
+                {!factsMin && <TopicFacts entry={entry} sim={sim} />}
               </aside>
             )}
             </div>
@@ -257,7 +271,7 @@ export function Correcao({ onEdit }: { onEdit: (s: Simulado) => void }) {
   );
 }
 
-function TopicFacts({ entry, sim, onStatus }: { entry: TopicEntry; sim: Simulado; onStatus: (s: CorrectionStatus) => void }) {
+function TopicFacts({ entry, sim }: { entry: TopicEntry; sim: Simulado }) {
   const { data } = useStore();
   const others = entry.topicId ? topicOccurrences(data.simulados, entry.topicId).filter((o) => o.sim.id !== sim.id && isMistake(o.group)) : [];
   const otherSims = [...new Map(others.map((o) => [o.sim.id, o.sim])).values()];
@@ -271,13 +285,6 @@ function TopicFacts({ entry, sim, onStatus }: { entry: TopicEntry; sim: Simulado
           {otherSims.length > 0 && (
             <p className="muted small">Também errado em: {otherSims.map((s) => `${s.name} (${fmtShort(s.date)})`).join(' · ')}</p>
           )}
-        </div>
-        <div className="seg corr-status" role="radiogroup" aria-label="Correção">
-          {CORRECTION_STATUS.map((c) => (
-            <button key={c.id} role="radio" aria-checked={entry.status === c.id} className={entry.status === c.id ? 'is-on' : ''} onClick={() => onStatus(c.id)}>
-              {c.label}
-            </button>
-          ))}
         </div>
       </header>
 
@@ -315,6 +322,29 @@ function TopicFacts({ entry, sim, onStatus }: { entry: TopicEntry; sim: Simulado
  * sequência e no Jardim. O tempo da prova (do registro do simulado) fica à
  * parte, então nada é contado duas vezes.
  */
+/** cronômetro desenhado: o ponteiro dá a volta a cada minuto e o anel enche a cada hora da sessão */
+function Stopwatch({ ms, running }: { ms: number; running: boolean }) {
+  const sec = (ms / 1000) % 60;
+  const hourFrac = (ms % 3600000) / 3600000;
+  const r = 34;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg className={`cw-watch ${running ? 'is-running' : ''}`} viewBox="0 0 100 108" aria-hidden="true">
+      <rect x="42" y="2" width="16" height="9" rx="4" className="cw-w-crown" />
+      <rect x="46" y="9" width="8" height="8" className="cw-w-crown" />
+      <rect x="78" y="18" width="12" height="7" rx="3.5" transform="rotate(45 84 21.5)" className="cw-w-crown" />
+      <circle cx="50" cy="62" r="44" className="cw-w-body" />
+      <circle cx="50" cy="62" r={r} className="cw-w-track" />
+      <circle cx="50" cy="62" r={r} className="cw-w-fill" strokeDasharray={`${c * hourFrac} ${c}`} transform="rotate(-90 50 62)" />
+      {Array.from({ length: 12 }).map((_, i) => (
+        <line key={i} x1="50" y1="33" x2="50" y2={i % 3 ? 36 : 38} transform={`rotate(${i * 30} 50 62)`} className="cw-w-tick" />
+      ))}
+      <line x1="50" y1="62" x2="50" y2="36" className="cw-w-hand" transform={`rotate(${sec * 6} 50 62)`} />
+      <circle cx="50" cy="62" r="4.5" className="cw-w-dot" />
+    </svg>
+  );
+}
+
 function CorrectionLog({ sim }: { sim: Simulado }) {
   const { data, saveSession, deleteSession, saveSimulado, snapshot } = useStore();
   const ui = useUI();
@@ -392,26 +422,28 @@ function CorrectionLog({ sim }: { sim: Simulado }) {
           Correção concluída
         </label>
       </div>
-      <div className={`corr-timer ${running ? 'is-running' : ''}`}>
-        <div className="corr-tblock">
-          <span className="corr-tlabel">Total dedicado</span>
-          <span className="corr-clock" aria-live="off">{fmtClock(ms)}</span>
-          <span className="corr-tsub">{done ? 'correção finalizada' : 'somando todas as sessões'}</span>
+      <div className={`corr-timer cw ${running ? 'is-running' : ''} ${done ? 'is-done' : ''}`}>
+        <Stopwatch ms={sessionMs} running={running} />
+        <div className="cw-now">
+          <span className="cw-label">{running ? 'Corrigindo agora' : 'Sessão atual'}</span>
+          <span className="corr-clock cw-clock" aria-live="off">{fmtClock(sessionMs)}</span>
+          <span className="cw-hint">{running ? 'ao parar, vai para as horas de hoje' : done ? 'correção finalizada 🎉' : ms > 0 ? 'pronta para a próxima sessão' : 'aperte o play quando começar'}</span>
         </div>
-        <div className="corr-tblock corr-tsession">
-          <span className="corr-tlabel">Sessão atual</span>
-          <span className="corr-sclock" aria-live="off">{fmtClock(sessionMs)}</span>
-          <span className="corr-tsub">{running ? 'contando · entra no dia ao parar' : 'parado'}</span>
+        <div className="cw-stats">
+          <span className="cw-stat cw-total" title="Tudo o que você já dedicou a esta correção"><b>{fmtMinutes(Math.floor(ms / 60000))}</b><small>no total</small></span>
+          <span className="cw-stat cw-today" title="O que já entrou nas horas de hoje"><b>{fmtMinutes(todayLogged)}</b><small>hoje</small></span>
         </div>
-        <div className="corr-tblock corr-ttoday">
-          <span className="corr-tlabel">Hoje</span>
-          <span className="corr-sclock">{fmtMinutes(todayLogged)}</span>
-          <span className="corr-tsub">já nas horas do dia</span>
-        </div>
-        <div className="btn-row">
-          {!running && <button className="btn btn-primary btn-sm" onClick={start}><Icon name="clock" size={15} /> {ms > 0 ? 'Continuar' : 'Iniciar'}</button>}
-          {running && <button className="btn btn-secondary btn-sm" onClick={stop}>Parar e registrar</button>}
-          {ms > 0 && !done && <button className="btn btn-quiet btn-sm" onClick={finish}>Finalizar</button>}
+        <div className="cw-actions">
+          {running ? (
+            <button className="cw-btn cw-stop" onClick={stop} title="Parar e registrar a sessão">
+              <span className="cw-ico"><i className="cw-sq" /></span> Parar e registrar
+            </button>
+          ) : (
+            <button className="cw-btn cw-play" onClick={start} title={ms > 0 ? 'Continuar a correção' : 'Começar a corrigir'}>
+              <span className="cw-ico"><i className="cw-tri" /></span> {ms > 0 ? 'Continuar' : 'Iniciar'}
+            </button>
+          )}
+          {ms > 0 && !done && <button className="cw-finish" onClick={finish}>🏁 Finalizar</button>}
         </div>
       </div>
       {logs.length > 0 && <span className="muted small corr-log-cap">Registros desta correção por dia · toque no tempo para ajustar</span>}
