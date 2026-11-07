@@ -6,7 +6,7 @@ import { MapSummary } from '../components/TopicStudy';
 import { syncSimMap } from '../logic/conceptMap';
 import { BIG_AREAS, CORRECTION_STATUS, REASONS, type BigArea, type CorrectionStatus, type ErrorGroup, type Simulado } from '../types';
 import { fmtMinutes, fmtShort, today, uid } from '../logic/dates';
-import { commitTimer, emptyTimer, fmtClock, startTimer, timerDayMs, timerMs } from '../logic/corrTimer';
+import { emptyTimer, fmtClock, minutesByDay, pauseTimer, startTimer, timerMs } from '../logic/corrTimer';
 import { play } from '../logic/sound';
 import { ConfirmButton, numOrNull, useUI } from '../components/ui';
 import type { Session } from '../types';
@@ -291,32 +291,37 @@ function CorrectionLog({ sim }: { sim: Simulado }) {
   const running = !!timer?.runningSince;
   const [now, setNow] = useState(Date.now());
   const [editing, setEditing] = useState<{ id: string; hh: string; mm: string } | null>(null);
+  const [saving, setSaving] = useState<{ hh: string; mm: string } | null>(null);
   useEffect(() => {
     if (!running) return undefined;
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, [running]);
-  const pendingMs = timerMs(timer, now);
+  // tempo desta sessão (ainda não registrado)
+  const ms = timerMs(timer, now);
   const logs = data.sessions.filter((s) => s.type === 'correcao' && s.simuladoId === sim.id).sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
   const logged = logs.reduce((a, s) => a + (s.minutes ?? 0), 0);
-  // o relógio mostra a correção inteira: o que já foi registrado + o que está contando
-  const ms = logged * 60000 + pendingMs;
-  const todayMin = logs.filter((l) => l.date === today()).reduce((a, s) => a + (s.minutes ?? 0), 0) + Math.floor(timerDayMs(timer, today(), now) / 60000);
   const done = !!sim.correctionDoneAt;
   // sempre grava em cima da versão mais nova do simulado
   const update = (p: Partial<Simulado>) => {
     const cur = snapshot().simulados.find((x) => x.id === sim.id);
     if (cur) saveSimulado({ ...cur, ...p });
   };
-  /** passa o tempo contado para o registro do dia (um registro por dia, somando) e segue contando se estava ligado */
-  const commit = (mode: 'keep' | 'pause' | 'end' = 'keep', extra: Partial<Simulado> = {}) => {
+  const setDone = (v: boolean) => update({ correctionDoneAt: v ? today() : null });
+  const start = () => { update({ correctionTimer: startTimer(timer) }); play('pop'); };
+  const pause = () => { update({ correctionTimer: pauseTimer(timer) }); play('pop'); };
+  /** abre o registro com o tempo contado (dá para ajustar antes de salvar) */
+  const askSave = () => {
+    const m = Math.round(timerMs(pauseTimer(timer)) / 60000);
+    setSaving({ hh: String(Math.floor(m / 60)), mm: String(m % 60) });
+  };
+  /** salva no registro do dia (soma no registro do mesmo dia, se já houver) e zera o cronômetro */
+  const save = () => {
+    if (!saving) return;
     const snap = snapshot();
-    const cur = snap.simulados.find((x) => x.id === sim.id);
-    const { rows, timer: kept } = commitTimer(cur?.correctionTimer);
-    const next = mode === 'end' ? emptyTimer() : mode === 'pause' ? { ...kept, runningSince: null } : kept;
-    let added = 0;
-    for (const [date, minutes] of rows) {
-      added += minutes;
+    const t = pauseTimer(snap.simulados.find((x) => x.id === sim.id)?.correctionTimer);
+    const wanted = (numOrNull(saving.hh) ?? 0) * 60 + (numOrNull(saving.mm) ?? 0);
+    for (const [date, minutes] of minutesByDay(t, wanted)) {
       const prev = snap.sessions.find((s) => s.type === 'correcao' && s.simuladoId === sim.id && s.date === date);
       if (prev) saveSession({ ...prev, minutes: (prev.minutes ?? 0) + minutes });
       else saveSession({
@@ -324,31 +329,12 @@ function CorrectionLog({ sim }: { sim: Simulado }) {
         questions: null, correct: null, errorTopics: [], notes: '', createdAt: new Date().toISOString(), simuladoId: sim.id,
       } as Session);
     }
-    update({ correctionTimer: next, ...extra });
-    return added;
-  };
-  // registra sozinho a cada 5 min e quando o app vai para segundo plano, para as horas do dia ficarem em dia
-  useEffect(() => {
-    if (!running) return undefined;
-    const id = window.setInterval(() => commit(), 5 * 60000);
-    const onHide = () => { if (document.visibilityState === 'hidden') commit(); };
-    document.addEventListener('visibilitychange', onHide);
-    return () => { window.clearInterval(id); document.removeEventListener('visibilitychange', onHide); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running, sim.id]);
-  const setDone = (v: boolean) => update({ correctionDoneAt: v ? today() : null });
-  const start = () => { update({ correctionTimer: startTimer(timer) }); play('pop'); };
-  const pause = () => { commit('pause'); play('pop'); };
-  const registerNow = () => {
-    const m = commit();
+    update({ correctionTimer: emptyTimer() });
+    setSaving(null);
     play('check');
-    ui.toast(m ? `+${fmtMinutes(m)} no registro de hoje. O cronômetro segue contando.` : 'Ainda não deu 1 minuto — segue contando.');
+    ui.toast(wanted ? `+${fmtMinutes(wanted)} de correção nas horas do dia. Total: ${fmtMinutes(logged + wanted)}.` : 'Cronômetro zerado.');
   };
-  const finish = () => {
-    const m = commit('end', { correctionDoneAt: today() });
-    play('check');
-    ui.toast(`Correção concluída${m ? ` (+${fmtMinutes(m)} registrados)` : ''}. Total: ${fmtMinutes(logged + m)}.`);
-  };
+  const discard = () => { update({ correctionTimer: emptyTimer() }); setSaving(null); };
   const saveEdit = () => {
     if (!editing) return;
     const s = logs.find((l) => l.id === editing.id);
@@ -373,19 +359,32 @@ function CorrectionLog({ sim }: { sim: Simulado }) {
         </label>
       </div>
       <div className={`corr-timer ${running ? 'is-running' : ''}`}>
-        <span className="corr-clock" aria-live="off" title="Tempo total desta correção">{fmtClock(ms)}</span>
+        <span className="corr-clock" aria-live="off">{fmtClock(ms)}</span>
         <span className="muted small corr-timer-state">
-          {running ? 'contando · já entra nas horas de hoje' : ms ? 'pausado (o tempo pausado não conta)' : 'cronômetro da correção'}
-          {todayMin > 0 && <> · <b>hoje {fmtMinutes(todayMin)}</b></>}
+          {running ? 'contando — pause quando parar de corrigir' : ms ? 'pausado · registre quando terminar a sessão' : 'cronômetro da correção'}
+          {logged > 0 && <> · <b>total {fmtMinutes(logged)}</b></>}
         </span>
         <div className="btn-row">
           {!running && !ms && <button className="btn btn-primary btn-sm" onClick={start}><Icon name="clock" size={15} /> Iniciar</button>}
           {running && <button className="btn btn-secondary btn-sm" onClick={pause}>Pausar</button>}
-          {!running && ms > 0 && <button className="btn btn-primary btn-sm" onClick={start}>Retomar</button>}
-          {running && <button className="btn btn-quiet btn-sm" onClick={registerNow} title="Salva o tempo de hoje no registro e continua contando">Registrar agora</button>}
-          {ms > 0 && !done && <button className="btn btn-quiet btn-sm" onClick={finish}>Finalizar</button>}
+          {!running && ms > 0 && <button className="btn btn-quiet btn-sm" onClick={start}>Retomar</button>}
+          {!running && ms > 0 && <button className="btn btn-primary btn-sm" onClick={askSave}>Registrar</button>}
         </div>
       </div>
+      {saving && (
+        <form className="corr-log-form corr-finish" onSubmit={(e) => { e.preventDefault(); save(); }}>
+          <label>
+            <span>Tempo desta sessão (pode ajustar)</span>
+            <span className="time-pair">
+              <input id="corr-h" inputMode="numeric" value={saving.hh} onChange={(e) => setSaving({ ...saving, hh: e.target.value.replace(/\D/g, '') })} aria-label="Horas" /> h
+              <input id="corr-m" inputMode="numeric" value={saving.mm} onChange={(e) => setSaving({ ...saving, mm: e.target.value.replace(/\D/g, '') })} aria-label="Minutos" /> min
+            </span>
+          </label>
+          <button type="submit" className="btn btn-primary btn-sm">Salvar no registro</button>
+          <button type="button" className="btn btn-quiet btn-sm" onClick={() => setSaving(null)}>Voltar</button>
+          <ConfirmButton className="btn btn-quiet btn-sm" label="Descartar" question="Zerar sem registrar?" confirmLabel="Zerar" onConfirm={discard} />
+        </form>
+      )}
       {logs.length > 0 && (
         <ul className="corr-log-list">
           {logs.map((l) => (

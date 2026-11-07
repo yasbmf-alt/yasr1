@@ -4,7 +4,7 @@ import { useStore } from '../data/store';
 import { useUI } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { StackBar } from '../components/charts';
-import { DEFAULT_GOAL, HoursJar, dayStudyMinutes, fmtHM, pendingCorrectionMinutes } from '../components/HoursJar';
+import { DEFAULT_GOAL, HoursJar, dayStudyMinutes, fmtHM } from '../components/HoursJar';
 import { StationIcon } from '../assets/art';
 import { AREA_CHART } from './Simulados';
 import { ACTIVITY_TYPES, BIG_AREAS, CORRECTION_TYPE, activityLabel, areaOf, type BigArea, type Session } from '../types';
@@ -45,8 +45,6 @@ export function Painel() {
   const order = [...todayS].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).map((s) => s.type as string);
   const layers = [...new Set(order)].map((k) => ({ color: typeColor(k), minutes: byType.get(k) ?? 0 })).filter((l) => l.minutes);
   if (simToday) layers.push({ color: SIM_COLOR, minutes: simToday });
-  const corrLive = pendingCorrectionMinutes(data.simulados, t0);
-  if (corrLive) layers.push({ color: typeColor('correcao'), minutes: corrLive });
   const byTopic = new Map<string, number>();
   for (const s of todayS) if (s.minutes && s.topicId) byTopic.set(s.topicId, (byTopic.get(s.topicId) ?? 0) + s.minutes);
   const topToday = [...byTopic.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);

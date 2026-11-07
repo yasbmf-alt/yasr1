@@ -57,29 +57,3 @@ export function fmtClock(ms: number) {
   return `${h ? `${h}:` : ''}${String(m).padStart(h ? 2 : 1, '0')}:${String(ss).padStart(2, '0')}`;
 }
 
-/** tempo ativo do cronômetro que caiu num dia (ainda não registrado), contando o trecho em andamento */
-export function timerDayMs(t: CorrectionTimer | undefined, day: string, now = Date.now()) {
-  if (!t) return 0;
-  const days = t.runningSince ? addSpan(t.days, new Date(t.runningSince).getTime(), now) : t.days;
-  return days[day] ?? 0;
-}
-
-/**
- * Passa o tempo do cronômetro para o registro: devolve os minutos inteiros de cada
- * dia e um cronômetro novo só com as sobras de segundos (e, se estava contando,
- * contando de novo a partir de agora). Assim o total segue e nada conta duas vezes.
- */
-export function commitTimer(t: CorrectionTimer | undefined, now = Date.now()): { rows: [string, number][]; timer: CorrectionTimer } {
-  const wasRunning = !!t?.runningSince;
-  const paused = pauseTimer(t, now);
-  const rows: [string, number][] = [];
-  const rest: Record<string, number> = {};
-  for (const [d, ms] of Object.entries(paused.days)) {
-    const m = Math.floor(ms / 60000);
-    if (m > 0) rows.push([d, m]);
-    const left = ms - m * 60000;
-    if (left > 0) rest[d] = left;
-  }
-  rows.sort(([a], [b]) => a.localeCompare(b));
-  return { rows, timer: { runningSince: wasRunning ? new Date(now).toISOString() : null, days: rest } };
-}
