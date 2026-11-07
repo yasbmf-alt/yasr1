@@ -5,7 +5,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useStore } from '../../data/store';
 import { Icon } from '../../components/Icon';
-import { ImgScene, over } from '../../yasland/ui';
+import { ImgScene, over } from './scene';
 import { deckCounts, isNewCard } from '../../logic/flashQueue';
 import { toKey } from '../../logic/dates';
 import { play } from '../../logic/sound';

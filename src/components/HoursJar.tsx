@@ -1,6 +1,7 @@
 import React, { useId } from 'react';
 import { motion } from 'framer-motion';
 import type { Session, Simulado } from '../types';
+import { timerDayMs } from '../logic/corrTimer';
 
 /**
  * Pote que enche conforme as horas estudadas no dia (até a meta). A água
@@ -83,9 +84,13 @@ export const fmtHM = (m: number) => {
 
 export const DEFAULT_GOAL = 240; // 4h por dia, ajustável no Painel
 
-/** minutos estudados num dia: sessões + simulados feitos nele */
+/** minutos do cronômetro de correção que ainda não viraram registro (contam ao vivo) */
+export const pendingCorrectionMinutes = (simulados: Simulado[], day: string, now = Date.now()) =>
+  Math.floor(simulados.reduce((a, s) => a + timerDayMs(s.correctionTimer, day, now), 0) / 60000);
+
+/** minutos estudados num dia: sessões + simulados feitos nele + correção em andamento */
 export const dayStudyMinutes = (sessions: Session[], simulados: Simulado[], day: string) =>
-  sessions.reduce((a, s) => a + (s.date === day ? s.minutes ?? 0 : 0), 0) + simulados.reduce((a, s) => a + (s.date === day ? s.minutes ?? 0 : 0), 0);
+  sessions.reduce((a, s) => a + (s.date === day ? s.minutes ?? 0 : 0), 0) + simulados.reduce((a, s) => a + (s.date === day ? s.minutes ?? 0 : 0), 0) + pendingCorrectionMinutes(simulados, day);
 
 /** selinho com o pote pequeno e as horas do dia */
 export function DayHours({ minutes, goal }: { minutes: number; goal: number }) {

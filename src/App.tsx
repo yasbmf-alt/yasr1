@@ -19,7 +19,6 @@ import { Flashcards } from './pages/Flashcards';
 import { Agenda } from './pages/Agenda';
 import { Revisoes } from './pages/Revisoes';
 import { Biblioteca } from './pages/Biblioteca';
-import { Yasland } from './yasland/Yasland';
 import { setDemo } from './data/repo';
 import { useActiveEvents } from './components/EventDecor';
 
@@ -33,7 +32,6 @@ const NAV: { id: Page; label: string; icon: string }[] = [
   { id: 'painel', label: 'Painel', icon: 'chart' },
   { id: 'simulados', label: 'Simulados', icon: 'simulados' },
   { id: 'flashcards', label: 'Flashcards', icon: 'flashcards' },
-  { id: 'yasland', label: 'Yasland', icon: 'city' },
   { id: 'config', label: 'Configurações', icon: 'config' },
 ];
 
@@ -157,7 +155,6 @@ function Main() {
                 {page === 'painel' && <Painel />}
                 {page === 'quarto' && <Quarto />}
                 {page === 'flashcards' && <Flashcards />}
-                {page === 'yasland' && <Yasland />}
                 {page === 'config' && <Configuracoes />}
               </motion.div>
             </AnimatePresence>
