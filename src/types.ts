@@ -228,6 +228,17 @@ export interface Settings {
   flashMinutes?: number; // tempo do plano diário de flashcards (padrão: 40 min)
   flashNewPerDay?: number; // (antigo) meta de novos por dia
   flashGoal?: number; // meta diária de cartões respondidos (só incentivo, nunca limite)
+  todos?: TodoItem[]; // post-it de tarefinhas da página inicial
+}
+
+export interface TodoItem {
+  id: string;
+  text: string;
+  done: boolean;
+  createdAt: string; // ISO
+  doneAt?: string; // YYYY-MM-DD (as feitas somem no dia seguinte)
+  page?: import('./components/ui').Page; // atalho para a parte do app
+  key?: string; // sugestão de onde veio (para não sugerir de novo)
 }
 
 export interface RewardImage {

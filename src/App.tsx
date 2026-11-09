@@ -9,6 +9,7 @@ import { UIProvider, useUI, type Page } from './components/ui';
 import { Icon } from './components/Icon';
 import { TopicSheet } from './components/TopicSheet';
 import { RewardWatcher } from './components/useRewards';
+import { TodoNote } from './components/TodoNote';
 import { Trilha } from './pages/Trilha';
 import { Evolucao } from './pages/Evolucao';
 import { Configuracoes } from './pages/Configuracoes';
@@ -160,6 +161,7 @@ function Main() {
             </AnimatePresence>
           )}
         </main>
+        {page === 'trilha' && ready && mode !== 'loading' && <TodoNote />}
       </div>
       <TopicSheet />
       <RewardWatcher />
