@@ -41,8 +41,14 @@ function Sidebar() {
   return (
     <nav className="sidebar" aria-label="Navegação principal">
       <div className="logo" aria-label="Yas R1">
-        <span>Yas</span>
-        <span className="logo-r1">R1</span>
+        <span className="logo-yas" aria-hidden="true">
+          {['Y', 'a', 's'].map((ch, i) => <span key={i} className="logo-ch" style={{ animationDelay: `${0.15 + i * 0.09}s` }}>{ch}</span>)}
+        </span>
+        <span className="logo-r1" aria-hidden="true">
+          <span className="logo-r1-txt">R1</span>
+          <i className="logo-r1-spark s1">✦</i>
+          <i className="logo-r1-spark s2">✦</i>
+        </span>
       </div>
       <ul className="nav">
         {NAV.map((n) => (
