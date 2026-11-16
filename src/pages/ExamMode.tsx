@@ -25,6 +25,7 @@ export const STEP_KINDS: { id: ExamStepKind; label: string; emoji: string; xp: n
   { id: 'pausa', label: 'Pausa', emoji: '🧃', xp: 5, color: '#FFE6D6' },
   { id: 'premio', label: 'Prêmio', emoji: '🎁', xp: 0, color: 'var(--manteiga)' },
   { id: 'bonus', label: 'Bônus', emoji: '🌟', xp: 50, color: 'var(--lima)' },
+  { id: 'pegadinha', label: 'Pegadinha', emoji: '🪤', xp: 15, color: 'var(--pessego)' },
   { id: 'outro', label: 'Outro', emoji: '⭐', xp: 15, color: 'var(--surface-2)' },
 ];
 export const kindOf = (k: ExamStepKind) => STEP_KINDS.find((x) => x.id === k) ?? STEP_KINDS[STEP_KINDS.length - 1];
@@ -112,7 +113,7 @@ export function ExamChapter({ chapter, onEditChapter }: { chapter: Chapter; onEd
 
 // ── Montar as fases à mão ──────────────────────────────────────
 
-const QUICK: ExamStepKind[] = ['tema', 'questoes', 'flashcards', 'revisao', 'prova', 'correcao', 'pausa', 'premio', 'bonus'];
+const QUICK: ExamStepKind[] = ['tema', 'questoes', 'flashcards', 'revisao', 'pegadinha', 'prova', 'correcao', 'pausa', 'premio', 'bonus'];
 
 function ExamSetup({ run, open, onClose }: { run: ExamRun; open: boolean; onClose: () => void }) {
   const { data, saveSettings } = useStore();
@@ -252,6 +253,7 @@ function ExamImport({ run, chapter, open, onClose }: { run: ExamRun; chapter: Ch
       endDate: end,
       examDate: plan.examDate ?? run.examDate ?? null,
       rules: mode === 'trocar' ? plan.rules : [...(run.rules ?? []), ...plan.rules],
+      dayNames: mode === 'trocar' ? plan.dayNames : { ...(run.dayNames ?? {}), ...plan.dayNames },
       steps: mode === 'trocar' ? steps : [...run.steps, ...steps],
       finishedAt: null,
     };
@@ -431,7 +433,10 @@ function Arena({ run, chapter, full, onFull, onSetup, onImport, onEditChapter }:
             <section key={d} className={`ex-phase ${d === t ? 'is-today' : ''} ${cs.length && dDone === cs.length ? 'is-clear' : ''}`} data-day={d}>
               <h3 className="ex-phase-h">
                 <span className="ex-phase-n">FASE {di + 1}</span>
-                <span>{fmtDay(d)}{d === t ? ' · hoje' : ''}{d === run.examDate ? ' · 👑 prova' : ''}</span>
+                <span className="ex-phase-name">
+                  {run.dayNames?.[d] && <b>{run.dayNames[d]}</b>}
+                  <small>{fmtDay(d)}{d === t ? ' · hoje' : ''}{d === run.examDate ? ' · 👑 prova' : ''}</small>
+                </span>
                 <span className="ex-phase-p">{cs.length ? (dDone === cs.length ? '⭐ completa' : `${dDone}/${cs.length}`) : '—'}</span>
               </h3>
               {steps.length === 0 && <p className="ex-phase-empty">Nada nesta fase ainda.</p>}

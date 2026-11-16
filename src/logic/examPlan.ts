@@ -11,6 +11,7 @@ export interface ParsedPlan {
   end?: string;
   examDate?: string;
   rules: string[];
+  dayNames: Record<string, string>;
   steps: PlanStep[];
   ignored: string[];
 }
@@ -27,6 +28,7 @@ const KIND_WORDS: [RegExp, ExamStepKind][] = [
   [/^(pausa|descanso|intervalo|almoco|lanche|jantar|cafe|cochilo|sono|refeicao)$/, 'pausa'],
   [/^(premio|recompensa|presente|mimo)$/, 'premio'],
   [/^(bonus|extra|desafio)$/, 'bonus'],
+  [/^(pegadinha|pegadinhas|armadilha|cilada)$/, 'pegadinha'],
   [/^(outro|outra|tarefa)$/, 'outro'],
 ];
 export const kindFromWord = (w: string): ExamStepKind | null => {
@@ -56,7 +58,8 @@ export function parseDate(s: string): string | null {
 const TIME = /^(\d{1,2})\s*(?:[:h]\s*(\d{2})?)\s*/i;
 
 export function parsePlan(text: string): ParsedPlan {
-  const out: ParsedPlan = { rules: [], steps: [], ignored: [] };
+  const out: ParsedPlan = { rules: [], dayNames: {}, steps: [], ignored: [] };
+  const hintNames = new Map<string, string>();
   const raw: { dayHint: string | null; time: string | null; kind: ExamStepKind; label: string }[] = [];
   let dayHint: string | null = null;
   let inRules = false;
@@ -73,7 +76,12 @@ export function parsePlan(text: string): ParsedPlan {
       if (/^regras?\b/.test(nb)) { inRules = true; continue; }
       inRules = false;
       const isDay = parseDate(body) || WEEKDAYS.some((w) => nb.includes(w)) || /\b(dia|fase)\s*\d+/.test(nb);
-      if (isDay) dayHint = body;
+      if (isDay) {
+        dayHint = body;
+        // "Sábado 21/11 · Mundo 1: Pulmão de Aço" → nome da fase
+        const name = body.split(/\s[·|–—-]\s/).slice(1).join(' · ').trim();
+        if (name) hintNames.set(body, name.replace(/^[·|–—-]\s*/, ''));
+      }
       else if (!out.title && line.startsWith('# ')) out.title = body.replace(/^modo prova\s*[:\-–]\s*/i, '');
       continue;
     }
@@ -139,6 +147,7 @@ export function parsePlan(text: string): ParsedPlan {
     return addDays(start, Math.max(0, hints.indexOf(hint)));
   };
   out.steps = raw.map((r) => ({ day: dayOf(r.dayHint), time: r.time, kind: r.kind, label: r.label }));
+  for (const [h, name] of hintNames) out.dayNames[dayOf(h)] = name;
   const days = out.steps.map((s) => s.day).sort();
   out.start = out.start ?? days[0];
   out.end = out.end ?? days.at(-1) ?? out.start;
@@ -170,7 +179,7 @@ regra: errou questão? anota o porquê no caderno de erros
 
 Regras do formato:
 - uma linha por bloco: horário | tipo | o que fazer
-- tipos aceitos: tema, questoes, flashcards, revisao, prova, correcao, pausa, premio, bonus, outro
+- tipos aceitos: tema, questoes, flashcards, revisao, prova, correcao, pausa, premio, bonus, pegadinha, outro
 - "premio" = recompensa que libera quando eu terminar os blocos antes dele
 - "bonus" = desafio extra opcional
 - um título "## Dia da semana dd/mm" para cada dia`;

@@ -238,7 +238,7 @@ export interface Settings {
   examRuns?: ExamRun[]; // modo prova (maratonas de estudo em semana de prova)
 }
 
-export type ExamStepKind = 'tema' | 'flashcards' | 'questoes' | 'prova' | 'correcao' | 'revisao' | 'pausa' | 'premio' | 'bonus' | 'outro';
+export type ExamStepKind = 'tema' | 'flashcards' | 'questoes' | 'prova' | 'correcao' | 'revisao' | 'pausa' | 'premio' | 'bonus' | 'pegadinha' | 'outro';
 export interface ExamStep {
   id: string;
   day: string; // YYYY-MM-DD
@@ -260,6 +260,7 @@ export interface ExamRun {
   chapterId?: string | null; // capítulo especial da trilha
   examDate?: string | null; // dia da prova (contagem regressiva)
   rules?: string[]; // regras do jogo (do plano importado ou escritas)
+  dayNames?: Record<string, string>; // nome de cada fase (ex.: "Mundo 1: Pulmão de Aço")
 }
 
 export interface TodoItem {
