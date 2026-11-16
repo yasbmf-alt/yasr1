@@ -7,6 +7,7 @@ import { useUI, ProgressRing, ConfirmButton } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { Asset } from '../assets/registry';
 import { MissionArt } from '../components/MissionArt';
+import { ExamBanner } from './ExamMode';
 import { internatoTheme } from '../logic/missionTheme';
 import { MissionPanel } from './MissionPanel';
 import { ChapterEditor, NewMission } from './TrilhaForms';
@@ -80,6 +81,7 @@ export function Trilha() {
         </div>
       ) : (
         <>
+          <ExamBanner />
           <ChapterTabs chapters={chapters} active={chapter?.id ?? null} onPick={setChId} onNew={() => setEditCh('new')} />
           <AnimatePresence mode="wait" initial={false} custom={dir.current}>
             {chapter && (

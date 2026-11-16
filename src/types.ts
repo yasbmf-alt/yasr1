@@ -234,6 +234,27 @@ export interface Settings {
   flashNewPerDay?: number; // (antigo) meta de novos por dia
   flashGoal?: number; // meta diária de cartões respondidos (só incentivo, nunca limite)
   todos?: TodoItem[]; // post-it de tarefinhas da página inicial
+  examRuns?: ExamRun[]; // modo prova (maratonas de estudo em semana de prova)
+}
+
+export type ExamStepKind = 'tema' | 'flashcards' | 'questoes' | 'prova' | 'correcao' | 'revisao' | 'pausa' | 'outro';
+export interface ExamStep {
+  id: string;
+  day: string; // YYYY-MM-DD
+  kind: ExamStepKind;
+  label: string;
+  topicId?: string | null;
+  done: boolean;
+  doneAt?: string | null; // ISO
+}
+export interface ExamRun {
+  id: string;
+  title: string;
+  startDate: string;
+  endDate: string;
+  steps: ExamStep[];
+  createdAt: string;
+  finishedAt?: string | null;
 }
 
 export interface TodoItem {
