@@ -1,4 +1,5 @@
 import { GoalParty } from './components/GoalParty';
+import { toKey } from './logic/dates';
 import { EventWatcher, PreviewBar } from './components/EventDecor';
 import { BackupReminder } from './components/BackupReminder';
 import { platformKind } from './platform/platform';
@@ -105,6 +106,20 @@ function Main() {
     document.documentElement.classList.toggle('reduce-motion', rm === 'on' || (rm === 'system' && matchMedia('(prefers-reduced-motion: reduce)').matches));
   }, [rm]);
   // Halloween e Natal trocam a paleta do app inteiro enquanto durarem (some sozinho depois)
+  // missões de simulado ligadas: concluem sozinhas quando o simulado é registrado / a correção é finalizada
+  const { saveMission } = useStore();
+  React.useEffect(() => {
+    if (!ready || mode === 'loading') return;
+    for (const m of data.missions) {
+      if (m.kind !== 'simulado' || !m.simuladoId) continue;
+      const sim = data.simulados.find((x) => x.id === m.simuladoId);
+      const act = m.activities[0];
+      if (!sim || !act || act.done) continue;
+      const when = m.simTask === 'corrigir' ? sim.correctionDoneAt : sim.date;
+      if (when && when <= toKey(new Date())) saveMission({ ...m, activities: m.activities.map((a, i) => (i === 0 ? { ...a, done: true, doneAt: when } : a)) });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, mode, data.missions, data.simulados]);
   // conserto único: atividades de missão concluídas sem tempo ganham a duração prevista (antes ficavam fora das horas)
   const { saveSession } = useStore();
   React.useEffect(() => {

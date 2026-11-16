@@ -653,3 +653,75 @@ export function StickerArt({ id, ...p }: P & { id: string }) {
     </svg>
   );
 }
+
+// ── Temas do internato e missões de simulado ──────────────────
+export function InternatoThemeIcon({ theme, ...p }: P & { theme: 'psiquiatria' | 'emergencia' | 'simulacao' | 'ambulatorio' }) {
+  const vb = '0 0 64 64';
+  switch (theme) {
+    case 'psiquiatria':
+      return (
+        <svg {...svgProps(vb, p)}>
+          <path d="M18 44 c-8 0-12-6-10-12 c-4-6 1-14 8-13 c1-7 10-10 15-5 c4-5 14-4 16 3 c7-1 12 6 9 12 c4 6-1 14-8 14 c-2 6-10 8-15 4 c-5 4-13 2-15-3z" fill={C.roxo} />
+          <path d="M24 22 c3 2 3 6 0 8 M34 18 c-2 4 0 8 4 9 M40 34 c-4 0-6 3-5 6 M26 36 c2 2 6 2 7-1" fill="none" stroke={C.lilas} strokeWidth="2.6" strokeLinecap="round" />
+          <path d="M44 50 c-3-2-6-4-6-7 a3 3 0 0 1 6-1 a3 3 0 0 1 6 1 c0 3-3 5-6 7z" fill={C.rosaMedio} />
+        </svg>
+      );
+    case 'emergencia':
+      return (
+        <svg {...svgProps(vb, p)}>
+          <path d="M8 18 l6 3 M56 18 l-6 3 M32 4 v7 M14 8 l4 5 M50 8 l-4 5" stroke={C.laranja} strokeWidth="3.4" strokeLinecap="round" />
+          <path d="M16 44 v-12 a16 16 0 0 1 32 0 v12z" fill={C.pessego} />
+          <path d="M24 32 a8 8 0 0 1 8-8" fill="none" stroke={C.branco} strokeWidth="3.4" strokeLinecap="round" />
+          <rect x="10" y="44" width="44" height="10" rx="4" fill={C.azul} />
+          <rect x="29" y="35" width="6" height="14" rx="1.5" fill={C.branco} transform="translate(0 -4)" />
+          <rect x="25" y="38" width="14" height="6" rx="1.5" fill={C.branco} transform="translate(0 -4)" />
+        </svg>
+      );
+    case 'simulacao':
+      return (
+        <svg {...svgProps(vb, p)}>
+          <path d="M12 58 c0-12 9-18 20-18 s20 6 20 18z" fill={C.azulClaro} />
+          <circle cx="32" cy="24" r="13" fill={C.manteiga} />
+          <circle cx="27" cy="23" r="2" fill={C.azul} /><circle cx="37" cy="23" r="2" fill={C.azul} />
+          <path d="M28 29 h8" stroke={C.azul} strokeWidth="2.4" strokeLinecap="round" />
+          <path d="M22 42 c0 8 4 11 10 11 s10-3 10-11" fill="none" stroke={C.azul} strokeWidth="2.8" strokeLinecap="round" />
+          <circle cx="42" cy="42" r="3.6" fill={C.rosaMedio} />
+          <rect x="44" y="6" width="14" height="10" rx="3" fill={C.rosaMedio} />
+          <path d="M49 9 l4 2 -4 2z" fill={C.branco} />
+        </svg>
+      );
+    case 'ambulatorio':
+      return (
+        <svg {...svgProps(vb, p)}>
+          <rect x="10" y="22" width="44" height="32" rx="5" fill={C.salvia} />
+          <path d="M24 22 v-5 a4 4 0 0 1 4-4 h8 a4 4 0 0 1 4 4 v5" fill="none" stroke={C.salviaEsc} strokeWidth="4" />
+          <rect x="28" y="28" width="8" height="20" rx="2" fill={C.branco} />
+          <rect x="22" y="34" width="20" height="8" rx="2" fill={C.branco} />
+        </svg>
+      );
+  }
+}
+
+export function SimMissionIcon({ task, ...p }: P & { task: 'fazer' | 'corrigir' }) {
+  const vb = '0 0 64 64';
+  return (
+    <svg {...svgProps(vb, p)}>
+      <rect x="14" y="10" width="36" height="46" rx="5" fill={C.branco} />
+      <rect x="24" y="6" width="16" height="9" rx="3" fill={C.roxo} />
+      {[22, 32, 42].map((y, i) => (
+        <g key={y}>
+          <circle cx="22" cy={y} r="3.4" fill={task === 'fazer' && i < 2 ? C.roxo : 'none'} stroke={C.roxo} strokeWidth="2" />
+          <rect x="29" y={y - 2} width={i === 1 ? 12 : 16} height="4" rx="2" fill={C.lilas} />
+        </g>
+      ))}
+      {task === 'corrigir' ? (
+        <>
+          <circle cx="44" cy="44" r="9" fill="none" stroke={C.rosaMedio} strokeWidth="4" />
+          <path d="M50.5 50.5 l7 7" stroke={C.rosaMedio} strokeWidth="5" strokeLinecap="round" />
+        </>
+      ) : (
+        <path d="M40 54 l14-14 l4 4 l-14 14 l-6 2z" fill={C.laranja} />
+      )}
+    </svg>
+  );
+}

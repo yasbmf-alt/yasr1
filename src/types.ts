@@ -63,7 +63,9 @@ export const REASONS: { id: ErrorReason; label: string; long: string }[] = [
 export const subtemaLabel = (s: Subtema | null | undefined) => SUBTEMAS.find((x) => x.id === s)?.label ?? 'Sem subtema';
 export const reasonLabel = (r: ErrorReason) => REASONS.find((x) => x.id === r)?.label ?? r;
 
-export type MissionKind = 'medway' | 'internato';
+export type MissionKind = 'medway' | 'internato' | 'simulado';
+/** tema visual da missão do internato (muda o ícone e a cor da estação) */
+export type InternatoTheme = 'hospital' | 'psiquiatria' | 'emergencia' | 'simulacao' | 'ambulatorio' | 'clinica' | 'cirurgia' | 'go' | 'pediatria' | 'preventiva';
 
 export type Priority = 'alta' | 'media' | 'baixa';
 
@@ -99,6 +101,9 @@ export interface Mission {
   activities: Activity[];
   notes: string;
   coverAssetId: string | null;
+  theme?: InternatoTheme; // só missões do internato
+  simTask?: 'fazer' | 'corrigir'; // só missões de simulado
+  simuladoId?: string | null; // simulado ligado (opcional): conclui sozinha quando ele é feito/corrigido
 }
 
 export interface Topic {

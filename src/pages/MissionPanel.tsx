@@ -13,13 +13,16 @@ import { EventEditor, type EventDraft } from '../components/EventEditor';
 import { fromMin, toMin } from '../logic/agenda';
 import { play } from '../logic/sound';
 import { useRewards } from '../components/useRewards';
+import { MissionArt } from '../components/MissionArt';
+import { internatoTheme, missionKindLabel } from '../logic/missionTheme';
+import { ThemePicker } from './TrilhaForms';
 
 export function MissionPanel({ missionId, onClose }: { missionId: string | null; onClose: () => void }) {
   const { data } = useStore();
   const m = data.missions.find((x) => x.id === missionId);
   return (
     <Drawer open={!!m} onClose={onClose} label={m?.label ?? 'Missão'}>
-      {m && <PanelBody key={m.id} m={m} onClose={onClose} />}
+      {m && (m.kind === 'simulado' ? <SimMissionBody key={m.id} m={m} onClose={onClose} /> : <PanelBody key={m.id} m={m} onClose={onClose} />)}
     </Drawer>
   );
 }
@@ -76,15 +79,15 @@ function PanelBody({ m, onClose }: { m: Mission; onClose: () => void }) {
 
   return (
     <div className="panel">
-      <header className="panel-head" style={{ background: internato ? 'var(--pessego)' : area.color }}>
+      <header className="panel-head" style={{ background: internato ? internatoTheme(m.theme).color : area.color }}>
         <button className="icon-btn panel-close" onClick={onClose} aria-label="Fechar painel">
           <Icon name="close" />
         </button>
         <div className="panel-art">
-          <Asset slot={internato ? 'trail.station.internato' : `trail.station.${topic?.area ?? 'geral'}`} />
+          <MissionArt m={m} area={topic?.area ?? 'geral'} />
         </div>
         <div className="panel-title">
-          <span className="eyebrow">{internato ? 'Missão especial do internato' : 'Missão Medway'} · {chapter?.title}</span>
+          <span className="eyebrow">{missionKindLabel(m)} · {chapter?.title}</span>
           <LazyInput id="panel-label" className="title-input" value={m.label} ariaLabel="Nome da missão" onCommit={(v) => v.trim() && saveMission({ ...m, label: v.trim() })} />
           <button className="topic-link" onClick={() => topic && ui.openTopic(topic.id)}>
             {topic?.name ?? 'Tema'} · {area.short}
@@ -93,6 +96,12 @@ function PanelBody({ m, onClose }: { m: Mission; onClose: () => void }) {
       </header>
 
       <div className="panel-body">
+        {internato && (
+          <details className="panel-theme">
+            <summary>🎨 Cara da estação: <b>{internatoTheme(m.theme).label}</b></summary>
+            <ThemePicker value={m.theme ?? 'hospital'} onChange={(t) => saveMission({ ...m, theme: t })} />
+          </details>
+        )}
         <section className="panel-summary">
           <ProgressRing pct={prog.pct} size={64} stroke={7} color={prog.complete ? 'var(--salvia-esc)' : 'var(--rosa-medio)'}>
             <span className="ring-num">{prog.done}/{prog.total}</span>
@@ -385,3 +394,67 @@ function SessionEditorForMission({ missionId, topicId, onDone }: { missionId: st
 }
 
 export { SessionEditor };
+
+/** missão de simulado: fazer ou corrigir. Sem horas: só marcar, ou ligar a um simulado e ela conclui sozinha. */
+function SimMissionBody({ m, onClose }: { m: Mission; onClose: () => void }) {
+  const { data, saveMission, deleteMission } = useStore();
+  const ui = useUI();
+  const sim = m.simuladoId ? data.simulados.find((x) => x.id === m.simuladoId) : null;
+  const act = m.activities[0];
+  const done = !!act?.done;
+  const chapter = data.chapters.find((c) => c.id === m.chapterId);
+  const corrigir = m.simTask === 'corrigir';
+  const sims = [...data.simulados].sort((a, b) => b.date.localeCompare(a.date));
+  const setDone = (v: boolean, e?: React.MouseEvent) => {
+    if (!act) return;
+    saveMission({ ...m, activities: m.activities.map((a) => (a.id === act.id ? { ...a, done: v, doneAt: v ? today() : null } : a)) });
+    if (v) {
+      play('check');
+      if (e) burst(e, 'confete', 16);
+      ui.toast(corrigir ? 'Correção na trilha: feita! 🔍✨' : 'Simulado feito! Que orgulho 📝✨');
+    }
+  };
+  return (
+    <div className="panel">
+      <header className="panel-head" style={{ background: 'var(--lilas)' }}>
+        <button className="icon-btn panel-close" onClick={onClose} aria-label="Fechar painel"><Icon name="close" /></button>
+        <div className="panel-art"><MissionArt m={m} area="geral" /></div>
+        <div className="panel-title">
+          <span className="eyebrow">{missionKindLabel(m)} · {chapter?.title}</span>
+          <LazyInput id="panel-label" className="title-input" value={m.label} ariaLabel="Nome da missão" onCommit={(v) => v.trim() && saveMission({ ...m, label: v.trim() })} />
+        </div>
+      </header>
+      <div className="panel-body">
+        <section className={`simm-card ${done ? 'is-done' : ''}`}>
+          <span className="simm-big" aria-hidden="true">{done ? '🏆' : corrigir ? '🔍' : '📝'}</span>
+          <div>
+            <strong>{done ? (corrigir ? 'Correção feita!' : 'Simulado feito!') : corrigir ? 'Corrigir o simulado' : 'Fazer o simulado'}</strong>
+            <p className="muted small">
+              {sim
+                ? corrigir ? (sim.correctionDoneAt ? 'A correção foi finalizada.' : 'Conclui sozinha quando você finalizar a correção.') : 'Ligado ao simulado registrado.'
+                : corrigir ? 'Ligue a um simulado para concluir sozinha ao finalizar a correção.' : 'Quando registrar o simulado, ligue aqui — ou só marque como feito.'}
+            </p>
+          </div>
+          <button className={`btn ${done ? 'btn-quiet' : 'btn-primary'}`} onClick={(e) => setDone(!done, e)}>{done ? 'Desmarcar' : '✓ Marcar como feito'}</button>
+        </section>
+
+        <Field label="Simulado ligado">
+          <select id="simm-link" value={m.simuladoId ?? ''} onChange={(e) => saveMission({ ...m, simuladoId: e.target.value || null })}>
+            <option value="">Nenhum</option>
+            {sims.map((x) => <option key={x.id} value={x.id}>{x.name} · {x.date.split('-').reverse().slice(0, 2).join('/')}</option>)}
+          </select>
+        </Field>
+        <Field label="Tipo">
+          <div className="seg">
+            <button type="button" className={!corrigir ? 'is-on' : ''} onClick={() => saveMission({ ...m, simTask: 'fazer', activities: m.activities.map((a) => ({ ...a, type: 'outro', label: 'Fazer o simulado' })) })}>📝 Fazer</button>
+            <button type="button" className={corrigir ? 'is-on' : ''} onClick={() => saveMission({ ...m, simTask: 'corrigir', activities: m.activities.map((a) => ({ ...a, type: 'correcao', label: 'Corrigir o simulado' })) })}>🔍 Corrigir</button>
+          </div>
+        </Field>
+        <div className="btn-row">
+          <button className="btn btn-secondary" onClick={() => { onClose(); ui.go('simulados'); }}>{corrigir ? 'Ir para a correção' : 'Ir para os simulados'}</button>
+          <ConfirmButton className="btn btn-quiet" label={<><Icon name="trash" size={15} /> Excluir missão</>} question="Excluir esta missão da trilha?" confirmLabel="Excluir" onConfirm={() => { deleteMission(m.id); onClose(); }} />
+        </div>
+      </div>
+    </div>
+  );
+}

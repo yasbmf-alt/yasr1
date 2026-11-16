@@ -14,6 +14,7 @@ import { eventTitle, occurrences } from '../logic/agenda';
 import type { TodoItem } from '../types';
 
 const KEY_OPEN = 'yasr1-todo-open';
+const KEY_POS = 'yasr1-todo-pos';
 // no celular começa escondido (só a abinha), para não cobrir a página
 const readOpen = () => {
   let v: string | null = null;
@@ -91,28 +92,64 @@ export function TodoNote() {
   };
   const allDone = items.length > 0 && pending.length === 0;
 
-  // reserva o canto de cima da página enquanto o post-it está aberto (telas largas)
+  // arrastar pela fitinha/título: a posição fica guardada neste aparelho
+  const W = 262;
+  const clampPos = (p: { x: number; y: number }) => ({
+    x: Math.min(Math.max(8, p.x), window.innerWidth - Math.min(W, window.innerWidth - 16) - 8),
+    y: Math.min(Math.max(8, p.y), window.innerHeight - 120),
+  });
+  const [pos, setPos] = useState(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem(KEY_POS) ?? 'null');
+      if (v && typeof v.x === 'number') return clampPos(v);
+    } catch { /* sem posição guardada */ }
+    const mobile = window.innerWidth <= 860;
+    return clampPos({ x: window.innerWidth - W - (mobile ? 12 : 28), y: mobile ? 70 : 190 });
+  });
+  const [dragging, setDragging] = useState(false);
+  const [landed, setLanded] = useState(0);
   useEffect(() => {
-    document.documentElement.classList.toggle('pit-open', open);
-    return () => document.documentElement.classList.remove('pit-open');
-  }, [open]);
+    const onResize = () => setPos((p) => clampPos(p));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const startDrag = (e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest('button, input')) return;
+    e.preventDefault();
+    const ox = e.clientX - pos.x;
+    const oy = e.clientY - pos.y;
+    let last = pos;
+    setDragging(true);
+    const move = (ev: PointerEvent) => { last = clampPos({ x: ev.clientX - ox, y: ev.clientY - oy }); setPos(last); };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      setDragging(false);
+      setLanded(Date.now());
+      play('pop');
+      try { localStorage.setItem(KEY_POS, JSON.stringify(last)); } catch { /* sem armazenamento */ }
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
 
   return (
-    <div className="pit-wrap">
+    <div className={`pit-wrap ${open ? '' : 'is-tab'}`} style={open ? { left: pos.x, top: pos.y } : { top: pos.y }}>
       <AnimatePresence initial={false} mode="wait">
         {open ? (
           <motion.aside
             key="note"
             className="pit-fly"
             aria-label="Minhas tarefinhas"
-            initial={{ y: -260, rotate: 14, opacity: 0 }}
-            animate={{ y: 0, rotate: 0, opacity: 1 }}
-            exit={{ y: -260, rotate: -10, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 260, damping: 17 }}
+            initial={{ scale: 1.6, rotate: -18, opacity: 0, y: -30 }}
+            animate={{ scale: 1, rotate: 0, opacity: 1, y: 0 }}
+            exit={{ scale: 0.4, rotate: 25, opacity: 0, x: 120, y: -60 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 15 }}
           >
-            <div className={`pit ${allDone ? 'is-all-done' : ''}`}>
-              <span className="pit-tape" aria-hidden="true" />
-              <header className="pit-head">
+            <div className={`pit ${allDone ? 'is-all-done' : ''} ${dragging ? 'is-dragging' : ''}`} key={landed} data-landed={landed ? '1' : undefined}>
+              <span className="pit-tape" aria-hidden="true" onPointerDown={startDrag} />
+              <header className="pit-head" onPointerDown={startDrag} title="Arraste para mudar de lugar">
                 <h2>Tarefinhas <span className="pit-heart" aria-hidden="true">♡</span></h2>
                 <button className="pit-hide" onClick={() => setOpenP(false)} aria-label="Esconder o post-it" title="Esconder">
                   <Icon name="chevronR" size={18} />

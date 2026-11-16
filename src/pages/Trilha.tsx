@@ -6,6 +6,8 @@ import { useStore } from '../data/store';
 import { useUI, ProgressRing, ConfirmButton } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { Asset } from '../assets/registry';
+import { MissionArt } from '../components/MissionArt';
+import { internatoTheme } from '../logic/missionTheme';
 import { MissionPanel } from './MissionPanel';
 import { ChapterEditor, NewMission } from './TrilhaForms';
 import { areaOf, type Chapter, type Mission, type Note, type NoteColor } from '../types';
@@ -212,12 +214,16 @@ function ChapterTabs({ chapters, active, onPick, onNew }: { chapters: Chapter[];
         const p = chapterProgress(c, data.missions);
         const th = chapterTheme(c.number);
         const isNow = c.startDate <= t && c.endDate >= t;
+        // capítulo que já passou com missões em aberto: avisinho pulando
+        const left = p.missions - p.done;
+        const late = c.endDate < t && left > 0;
         return (
           <button
             key={c.id}
             role="tab"
             aria-selected={active === c.id}
-            className={`ch-tab ${active === c.id ? 'is-active' : ''}`}
+            title={late ? `Faltam ${left} miss${left > 1 ? 'ões' : 'ão'} deste capítulo` : undefined}
+            className={`ch-tab ${active === c.id ? 'is-active' : ''} ${late ? 'is-late' : ''}`}
             style={{ ['--tab' as string]: th.tab }}
             onClick={() => onPick(c.id)}
           >
@@ -225,6 +231,8 @@ function ChapterTabs({ chapters, active, onPick, onNew }: { chapters: Chapter[];
             <span className="ch-tab-d">{fmtRange(c.startDate, c.endDate)}</span>
             <span className="ch-tab-bar"><span style={{ width: `${p.pct * 100}%` }} /></span>
             {isNow && <span className="ch-now">esta semana</span>}
+            {late && <span className="ch-late" aria-label={`faltam ${left}`}><b>!</b></span>}
+            {late && <span className="ch-late-txt">faltam {left}</span>}
           </button>
         );
       })}
@@ -549,11 +557,15 @@ function Station({ m, x, y, current, index, onOpen }: { m: Mission; x: number; y
   const topic = data.topics.find((t) => t.id === m.topicId);
   const p = missionProgress(m);
   const internato = m.kind === 'internato';
+  const simu = m.kind === 'simulado';
+  const special = internato || simu;
   const area = areaOf(topic?.area ?? 'geral');
+  const th = internatoTheme(m.theme);
+  const ring = simu ? 'var(--lilas)' : internato ? th.color : area.color;
   return (
     <motion.div
-      className={`station ${internato ? 'station-special' : ''} ${p.complete ? 'is-done' : ''} ${current ? 'is-current' : ''}`}
-      style={{ left: `${x}%`, top: y, x: '-50%', y: internato ? -62 : -56 }}
+      className={`station ${special ? 'station-special' : ''} ${simu ? 'station-sim' : ''} ${p.complete ? 'is-done' : ''} ${current ? 'is-current' : ''}`}
+      style={{ left: `${x}%`, top: y, x: '-50%', y: special ? -62 : -56 }}
       initial={{ scale: 0.4, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       transition={{ delay: 0.06 * index, type: 'spring', stiffness: 300, damping: 18 }}
@@ -571,12 +583,12 @@ function Station({ m, x, y, current, index, onOpen }: { m: Mission; x: number; y
         }}
         whileHover={{ scale: 1.07, y: -3, rotate: index % 2 ? 2 : -2 }}
         whileTap={{ scale: 0.94, y: 2 }}
-        style={{ ['--area' as string]: internato ? 'var(--pessego)' : area.color }}
-        aria-label={`${m.label}. ${p.done} de ${p.total} atividades.${internato ? ' Missão especial do internato.' : ''}`}
+        style={{ ['--area' as string]: ring }}
+        aria-label={`${m.label}. ${p.done} de ${p.total} atividades.${internato ? ` Missão do internato (${th.label}).` : simu ? ' Missão de simulado.' : ''}`}
       >
-        <ProgressRing pct={p.pct} size={internato ? 124 : 112} stroke={8} color={p.complete ? 'var(--salvia-esc)' : 'var(--rosa-medio)'} track="rgba(255,255,255,.8)">
+        <ProgressRing pct={p.pct} size={special ? 124 : 112} stroke={8} color={p.complete ? 'var(--salvia-esc)' : 'var(--rosa-medio)'} track="rgba(255,255,255,.8)">
           <span className="station-face">
-            <Asset slot={internato ? 'trail.station.internato' : `trail.station.${topic?.area ?? 'geral'}`} />
+            <MissionArt m={m} area={topic?.area ?? 'geral'} />
           </span>
         </ProgressRing>
         {p.complete && (
@@ -584,7 +596,8 @@ function Station({ m, x, y, current, index, onOpen }: { m: Mission; x: number; y
             <Icon name="check" size={16} />
           </motion.span>
         )}
-        {internato && <span className="station-ribbon"><Icon name="star" size={12} /> Internato</span>}
+        {internato && <span className="station-ribbon"><Icon name="star" size={12} /> {th.id === 'hospital' ? 'Internato' : th.label}</span>}
+        {simu && <span className="station-ribbon station-ribbon-sim">{m.simTask === 'corrigir' ? '🔍 Correção' : '📝 Simulado'}</span>}
       </motion.button>
       <div className="station-label">
         <span className="station-name">{m.label}</span>

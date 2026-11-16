@@ -67,14 +67,14 @@ export function Biblioteca() {
           const pending = occ.some((o) => (o.group.status ?? 'nao') !== 'corrigido') || (!!st.nextReview && st.sessions.length > 0 && st.nextReview <= t0);
           // trilha: tema de missão só entra quando uma missão dele é concluída (missão só programada não conta);
           // tema fora das missões entra no primeiro registro de estudo. Simulados: apareceu nos erros de um simulado.
-          const ms = data.missions.filter((m) => m.topicId === t.id);
+          const ms = data.missions.filter((m) => m.topicId === t.id && m.kind !== 'simulado');
           // sem missão: só vira livro com estudo de verdade registrado (aula, questões, leitura…). Mapa,
           // flashcards ou correção de simulado sozinhos não criam livro (ex.: tema que só apareceu num simulado).
           const studied = st.sessions.some((x) => x.type !== 'flashcards' && x.type !== 'correcao');
           const inTrail = ms.length ? ms.some((m) => missionProgress(m).complete) : studied;
           const done = ms.filter((m) => missionProgress(m).complete);
           // estudo avulso (sem missão) fica junto com a Medway
-          const kinds = [...new Set(done.length ? done.map((m) => m.kind ?? 'medway') : ['medway' as const])];
+          const kinds = [...new Set(done.length ? done.map((m) => (m.kind === 'internato' ? 'internato' as const : 'medway' as const)) : ['medway' as const])];
           return { t, st, first, inSims: occ.length > 0, inTrail, pending, kinds };
         })
         .filter((b) => b.inTrail) // erros de simulado ficam na Correção de Simulados, não viram livro
