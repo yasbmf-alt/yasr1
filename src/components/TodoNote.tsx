@@ -104,7 +104,7 @@ export function TodoNote() {
       if (v && typeof v.x === 'number') return clampPos(v);
     } catch { /* sem posição guardada */ }
     const mobile = window.innerWidth <= 860;
-    return clampPos({ x: window.innerWidth - W - (mobile ? 12 : 28), y: mobile ? 70 : 190 });
+    return clampPos({ x: window.innerWidth - W - (mobile ? 12 : 28), y: mobile ? 70 : 400 });
   });
   const [dragging, setDragging] = useState(false);
   const [landed, setLanded] = useState(0);
@@ -161,7 +161,8 @@ export function TodoNote() {
                   {[...pending, ...doneToday].map((t) => (
                     <motion.li
                       key={t.id}
-                      layout
+                      layout="position"
+                      layoutDependency={`${pending.map((x) => x.id).join()}|${doneToday.length}`}
                       className={t.done ? 'is-done' : ''}
                       initial={{ opacity: 0, scale: 0.6, rotate: -6 }}
                       animate={{ opacity: 1, scale: 1, rotate: 0 }}
