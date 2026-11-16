@@ -75,6 +75,7 @@ export interface Chapter {
   title: string;
   startDate: string; // YYYY-MM-DD
   endDate: string; // YYYY-MM-DD
+  kind?: 'normal' | 'prova'; // prova = capítulo especial (modo jogo)
 }
 
 export interface Activity {
@@ -237,13 +238,14 @@ export interface Settings {
   examRuns?: ExamRun[]; // modo prova (maratonas de estudo em semana de prova)
 }
 
-export type ExamStepKind = 'tema' | 'flashcards' | 'questoes' | 'prova' | 'correcao' | 'revisao' | 'pausa' | 'outro';
+export type ExamStepKind = 'tema' | 'flashcards' | 'questoes' | 'prova' | 'correcao' | 'revisao' | 'pausa' | 'premio' | 'bonus' | 'outro';
 export interface ExamStep {
   id: string;
   day: string; // YYYY-MM-DD
   kind: ExamStepKind;
   label: string;
   topicId?: string | null;
+  time?: string | null; // HH:MM do bloco
   done: boolean;
   doneAt?: string | null; // ISO
 }
@@ -255,6 +257,9 @@ export interface ExamRun {
   steps: ExamStep[];
   createdAt: string;
   finishedAt?: string | null;
+  chapterId?: string | null; // capítulo especial da trilha
+  examDate?: string | null; // dia da prova (contagem regressiva)
+  rules?: string[]; // regras do jogo (do plano importado ou escritas)
 }
 
 export interface TodoItem {

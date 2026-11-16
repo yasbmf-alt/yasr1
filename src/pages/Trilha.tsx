@@ -7,7 +7,7 @@ import { useUI, ProgressRing, ConfirmButton } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { Asset } from '../assets/registry';
 import { MissionArt } from '../components/MissionArt';
-import { ExamBanner } from './ExamMode';
+import { ExamChapter, examProgress, runOfChapter } from './ExamMode';
 import { internatoTheme } from '../logic/missionTheme';
 import { MissionPanel } from './MissionPanel';
 import { ChapterEditor, NewMission } from './TrilhaForms';
@@ -39,10 +39,11 @@ export const chapterTheme = (n: number) => THEMES[(Math.max(1, n) - 1) % THEMES.
 
 export function Trilha() {
   const { data } = useStore();
-  const chapters = useMemo(() => [...data.chapters].sort((a, b) => a.number - b.number), [data.chapters]);
+  // por data (o capítulo especial entra no meio, nos dias dele); empate pelo número
+  const chapters = useMemo(() => [...data.chapters].sort((a, b) => a.startDate.localeCompare(b.startDate) || a.number - b.number), [data.chapters]);
   const [chId, setChId] = useState<string | null>(() => currentChapter(data.chapters)?.id ?? null);
   const [openMission, setOpenMission] = useState<string | null>(null);
-  const [editCh, setEditCh] = useState<Chapter | 'new' | null>(null);
+  const [editCh, setEditCh] = useState<Chapter | 'new' | 'new-prova' | null>(null);
   const [newMission, setNewMission] = useState(false);
   const chapter = chapters.find((c) => c.id === chId) ?? currentChapter(chapters) ?? null;
   // direção da transição entre capítulos (avança → entra pela direita)
@@ -59,6 +60,21 @@ export function Trilha() {
 
   const ui = useUI();
   const season = useHomeSeason();
+  // maratonas criadas antes (fora da trilha) viram capítulos especiais
+  const { saveChapter, saveSettings } = useStore();
+  useEffect(() => {
+    const orphans = (data.settings.examRuns ?? []).filter((r) => !r.chapterId);
+    if (!orphans.length) return;
+    let n = data.chapters.reduce((a, c) => Math.max(a, c.number), 0);
+    const runs = (data.settings.examRuns ?? []).map((r) => {
+      if (r.chapterId) return r;
+      const id = uid();
+      saveChapter({ id, number: ++n, title: r.title, startDate: r.startDate, endDate: r.endDate, kind: 'prova' });
+      return { ...r, chapterId: id };
+    });
+    saveSettings({ examRuns: runs });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.settings.examRuns]);
   useEffect(() => {
     if (!ui.pendingMission) return;
     const m = data.missions.find((x) => x.id === ui.pendingMission);
@@ -81,7 +97,6 @@ export function Trilha() {
         </div>
       ) : (
         <>
-          <ExamBanner />
           <ChapterTabs chapters={chapters} active={chapter?.id ?? null} onPick={setChId} onNew={() => setEditCh('new')} />
           <AnimatePresence mode="wait" initial={false} custom={dir.current}>
             {chapter && (
@@ -98,12 +113,17 @@ export function Trilha() {
                 exit="leave"
                 transition={{ duration: 0.24, ease: [0.3, 0.7, 0.2, 1] }}
               >
-                <Board
-                  chapter={chapter}
-                  onOpen={(id) => { play('pop'); setOpenMission(id); }}
-                  onEdit={() => setEditCh(chapter)}
-                  onNewMission={() => setNewMission(true)}
-                />
+                {chapter.kind === 'prova' ? (
+                  <ExamChapter chapter={chapter} onEditChapter={() => setEditCh(chapter)} />
+                ) : (
+                  <Board
+                    chapter={chapter}
+                    onOpen={(id) => { play('pop'); setOpenMission(id); }}
+                    onEdit={() => setEditCh(chapter)}
+                    onNewMission={() => setNewMission(true)}
+                    onNewSpecial={() => setEditCh('new-prova')}
+                  />
+                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -213,7 +233,10 @@ function ChapterTabs({ chapters, active, onPick, onNew }: { chapters: Chapter[];
   return (
     <div className="ch-tabs" role="tablist" aria-label="Capítulos">
       {chapters.map((c) => {
-        const p = chapterProgress(c, data.missions);
+        const special = c.kind === 'prova';
+        const p0 = chapterProgress(c, data.missions);
+        const ep = special ? examProgress(runOfChapter(data.settings.examRuns, c.id)) : null;
+        const p = ep ? { ...p0, missions: ep.total, done: ep.done, complete: ep.complete, pct: ep.pct } : p0;
         const th = chapterTheme(c.number);
         const isNow = c.startDate <= t && c.endDate >= t;
         // capítulo que já passou com missões em aberto: avisinho pulando
@@ -225,11 +248,12 @@ function ChapterTabs({ chapters, active, onPick, onNew }: { chapters: Chapter[];
             role="tab"
             aria-selected={active === c.id}
             title={late ? `Faltam ${left} miss${left > 1 ? 'ões' : 'ão'} deste capítulo` : undefined}
-            className={`ch-tab ${active === c.id ? 'is-active' : ''} ${late ? 'is-late' : ''}`}
+            className={`ch-tab ${active === c.id ? 'is-active' : ''} ${late ? 'is-late' : ''} ${special ? 'ch-tab-special' : ''}`}
             style={{ ['--tab' as string]: th.tab }}
             onClick={() => onPick(c.id)}
           >
-            <span className="ch-tab-n">Cap. {c.number}{p.complete && <Icon name="check" size={14} />}</span>
+            {special && <span className="ch-tab-glint" aria-hidden="true" />}
+            <span className="ch-tab-n">{special ? '🎮 Especial' : `Cap. ${c.number}`}{p.complete && <Icon name="check" size={14} />}</span>
             <span className="ch-tab-d">{fmtRange(c.startDate, c.endDate)}</span>
             <span className="ch-tab-bar"><span style={{ width: `${p.pct * 100}%` }} /></span>
             {isNow && <span className="ch-now">esta semana</span>}
@@ -249,7 +273,7 @@ function ChapterTabs({ chapters, active, onPick, onNew }: { chapters: Chapter[];
 
 const xAt = sceneXAt;
 
-function Board({ chapter, onOpen, onEdit, onNewMission }: { chapter: Chapter; onOpen: (id: string) => void; onEdit: () => void; onNewMission: () => void }) {
+function Board({ chapter, onOpen, onEdit, onNewMission, onNewSpecial }: { chapter: Chapter; onOpen: (id: string) => void; onEdit: () => void; onNewMission: () => void; onNewSpecial: () => void }) {
   const { data, saveNote } = useStore();
   const ui = useUI();
   const ambient = useAmbient();
@@ -346,6 +370,7 @@ function Board({ chapter, onOpen, onEdit, onNewMission }: { chapter: Chapter; on
         <div className="btn-row">
           <button className="btn btn-quiet btn-sm" onClick={onEdit}><Icon name="edit" size={16} /> Editar</button>
           <button className="btn btn-quiet btn-sm" onClick={onNewMission}><Icon name="plus" size={16} /> Missão</button>
+          <button className="btn btn-special btn-sm" onClick={onNewSpecial} title="Novo capítulo especial (modo prova)">🎮 Especial</button>
           <button className="btn btn-note btn-sm" onClick={addNote}><Icon name="note" size={16} /> Post-it</button>
         </div>
       </div>

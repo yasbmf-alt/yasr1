@@ -47,7 +47,8 @@ export function currentChapter(chapters: Chapter[]): Chapter | null {
   if (!chapters.length) return null;
   const t = today();
   const sorted = [...chapters].sort((a, b) => a.startDate.localeCompare(b.startDate));
-  const inside = sorted.find((c) => c.startDate <= t && c.endDate >= t);
+  // nos dias de um capítulo especial (modo prova), ele vem na frente da semana normal
+  const inside = sorted.find((c) => c.kind === 'prova' && c.startDate <= t && c.endDate >= t) ?? sorted.find((c) => c.startDate <= t && c.endDate >= t);
   if (inside) return inside;
   const next = sorted.find((c) => c.startDate > t);
   return next ?? sorted[sorted.length - 1];

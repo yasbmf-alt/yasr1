@@ -11,14 +11,21 @@ import { addDays, today, uid } from '../logic/dates';
 
 // ── Edição de capítulo ────────────────────────────────────────
 
-export function ChapterEditor({ value, onClose, onSaved }: { value: Chapter | 'new' | null; onClose: () => void; onSaved: (id: string) => void }) {
-  const { data, saveChapter, deleteChapter } = useStore();
-  const isNew = value === 'new';
+export function ChapterEditor({ value, onClose, onSaved }: { value: Chapter | 'new' | 'new-prova' | null; onClose: () => void; onSaved: (id: string) => void }) {
+  const { data, saveChapter, deleteChapter, saveSettings } = useStore();
+  const isNew = value === 'new' || value === 'new-prova';
   const base: Chapter | null = useMemo(() => {
     if (!value) return null;
-    if (value !== 'new') return value;
+    if (value !== 'new' && value !== 'new-prova') return value;
     const last = [...data.chapters].sort((a, b) => b.number - a.number)[0];
     const n = (last?.number ?? 0) + 1;
+    if (value === 'new-prova') {
+      // especial: fim de semana que vem (ou hoje e amanhã se já for fim de semana)
+      const d = new Date();
+      const toSat = (6 - d.getDay() + 7) % 7;
+      const start = d.getDay() === 0 ? today() : addDays(today(), toSat);
+      return { id: uid(), number: n, title: 'Maratona da prova', startDate: start, endDate: d.getDay() === 0 ? start : addDays(start, 1), kind: 'prova' };
+    }
     const start = last ? addDays(last.endDate, 1) : today();
     return { id: uid(), number: n, title: `Semana ${n}`, startDate: start, endDate: addDays(start, 6) };
   }, [value, data.chapters]);
@@ -26,7 +33,7 @@ export function ChapterEditor({ value, onClose, onSaved }: { value: Chapter | 'n
   useEffect(() => setDraft(base), [base]);
 
   return (
-    <Modal open={!!value} onClose={onClose} title={isNew ? 'Novo capítulo' : 'Editar capítulo'}>
+    <Modal open={!!value} onClose={onClose} title={draft?.kind === 'prova' ? (isNew ? '🎮 Novo capítulo especial' : '🎮 Capítulo especial') : isNew ? 'Novo capítulo' : 'Editar capítulo'}>
       {draft && (
         <form
           className="form"
@@ -38,6 +45,16 @@ export function ChapterEditor({ value, onClose, onSaved }: { value: Chapter | 'n
             onClose();
           }}
         >
+          {isNew && (
+            <div className="ch-kind-pick" role="radiogroup" aria-label="Tipo de capítulo">
+              <button type="button" role="radio" aria-checked={draft.kind !== 'prova'} className={draft.kind !== 'prova' ? 'is-on' : ''} onClick={() => setDraft({ ...draft, kind: 'normal', title: draft.title === 'Maratona da prova' ? `Semana ${draft.number}` : draft.title })}>
+                <span aria-hidden="true">🗺️</span><b>Semana normal</b><small>trilha com missões</small>
+              </button>
+              <button type="button" role="radio" aria-checked={draft.kind === 'prova'} className={`is-special ${draft.kind === 'prova' ? 'is-on' : ''}`} onClick={() => setDraft({ ...draft, kind: 'prova', title: /^Semana \d+$/.test(draft.title) ? 'Maratona da prova' : draft.title })}>
+                <span aria-hidden="true">🎮</span><b>Especial · modo prova</b><small>dias de maratona em jogo, com prêmios</small>
+              </button>
+            </div>
+          )}
           <div className="register-grid">
             <Field label="Número">
               <input id="ch-n" type="number" min={1} value={draft.number} onChange={(e) => setDraft({ ...draft, number: Number(e.target.value) || 1 })} />
@@ -57,9 +74,13 @@ export function ChapterEditor({ value, onClose, onSaved }: { value: Chapter | 'n
             {!isNew ? (
               <ConfirmButton
                 label={<><Icon name="trash" size={16} /> Excluir capítulo</>}
-                question="Excluir o capítulo e as missões dele? Os registros ficam."
+                question={draft.kind === 'prova' ? 'Excluir o capítulo especial e o jogo dele?' : 'Excluir o capítulo e as missões dele? Os registros ficam.'}
                 confirmLabel="Excluir"
-                onConfirm={() => { deleteChapter(draft.id); onClose(); }}
+                onConfirm={() => {
+                  if (draft.kind === 'prova') saveSettings({ examRuns: (data.settings.examRuns ?? []).filter((r) => r.chapterId !== draft.id) });
+                  deleteChapter(draft.id);
+                  onClose();
+                }}
               />
             ) : <span />}
             <div className="btn-row">

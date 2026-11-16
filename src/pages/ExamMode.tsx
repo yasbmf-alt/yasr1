@@ -1,17 +1,19 @@
-// Modo prova: a semana/os dias de prova viram um jogo. Cada dia é uma fase,
-// cada etapa (tema, flashcards, questões, simulado/prova, correção, pausa) é
-// uma casinha do caminho, e a prova é o chefão no fim. Marcar etapas dá XP,
-// combo do dia e uma "vibe" que vai esquentando (sem fogo: brilho, raio, arco-íris).
+// Capítulo especial (modo prova): os dias de prova viram um jogo dentro da
+// trilha. Cada dia é uma fase, cada bloco (tema, questões, flashcards, revisão,
+// prova, correção, pausa, prêmio, bônus) é uma casinha com horário. A prova é o
+// chefão; prêmios abrem quando os blocos antes deles acabam; bônus são extras.
+// O plano pode vir pronto de um texto (feito em outro chat) — ele dita as regras.
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useStore } from '../data/store';
-import { Field, Modal, ConfirmButton, useUI, type Page } from '../components/ui';
+import { Field, Modal, useUI, type Page } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { addDays, diffDays, fromKey, today, uid, DIAS_CURTOS } from '../logic/dates';
 import { burst } from '../logic/fx';
 import { play } from '../logic/sound';
-import type { ExamRun, ExamStep, ExamStepKind } from '../types';
+import { parsePlan, PLAN_PROMPT, type ParsedPlan } from '../logic/examPlan';
+import type { Chapter, ExamRun, ExamStep, ExamStepKind } from '../types';
 
 export const STEP_KINDS: { id: ExamStepKind; label: string; emoji: string; xp: number; color: string; page?: Page }[] = [
   { id: 'tema', label: 'Tema', emoji: '📚', xp: 30, color: 'var(--azul-claro)' },
@@ -21,11 +23,13 @@ export const STEP_KINDS: { id: ExamStepKind; label: string; emoji: string; xp: n
   { id: 'prova', label: 'Prova / simulado', emoji: '👑', xp: 100, color: 'var(--manteiga)', page: 'simulados' },
   { id: 'correcao', label: 'Correção', emoji: '🔍', xp: 40, color: 'var(--lilas)', page: 'simulados' },
   { id: 'pausa', label: 'Pausa', emoji: '🧃', xp: 5, color: '#FFE6D6' },
+  { id: 'premio', label: 'Prêmio', emoji: '🎁', xp: 0, color: 'var(--manteiga)' },
+  { id: 'bonus', label: 'Bônus', emoji: '🌟', xp: 50, color: 'var(--lima)' },
   { id: 'outro', label: 'Outro', emoji: '⭐', xp: 15, color: 'var(--surface-2)' },
 ];
-const kindOf = (k: ExamStepKind) => STEP_KINDS.find((x) => x.id === k) ?? STEP_KINDS[STEP_KINDS.length - 1];
+export const kindOf = (k: ExamStepKind) => STEP_KINDS.find((x) => x.id === k) ?? STEP_KINDS[STEP_KINDS.length - 1];
 
-// a vibe esquenta com o combo do dia (etapas feitas hoje)
+// a vibe esquenta com o combo do dia (blocos feitos hoje)
 const HYPE = [
   { min: 0, name: 'Aquecendo', emoji: '🎧', line: 'bora começar, uma casinha de cada vez' },
   { min: 1, name: 'Embalada', emoji: '✨', line: 'primeira já foi, o resto vem!' },
@@ -46,130 +50,116 @@ const fmtDay = (k: string) => {
   return `${DIAS_CURTOS[d.getDay()]} ${d.getDate()}/${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
 const xpOf = (steps: ExamStep[]) => steps.filter((s) => s.done).reduce((a, s) => a + kindOf(s.kind).xp, 0);
+/** casinhas que contam para zerar (bônus é extra) */
+const counted = (steps: ExamStep[]) => steps.filter((s) => s.kind !== 'bonus');
 
-/** maratona ativa (ou a próxima até 14 dias) */
-export function activeRun(runs: ExamRun[] | undefined) {
-  const t = today();
-  return (runs ?? []).filter((r) => r.endDate >= t && r.startDate <= addDays(t, 14) && !r.finishedAt).sort((a, b) => a.startDate.localeCompare(b.startDate))[0] ?? null;
+/** progresso do capítulo especial (para a aba da trilha) */
+export function examProgress(run: ExamRun | undefined) {
+  const c = counted(run?.steps ?? []);
+  const done = c.filter((s) => s.done).length;
+  return { total: c.length, done, pct: c.length ? done / c.length : 0, complete: c.length > 0 && done === c.length };
 }
+export const runOfChapter = (runs: ExamRun[] | undefined, chapterId: string) => (runs ?? []).find((r) => r.chapterId === chapterId);
 
-// ── Faixa na Minha Trilha ──────────────────────────────────────
+/** prêmio fica trancado até os blocos antes dele (no mesmo dia) acabarem */
+const isLocked = (run: ExamRun, s: ExamStep) => {
+  if (s.kind !== 'premio' || s.done) return false;
+  const sameDay = run.steps.filter((x) => x.day === s.day);
+  const before = sameDay.slice(0, sameDay.findIndex((x) => x.id === s.id));
+  return before.some((x) => !x.done && x.kind !== 'bonus' && x.kind !== 'premio');
+};
 
-export function ExamBanner() {
-  const { data } = useStore();
-  const [arena, setArena] = useState<string | null>(null);
-  const [setup, setSetup] = useState<ExamRun | 'new' | null>(null);
-  const run = activeRun(data.settings.examRuns);
-  const t = today();
+// ── Capítulo especial na trilha ────────────────────────────────
 
-  if (!run)
-    return (
-      <>
-        <button className="ex-cta" onClick={() => setSetup('new')}>
-          <span className="ex-cta-pad" aria-hidden="true">🎮</span> Semana de prova? <b>Ligar o modo jogo</b>
-        </button>
-        <ExamSetup value={setup} onClose={() => setSetup(null)} onSaved={(id) => setArena(id)} />
-        {arena && <ExamArena runId={arena} onClose={() => setArena(null)} onEdit={(r) => setSetup(r)} />}
-      </>
-    );
+export function ExamChapter({ chapter, onEditChapter }: { chapter: Chapter; onEditChapter: () => void }) {
+  const { data, saveSettings } = useStore();
+  const run = runOfChapter(data.settings.examRuns, chapter.id);
+  const [setup, setSetup] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [full, setFull] = useState(false);
 
-  const total = run.steps.length;
-  const done = run.steps.filter((s) => s.done).length;
-  const live = run.startDate <= t;
-  const until = diffDays(run.startDate, t);
-  const todayDone = run.steps.filter((s) => s.done && s.doneAt?.slice(0, 10) === t).length;
-  const h = hypeOf(todayDone);
+  // todo capítulo especial tem a sua maratona (cria vazia se faltar) e segue as datas do capítulo
+  useEffect(() => {
+    const runs = data.settings.examRuns ?? [];
+    if (!run) {
+      saveSettings({ examRuns: [...runs, { id: uid(), chapterId: chapter.id, title: chapter.title, startDate: chapter.startDate, endDate: chapter.endDate, steps: [], createdAt: new Date().toISOString() }] });
+    } else if (run.startDate !== chapter.startDate || run.endDate !== chapter.endDate || run.title !== chapter.title) {
+      saveSettings({ examRuns: runs.map((r) => (r.id === run.id ? { ...r, title: chapter.title, startDate: chapter.startDate, endDate: chapter.endDate } : r)) });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chapter.id, chapter.startDate, chapter.endDate, chapter.title, !!run]);
+
+  if (!run) return null;
+  const arena = (
+    <Arena
+      run={run}
+      chapter={chapter}
+      full={full}
+      onFull={() => setFull(!full)}
+      onSetup={() => setSetup(true)}
+      onImport={() => setImporting(true)}
+      onEditChapter={onEditChapter}
+    />
+  );
   return (
     <>
-      <motion.button
-        className={`ex-banner hype-${hypeIdx(todayDone)} ${live ? 'is-live' : ''}`}
-        onClick={() => { play('ignite'); setArena(run.id); }}
-        initial={{ opacity: 0, y: -10, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        whileHover={{ scale: 1.015, rotate: -0.4 }}
-        whileTap={{ scale: 0.98 }}
-      >
-        <span className="ex-banner-shine" aria-hidden="true" />
-        <span className="ex-banner-ico" aria-hidden="true">🎮</span>
-        <span className="ex-banner-txt">
-          <span className="ex-banner-k">{live ? 'GAME ON · modo prova' : until === 1 ? 'amanhã começa!' : `começa em ${until} dias`}</span>
-          <strong>{run.title}</strong>
-          <span className="ex-banner-sub">{done}/{total} casinhas · {xpOf(run.steps)} XP{live ? ` · ${h.emoji} ${h.name}` : ''}</span>
-        </span>
-        <span className="ex-banner-go">{live ? 'JOGAR' : 'VER'} <Icon name="chevronR" size={16} /></span>
-      </motion.button>
-      {arena && <ExamArena runId={arena} onClose={() => setArena(null)} onEdit={(r) => setSetup(r)} />}
-      <ExamSetup value={setup} onClose={() => setSetup(null)} onSaved={(id) => setArena(id)} />
+      {full ? createPortal(<div className="ex-full">{arena}</div>, document.body) : arena}
+      <ExamSetup run={run} open={setup} onClose={() => setSetup(false)} />
+      <ExamImport run={run} chapter={chapter} open={importing} onClose={() => setImporting(false)} />
     </>
   );
 }
 
-// ── Montar a maratona ─────────────────────────────────────────
+// ── Montar as fases à mão ──────────────────────────────────────
 
-const QUICK: ExamStepKind[] = ['tema', 'questoes', 'flashcards', 'revisao', 'prova', 'correcao', 'pausa'];
+const QUICK: ExamStepKind[] = ['tema', 'questoes', 'flashcards', 'revisao', 'prova', 'correcao', 'pausa', 'premio', 'bonus'];
 
-function ExamSetup({ value, onClose, onSaved }: { value: ExamRun | 'new' | null; onClose: () => void; onSaved: (id: string) => void }) {
+function ExamSetup({ run, open, onClose }: { run: ExamRun; open: boolean; onClose: () => void }) {
   const { data, saveSettings } = useStore();
-  const base = useMemo<ExamRun | null>(() => {
-    if (!value) return null;
-    if (value !== 'new') return value;
-    const s = today();
-    return { id: uid(), title: 'Maratona da prova', startDate: s, endDate: addDays(s, 1), steps: [], createdAt: new Date().toISOString() };
-  }, [value]);
-  const [draft, setDraft] = useState<ExamRun | null>(base);
-  const [day, setDay] = useState('');
+  const [draft, setDraft] = useState<ExamRun>(run);
+  const [day, setDay] = useState(run.startDate);
   const [text, setText] = useState('');
+  const [time, setTime] = useState('');
   const [kind, setKind] = useState<ExamStepKind>('tema');
-  useEffect(() => { setDraft(base); setDay(base?.startDate ?? ''); setText(''); setKind('tema'); }, [base]);
-  if (!draft) return null;
+  const [rules, setRules] = useState('');
+  useEffect(() => {
+    if (open) { setDraft(run); setDay(run.startDate); setText(''); setTime(''); setKind('tema'); setRules((run.rules ?? []).join('\n')); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
   const days = dayList(draft.startDate, draft.endDate);
   const curDay = days.includes(day) ? day : days[0];
   const topicByName = (n: string) => data.topics.find((t) => t.name.toLowerCase() === n.trim().toLowerCase());
 
-  const addStep = (k: ExamStepKind = kind, label = text) => {
-    const v = label.trim() || kindOf(k).label;
-    const tp = k === 'tema' ? topicByName(v) : undefined;
-    setDraft({ ...draft, steps: [...draft.steps, { id: uid(), day: curDay, kind: k, label: v, topicId: tp?.id ?? null, done: false }] });
+  const addStep = () => {
+    const v = text.trim() || kindOf(kind).label;
+    const tp = kind === 'tema' ? topicByName(v) : undefined;
+    setDraft({ ...draft, steps: [...draft.steps, { id: uid(), day: curDay, kind, label: v, time: time || null, topicId: tp?.id ?? null, done: false }] });
     setText('');
     play('pop');
   };
   const move = (id: string, dir: -1 | 1) => {
     const list = [...draft.steps];
     const i = list.findIndex((s) => s.id === id);
-    const j = i + dir;
+    // anda só entre as casinhas do mesmo dia
+    let j = i + dir;
+    while (j >= 0 && j < list.length && list[j].day !== list[i].day) j += dir;
     if (j < 0 || j >= list.length) return;
     [list[i], list[j]] = [list[j], list[i]];
     setDraft({ ...draft, steps: list });
   };
   const save = () => {
-    const runs = data.settings.examRuns ?? [];
-    // etapas fora das datas novas vão para o último dia
-    const steps = draft.steps.map((s) => (days.includes(s.day) ? s : { ...s, day: s.day < draft.startDate ? draft.startDate : draft.endDate }));
-    const next = { ...draft, steps };
-    saveSettings({ examRuns: runs.some((r) => r.id === next.id) ? runs.map((r) => (r.id === next.id ? next : r)) : [...runs, next] });
-    onSaved(next.id);
+    const next = { ...draft, rules: rules.split('\n').map((x) => x.trim()).filter(Boolean) };
+    saveSettings({ examRuns: (data.settings.examRuns ?? []).map((r) => (r.id === next.id ? next : r)) });
     onClose();
   };
-  const del = () => {
-    saveSettings({ examRuns: (data.settings.examRuns ?? []).filter((r) => r.id !== draft.id) });
-    onClose();
-  };
+  const daySteps = draft.steps.filter((s) => s.day === curDay);
 
   return (
-    <Modal open={!!value} onClose={onClose} title={value === 'new' ? '🎮 Novo modo prova' : '🎮 Editar modo prova'} wide>
+    <Modal open={open} onClose={onClose} title="🎮 Montar as fases" wide>
       <form className="form ex-setup" onSubmit={(e) => { e.preventDefault(); save(); }}>
-        <div className="register-grid">
-          <Field label="Nome da maratona">
-            <input id="ex-title" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} required />
-          </Field>
-          <Field label="Começa">
-            <input id="ex-s" type="date" value={draft.startDate} onChange={(e) => setDraft({ ...draft, startDate: e.target.value, endDate: e.target.value > draft.endDate ? e.target.value : draft.endDate })} required />
-          </Field>
-          <Field label="Termina">
-            <input id="ex-e" type="date" value={draft.endDate} min={draft.startDate} onChange={(e) => setDraft({ ...draft, endDate: e.target.value })} required />
-          </Field>
-        </div>
-
+        <Field label="Dia da prova" hint="Mostra a contagem regressiva no capítulo.">
+          <input id="ex-prova" type="date" value={draft.examDate ?? ''} onChange={(e) => setDraft({ ...draft, examDate: e.target.value || null })} />
+        </Field>
         <div className="ex-days" role="tablist" aria-label="Fases">
           {days.map((d, i) => (
             <button type="button" key={d} role="tab" aria-selected={d === curDay} className={d === curDay ? 'is-on' : ''} onClick={() => setDay(d)}>
@@ -177,7 +167,6 @@ function ExamSetup({ value, onClose, onSaved }: { value: ExamRun | 'new' | null;
             </button>
           ))}
         </div>
-
         <div className="ex-add">
           <div className="ex-kinds">
             {QUICK.map((k) => (
@@ -187,148 +176,263 @@ function ExamSetup({ value, onClose, onSaved }: { value: ExamRun | 'new' | null;
             ))}
           </div>
           <div className="ex-add-row">
+            <input id="ex-time" type="time" value={time} onChange={(e) => setTime(e.target.value)} aria-label="Horário" className="ex-time-in" />
             <input
               id="ex-step"
               list="ex-topics"
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addStep(); } }}
-              placeholder={kind === 'tema' ? 'Ex.: Pré-eclâmpsia (escreva ou escolha um tema)' : kind === 'prova' ? 'Ex.: Prova de GO' : `${kindOf(kind).label} (opcional: detalhe)`}
-              aria-label="Nova etapa"
+              placeholder={kind === 'tema' ? 'Ex.: Bronquiolite' : kind === 'premio' ? 'Ex.: almoço gostoso + 1 episódio' : kind === 'bonus' ? 'Ex.: 10 questões extras' : `${kindOf(kind).label} (detalhe)`}
+              aria-label="Nova casinha"
             />
             <datalist id="ex-topics">{data.topics.map((t) => <option key={t.id} value={t.name} />)}</datalist>
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => addStep()}><Icon name="plus" size={15} /> Pôr na fase</button>
+            <button type="button" className="btn btn-primary btn-sm" onClick={addStep}><Icon name="plus" size={15} /> Pôr</button>
           </div>
         </div>
-
         <ol className="ex-plan">
-          {draft.steps.filter((s) => s.day === curDay).length === 0 && <li className="ex-plan-empty">Fase vazia — escolha o tipo, escreva e “Pôr na fase”. Dica: termine o dia com a prova (o chefão 👑) ou uma pausa 🧃.</li>}
-          {draft.steps.filter((s) => s.day === curDay).map((s) => (
+          {daySteps.length === 0 && <li className="ex-plan-empty">Fase vazia. Dica: dá para importar o plano pronto de um texto (botão “Importar plano”).</li>}
+          {daySteps.map((s) => (
             <li key={s.id} style={{ ['--k' as string]: kindOf(s.kind).color }}>
               <span className="ex-plan-ico" aria-hidden="true">{kindOf(s.kind).emoji}</span>
-              <span className="ex-plan-txt">{s.label}<small>{kindOf(s.kind).label} · {kindOf(s.kind).xp} XP</small></span>
+              <input className="ex-plan-time" type="time" value={s.time ?? ''} onChange={(e) => setDraft({ ...draft, steps: draft.steps.map((x) => (x.id === s.id ? { ...x, time: e.target.value || null } : x)) })} aria-label="Horário" />
+              <span className="ex-plan-txt">{s.label}<small>{kindOf(s.kind).label}{kindOf(s.kind).xp ? ` · ${kindOf(s.kind).xp} XP` : ''}</small></span>
               <button type="button" className="icon-btn icon-btn-sm" onClick={() => move(s.id, -1)} aria-label="Subir"><Icon name="chevronL" size={14} /></button>
               <button type="button" className="icon-btn icon-btn-sm" onClick={() => move(s.id, 1)} aria-label="Descer"><Icon name="chevronR" size={14} /></button>
               <button type="button" className="icon-btn icon-btn-sm" onClick={() => setDraft({ ...draft, steps: draft.steps.filter((x) => x.id !== s.id) })} aria-label="Tirar"><Icon name="close" size={14} /></button>
             </li>
           ))}
         </ol>
-
-        <div className="register-actions spread">
-          {value !== 'new' ? <ConfirmButton label={<><Icon name="trash" size={15} /> Apagar maratona</>} question="Apagar este modo prova?" confirmLabel="Apagar" onConfirm={del} /> : <span />}
-          <div className="btn-row">
-            <button type="button" className="btn btn-quiet" onClick={onClose}>Cancelar</button>
-            <button type="submit" className="btn btn-primary">🎮 Salvar e jogar</button>
-          </div>
+        <Field label="Regras do jogo" hint="Uma por linha. Aparecem no topo do capítulo.">
+          <textarea id="ex-rules" rows={3} value={rules} onChange={(e) => setRules(e.target.value)} placeholder={'celular longe durante os blocos\nerrou questão? anota o porquê'} />
+        </Field>
+        <div className="register-actions">
+          <button type="button" className="btn btn-quiet" onClick={onClose}>Cancelar</button>
+          <button type="submit" className="btn btn-primary">🎮 Salvar</button>
         </div>
       </form>
     </Modal>
   );
 }
 
-// ── A arena (tela cheia) ───────────────────────────────────────
+// ── Importar o plano pronto (texto colado ou arquivo) ──────────
 
-function ExamArena({ runId, onClose, onEdit }: { runId: string; onClose: () => void; onEdit: (r: ExamRun) => void }) {
+function ExamImport({ run, chapter, open, onClose }: { run: ExamRun; chapter: Chapter; open: boolean; onClose: () => void }) {
+  const { data, saveSettings, saveChapter } = useStore();
+  const ui = useUI();
+  const [text, setText] = useState('');
+  const [mode, setMode] = useState<'trocar' | 'somar'>('trocar');
+  useEffect(() => { if (open) { setText(''); setMode(run.steps.length ? 'somar' : 'trocar'); } }, [open, run.steps.length]);
+  const plan: ParsedPlan | null = useMemo(() => (text.trim() ? parsePlan(text) : null), [text]);
+  const byDay = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const s of plan?.steps ?? []) m.set(s.day, (m.get(s.day) ?? 0) + 1);
+    return [...m.entries()].sort();
+  }, [plan]);
+
+  const readFile = async (f: File | undefined) => {
+    if (!f) return;
+    if (f.size > 400_000) { ui.toast('Arquivo grande demais: cole o texto do plano.'); return; }
+    setText(await f.text());
+  };
+  const copyPrompt = async () => {
+    try { await navigator.clipboard.writeText(PLAN_PROMPT); ui.toast('Pedido copiado! Cole no outro chat junto com o material da prova.'); } catch { ui.toast('Não deu para copiar: selecione o texto do pedido.'); }
+  };
+  const apply = () => {
+    if (!plan || !plan.steps.length) return;
+    const start = plan.start && plan.start < chapter.startDate ? plan.start : chapter.startDate;
+    const end = plan.end && plan.end > chapter.endDate ? plan.end : chapter.endDate;
+    const steps: ExamStep[] = plan.steps.map((s) => {
+      const tp = s.kind === 'tema' ? data.topics.find((t) => t.name.toLowerCase() === s.label.toLowerCase()) : undefined;
+      return { id: uid(), day: s.day, time: s.time, kind: s.kind, label: s.label || kindOf(s.kind).label, topicId: tp?.id ?? null, done: false };
+    });
+    const next: ExamRun = {
+      ...run,
+      startDate: start,
+      endDate: end,
+      examDate: plan.examDate ?? run.examDate ?? null,
+      rules: mode === 'trocar' ? plan.rules : [...(run.rules ?? []), ...plan.rules],
+      steps: mode === 'trocar' ? steps : [...run.steps, ...steps],
+      finishedAt: null,
+    };
+    if (start !== chapter.startDate || end !== chapter.endDate || (plan.title && plan.title !== chapter.title)) {
+      saveChapter({ ...chapter, startDate: start, endDate: end, title: plan.title || chapter.title });
+    }
+    saveSettings({ examRuns: (data.settings.examRuns ?? []).map((r) => (r.id === run.id ? { ...next, title: plan.title || r.title } : r)) });
+    play('mission');
+    ui.toast(`Plano no jogo: ${steps.length} casinhas em ${byDay.length} fase${byDay.length > 1 ? 's' : ''}! 🎮`);
+    onClose();
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title="📜 Importar plano" wide>
+      <div className="form ex-import">
+        <ol className="ex-howto">
+          <li><b>No outro chat</b>, mande o material da prova (temas, provas anteriores, onde você foi mal) e cole este pedido: <button type="button" className="btn btn-secondary btn-sm" onClick={copyPrompt}>📋 Copiar pedido</button></li>
+          <li><b>Cole aqui</b> o plano que ele responder (ou anexe o arquivo .txt / .md).</li>
+          <li>Confira a prévia e toque em <b>Pôr no jogo</b>. O app só segue as linhas: cada uma vira uma casinha.</li>
+        </ol>
+        <details className="ex-format">
+          <summary>Ver o formato</summary>
+          <pre>{PLAN_PROMPT.split('\n').slice(3, 21).join('\n')}</pre>
+        </details>
+        <textarea id="ex-import" rows={9} value={text} onChange={(e) => setText(e.target.value)} placeholder={'titulo: Maratona de Pediatria\ninicio: 21/11/2026\nfim: 22/11/2026\nprova: 23/11/2026\n\n## Sábado 21/11\n07:00 | tema | Bronquiolite\n08:30 | questoes | 20 questões\n10:00 | pausa | café'} aria-label="Texto do plano" />
+        <label className="btn btn-quiet btn-sm ex-file">
+          📎 Anexar arquivo
+          <input type="file" accept=".txt,.md,.markdown,text/plain,text/markdown" onChange={(e) => readFile(e.target.files?.[0])} hidden />
+        </label>
+
+        {plan && (
+          <div className="ex-preview">
+            {plan.steps.length === 0 ? (
+              <p className="muted">Não achei nenhuma casinha. Cada bloco precisa de uma linha tipo <code>07:00 | tema | Bronquiolite</code>.</p>
+            ) : (
+              <>
+                <p><b>{plan.title ?? chapter.title}</b>{plan.examDate ? ` · prova em ${fmtDay(plan.examDate)}` : ''}</p>
+                <ul>
+                  {byDay.map(([d, n]) => <li key={d}>{fmtDay(d)}: <b>{n}</b> casinha{n > 1 ? 's' : ''} · {plan.steps.filter((s) => s.day === d && s.kind === 'premio').length} 🎁 · {plan.steps.filter((s) => s.day === d && s.kind === 'bonus').length} 🌟</li>)}
+                </ul>
+                {plan.rules.length > 0 && <p className="muted small">{plan.rules.length} regra{plan.rules.length > 1 ? 's' : ''} do jogo</p>}
+                {plan.ignored.length > 0 && <p className="muted small">{plan.ignored.length} linha{plan.ignored.length > 1 ? 's' : ''} sem formato de casinha ficaram de fora.</p>}
+                {run.steps.length > 0 && (
+                  <div className="seg">
+                    <button type="button" className={mode === 'somar' ? 'is-on' : ''} onClick={() => setMode('somar')}>Somar ao que já tem</button>
+                    <button type="button" className={mode === 'trocar' ? 'is-on' : ''} onClick={() => setMode('trocar')}>Trocar tudo</button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+        <div className="register-actions">
+          <button type="button" className="btn btn-quiet" onClick={onClose}>Cancelar</button>
+          <button type="button" className="btn btn-primary" disabled={!plan?.steps.length} onClick={apply}>🎮 Pôr no jogo</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ── O jogo ─────────────────────────────────────────────────────
+
+function Arena({ run, chapter, full, onFull, onSetup, onImport, onEditChapter }: {
+  run: ExamRun; chapter: Chapter; full: boolean; onFull: () => void; onSetup: () => void; onImport: () => void; onEditChapter: () => void;
+}) {
   const { data, saveSettings } = useStore();
   const ui = useUI();
-  const run = (data.settings.examRuns ?? []).find((r) => r.id === runId);
   const [pop, setPop] = useState<{ id: string; text: string; n: number } | null>(null);
   const [combo, setCombo] = useState<{ name: string; emoji: string; n: number; id: number } | null>(null);
   const t = today();
-  const scroller = useRef<HTMLDivElement>(null);
+  const wrap = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    if (!full) return undefined;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onFull();
     window.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
     return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = ''; };
-  }, [onClose]);
+  }, [full, onFull]);
 
-  // abre já na fase de hoje
-  useEffect(() => {
-    const el = scroller.current?.querySelector(`[data-day="${t}"]`);
-    if (el) el.scrollIntoView({ block: 'start' });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  if (!run) return null;
   const days = dayList(run.startDate, run.endDate);
-  const total = run.steps.length;
-  const done = run.steps.filter((s) => s.done).length;
+  const prog = examProgress(run);
   const xp = xpOf(run.steps);
-  const maxXp = run.steps.reduce((a, s) => a + kindOf(s.kind).xp, 0) || 1;
   const level = Math.floor(xp / 100) + 1;
-  const todayDone = run.steps.filter((s) => s.done && s.doneAt?.slice(0, 10) === t).length;
+  const todayDone = run.steps.filter((s) => s.done && s.kind !== 'premio' && s.doneAt?.slice(0, 10) === t).length;
   const h = hypeOf(todayDone);
-  const next = run.steps.find((s) => !s.done);
+  const next = run.steps.find((s) => !s.done && s.kind !== 'bonus' && !isLocked(run, s));
   const live = run.startDate <= t;
   const until = diffDays(run.startDate, t);
+  const toExam = run.examDate ? diffDays(run.examDate, t) : null;
 
   const saveRun = (r: ExamRun) => saveSettings({ examRuns: (data.settings.examRuns ?? []).map((x) => (x.id === r.id ? r : x)) });
   const toggle = (s: ExamStep, e: React.MouseEvent) => {
+    if (isLocked(run, s)) {
+      play('fizzle');
+      ui.toast('🎁 Esse prêmio abre quando você terminar os blocos antes dele!');
+      return;
+    }
     const nowDone = !s.done;
     const steps = run.steps.map((x) => (x.id === s.id ? { ...x, done: nowDone, doneAt: nowDone ? new Date().toISOString() : null } : x));
-    const allDone = steps.length > 0 && steps.every((x) => x.done);
+    const allDone = examProgress({ ...run, steps }).complete;
     saveRun({ ...run, steps, finishedAt: allDone ? new Date().toISOString() : null });
     if (!nowDone) { play('uncheck'); return; }
     const k = kindOf(s.kind);
-    burst(e, s.kind === 'prova' ? 'confete' : 'brilho', s.kind === 'prova' ? 28 : 14);
-    play(s.kind === 'prova' ? 'mission' : 'check');
-    setPop({ id: s.id, text: `+${k.xp} XP`, n: Date.now() });
-    window.setTimeout(() => setPop((p) => (p?.id === s.id ? null : p)), 1100);
-    const before = hypeIdx(todayDone);
-    const after = hypeIdx(todayDone + 1);
-    if (after > before) {
-      const hh = HYPE[after];
-      const id = Date.now();
-      setCombo({ name: hh.name, emoji: hh.emoji, n: todayDone + 1, id });
-      play('ignite');
-      window.setTimeout(() => setCombo((c) => (c?.id === id ? null : c)), 1900);
+    if (s.kind === 'premio') {
+      burst(e, 'coracoes', 18);
+      play('jingle');
+      setPop({ id: s.id, text: 'aproveita! 💛', n: Date.now() });
+    } else {
+      burst(e, s.kind === 'prova' || s.kind === 'bonus' ? 'confete' : 'brilho', s.kind === 'prova' ? 28 : 14);
+      play(s.kind === 'prova' ? 'mission' : 'check');
+      setPop({ id: s.id, text: `+${k.xp} XP`, n: Date.now() });
+      const before = hypeIdx(todayDone);
+      const after = hypeIdx(todayDone + 1);
+      if (after > before) {
+        const hh = HYPE[after];
+        const id = Date.now();
+        setCombo({ name: hh.name, emoji: hh.emoji, n: todayDone + 1, id });
+        play('ignite');
+        window.setTimeout(() => setCombo((c) => (c?.id === id ? null : c)), 1900);
+      }
     }
+    window.setTimeout(() => setPop((p) => (p?.id === s.id ? null : p)), 1100);
     if (allDone) {
       play('chapter');
-      ui.celebrate({ kind: 'chapter', title: `${run.title}: zerada! 🏆`, extras: [`${xp + k.xp} XP no total`, 'Você jogou a maratona inteira. Lenda.'] });
+      ui.celebrate({ kind: 'chapter', title: `${chapter.title}: zerado! 🏆`, extras: [`${xp + k.xp} XP no total`, 'Capítulo especial completo. Agora é com você na prova 👑'] });
     }
   };
 
-  return createPortal(
-    <div className={`ex-arena hype-${hypeIdx(todayDone)}`} role="dialog" aria-label={`Modo prova: ${run.title}`}>
+  return (
+    <div ref={wrap} className={`ex-arena ex-inline hype-${hypeIdx(todayDone)} ${full ? 'is-full' : ''}`} aria-label={`Capítulo especial: ${chapter.title}`}>
       <div className="ex-bg" aria-hidden="true">
         {Array.from({ length: 14 }).map((_, i) => <i key={i} style={{ left: `${(i * 37) % 100}%`, animationDelay: `${(i * 0.53) % 5}s`, animationDuration: `${5 + (i % 4)}s` }}>{['✦', '⚡', '★', '✧'][i % 4]}</i>)}
       </div>
 
       <header className="ex-hud">
-        <button className="ex-x" onClick={onClose} aria-label="Sair do modo prova"><Icon name="close" size={20} /></button>
         <div className="ex-hud-title">
-          <span className="ex-hud-k">🎮 MODO PROVA {live ? '· GAME ON' : `· começa ${until === 1 ? 'amanhã' : `em ${until} dias`}`}</span>
-          <h2>{run.title}</h2>
+          <span className="ex-hud-k">✦ CAPÍTULO ESPECIAL · {live ? 'GAME ON' : `começa ${until === 1 ? 'amanhã' : `em ${until} dias`}`}</span>
+          <h2>{chapter.title}</h2>
+          {toExam != null && toExam >= 0 && <span className="ex-countdown">{toExam === 0 ? '👑 hoje é o dia da prova!' : `👑 prova em ${toExam} dia${toExam > 1 ? 's' : ''}`}</span>}
         </div>
-        <button className="ex-edit" onClick={() => onEdit(run)}><Icon name="edit" size={15} /> Montar</button>
+        <div className="ex-tools">
+          <button className="ex-edit" onClick={onImport}>📜 Importar plano</button>
+          <button className="ex-edit" onClick={onSetup}><Icon name="edit" size={15} /> Montar</button>
+          <button className="ex-edit" onClick={onEditChapter} title="Nome e datas do capítulo">⚙️</button>
+          <button className="ex-edit" onClick={onFull} title={full ? 'Sair da tela cheia' : 'Tela cheia'} aria-label={full ? 'Sair da tela cheia' : 'Tela cheia'}>{full ? <Icon name="close" size={16} /> : '⛶'}</button>
+        </div>
       </header>
 
       <section className="ex-stats">
         <div className="ex-level"><span>NÍVEL</span><b>{level}</b></div>
         <div className="ex-xpbar">
-          <div className="ex-xpbar-top"><b>{xp} XP</b><span>{done}/{total} casinhas</span></div>
-          <div className="ex-xpbar-track"><motion.span animate={{ width: `${(xp / maxXp) * 100}%` }} transition={{ type: 'spring', stiffness: 120, damping: 18 }} /></div>
+          <div className="ex-xpbar-top"><b>{xp} XP</b><span>{prog.done}/{prog.total} casinhas</span></div>
+          <div className="ex-xpbar-track"><motion.span animate={{ width: `${prog.pct * 100}%` }} transition={{ type: 'spring', stiffness: 120, damping: 18 }} /></div>
         </div>
         <motion.div className="ex-hype" key={h.name} initial={{ scale: 0.6, rotate: -8 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 12 }}>
           <span className="ex-hype-emoji">{h.emoji}</span>
           <span className="ex-hype-txt"><b>{h.name}</b><small>combo hoje: {todayDone}</small></span>
         </motion.div>
       </section>
-      <p className="ex-line">{total === 0 ? 'Monte as fases: toque em “Montar” e coloque temas, flashcards, a prova e a correção.' : done === total ? 'Maratona zerada! 🏆 Respira, se hidrata e se orgulha.' : h.line}</p>
+      <p className="ex-line">{prog.total === 0 ? 'Monte as fases: importe o plano pronto ou toque em “Montar”.' : prog.complete ? 'Capítulo zerado! 🏆 Respira, se hidrata e se orgulha.' : h.line}</p>
 
-      <div className="ex-path" ref={scroller}>
+      {(run.rules ?? []).length > 0 && (
+        <details className="ex-rules" open={prog.done === 0}>
+          <summary>📜 Regras do jogo</summary>
+          <ul>{run.rules!.map((r, i) => <li key={i}>{r}</li>)}</ul>
+        </details>
+      )}
+
+      <div className="ex-path">
         {days.map((d, di) => {
           const steps = run.steps.filter((s) => s.day === d);
-          const dDone = steps.filter((s) => s.done).length;
+          const cs = counted(steps);
+          const dDone = cs.filter((s) => s.done).length;
           return (
-            <section key={d} className={`ex-phase ${d === t ? 'is-today' : ''} ${steps.length && dDone === steps.length ? 'is-clear' : ''}`} data-day={d}>
+            <section key={d} className={`ex-phase ${d === t ? 'is-today' : ''} ${cs.length && dDone === cs.length ? 'is-clear' : ''}`} data-day={d}>
               <h3 className="ex-phase-h">
                 <span className="ex-phase-n">FASE {di + 1}</span>
-                <span>{fmtDay(d)}{d === t ? ' · hoje' : ''}</span>
-                <span className="ex-phase-p">{steps.length ? (dDone === steps.length ? '⭐ completa' : `${dDone}/${steps.length}`) : '—'}</span>
+                <span>{fmtDay(d)}{d === t ? ' · hoje' : ''}{d === run.examDate ? ' · 👑 prova' : ''}</span>
+                <span className="ex-phase-p">{cs.length ? (dDone === cs.length ? '⭐ completa' : `${dDone}/${cs.length}`) : '—'}</span>
               </h3>
               {steps.length === 0 && <p className="ex-phase-empty">Nada nesta fase ainda.</p>}
               <ol className="ex-nodes">
@@ -336,15 +440,16 @@ function ExamArena({ runId, onClose, onEdit }: { runId: string; onClose: () => v
                   const k = kindOf(s.kind);
                   const isNext = next?.id === s.id;
                   const boss = s.kind === 'prova';
+                  const locked = isLocked(run, s);
                   const topic = s.topicId ? data.topics.find((x) => x.id === s.topicId) : null;
                   return (
                     <motion.li
                       key={s.id}
-                      className={`ex-node ${s.done ? 'is-done' : ''} ${isNext ? 'is-next' : ''} ${boss ? 'is-boss' : ''} ${i % 2 ? 'is-r' : 'is-l'}`}
+                      className={`ex-node ex-k-${s.kind} ${s.done ? 'is-done' : ''} ${isNext ? 'is-next' : ''} ${boss ? 'is-boss' : ''} ${locked ? 'is-locked' : ''} ${i % 2 ? 'is-r' : 'is-l'}`}
                       style={{ ['--k' as string]: k.color }}
                       initial={{ opacity: 0, scale: 0.7, y: 14 }}
                       animate={{ opacity: 1, scale: 1, y: 0 }}
-                      transition={{ delay: 0.04 * i, type: 'spring', stiffness: 320, damping: 18 }}
+                      transition={{ delay: 0.03 * i, type: 'spring', stiffness: 320, damping: 18 }}
                     >
                       {isNext && <span className="ex-go">VAI!</span>}
                       <motion.button
@@ -353,9 +458,9 @@ function ExamArena({ runId, onClose, onEdit }: { runId: string; onClose: () => v
                         whileHover={{ scale: 1.08, rotate: i % 2 ? 4 : -4 }}
                         whileTap={{ scale: 0.88 }}
                         aria-pressed={s.done}
-                        aria-label={`${s.label}: ${s.done ? 'feito, toque para desfazer' : 'marcar como feito'}`}
+                        aria-label={`${s.label}: ${locked ? 'prêmio trancado' : s.done ? 'feito, toque para desfazer' : 'marcar como feito'}`}
                       >
-                        <span className="ex-orb-emoji" aria-hidden="true">{s.done ? '⭐' : k.emoji}</span>
+                        <span className="ex-orb-emoji" aria-hidden="true">{locked ? '🔒' : s.done ? (s.kind === 'premio' ? '💝' : '⭐') : k.emoji}</span>
                         {boss && !s.done && <span className="ex-crown" aria-hidden="true">👑</span>}
                       </motion.button>
                       <AnimatePresence>
@@ -366,10 +471,11 @@ function ExamArena({ runId, onClose, onEdit }: { runId: string; onClose: () => v
                         )}
                       </AnimatePresence>
                       <div className="ex-node-txt">
-                        <strong>{boss ? `Chefão: ${s.label}` : s.label}</strong>
-                        <span>{k.label} · {k.xp} XP</span>
-                        {!s.done && (topic || k.page) && (
-                          <button className="ex-node-link" onClick={() => { onClose(); if (topic) ui.openTopic(topic.id); else if (k.page) ui.go(k.page); }}>
+                        {s.time && <span className="ex-node-time">{s.time}</span>}
+                        <strong>{boss ? `Chefão: ${s.label}` : s.kind === 'premio' ? `Prêmio: ${s.label}` : s.kind === 'bonus' ? `Bônus: ${s.label}` : s.label}</strong>
+                        <span>{locked ? 'abre quando os blocos antes acabarem' : s.kind === 'premio' ? (s.done ? 'resgatado 💛' : 'liberado! toque para resgatar') : `${k.label} · ${k.xp} XP${s.kind === 'bonus' ? ' · extra' : ''}`}</span>
+                        {!s.done && !locked && (topic || k.page) && (
+                          <button className="ex-node-link" onClick={() => { if (full) onFull(); if (topic) ui.openTopic(topic.id); else if (k.page) ui.go(k.page); }}>
                             {topic ? 'abrir tema' : k.id === 'correcao' ? 'ir para a correção' : `ir para ${k.label.toLowerCase()}`} →
                           </button>
                         )}
@@ -381,10 +487,10 @@ function ExamArena({ runId, onClose, onEdit }: { runId: string; onClose: () => v
             </section>
           );
         })}
-        <div className={`ex-trophy ${total > 0 && done === total ? 'is-won' : ''}`}>
+        <div className={`ex-trophy ${prog.complete ? 'is-won' : ''}`}>
           <span aria-hidden="true">🏆</span>
-          <b>{total > 0 && done === total ? 'ZERADA!' : 'Troféu da maratona'}</b>
-          <small>{total > 0 && done === total ? 'você conseguiu, R1 vem aí' : `faltam ${total - done} casinha${total - done === 1 ? '' : 's'}`}</small>
+          <b>{prog.complete ? 'ZERADO!' : 'Troféu do capítulo'}</b>
+          <small>{prog.complete ? 'você conseguiu, R1 vem aí' : `faltam ${prog.total - prog.done} casinha${prog.total - prog.done === 1 ? '' : 's'}`}</small>
         </div>
       </div>
 
@@ -397,7 +503,6 @@ function ExamArena({ runId, onClose, onEdit }: { runId: string; onClose: () => v
           </div>
         </div>
       )}
-    </div>,
-    document.body,
+    </div>
   );
 }
