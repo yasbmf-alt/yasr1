@@ -3573,3 +3573,6 @@ html.corr-wide .corr-log .cw-clock { font-size: 20px; }
 @keyframes exTrap { 0%, 80%, 100% { transform: rotate(0); } 84% { transform: rotate(-12deg) scale(1.05); } 88% { transform: rotate(10deg); } 92% { transform: rotate(-5deg); } }
 .ex-k-pegadinha .ex-node-txt strong { color: #ffd0d2; }
 .ex-k-pegadinha.is-done .ex-orb { animation: none; }
+.corr-big { display: flex; flex-direction: column; gap: 6px; background: #fff6d6; border-radius: 16px; padding: 12px 14px; box-shadow: inset 0 0 0 2px #f4d35e; }
+.corr-big-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.corr-big .time-pair input { width: 56px; padding: 5px 8px; }

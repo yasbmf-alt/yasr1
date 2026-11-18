@@ -6,7 +6,7 @@ import { MapSummary } from '../components/TopicStudy';
 import { syncSimMap } from '../logic/conceptMap';
 import { BIG_AREAS, REASONS, type BigArea, type CorrectionStatus, type ErrorGroup, type MapNode, type Simulado } from '../types';
 import { fmtMinutes, fmtShort, today, uid } from '../logic/dates';
-import { commitTimer, fmtClock, startTimer, timerMs } from '../logic/corrTimer';
+import { commitTimer, emptyTimer, fmtClock, minutesByDay, pauseTimer, startTimer, timerMs } from '../logic/corrTimer';
 import { play } from '../logic/sound';
 import { ConfirmButton, numOrNull, useUI } from '../components/ui';
 import type { Session } from '../types';
@@ -389,15 +389,54 @@ function CorrectionLog({ sim }: { sim: Simulado }) {
   };
   const setDone = (v: boolean) => update({ correctionDoneAt: v ? today() : null });
   const start = () => { update({ correctionTimer: startTimer(timer), correctionDoneAt: null }); play('pop'); };
-  const stop = () => {
+  // sessão longa demais (cronômetro esquecido ligado): pergunta antes de registrar
+  const LONG_MS = 4 * 3600000;
+  const [bigStop, setBigStop] = useState<{ finish: boolean; hh: string; mm: string } | null>(null);
+  const doStop = () => {
     const m = stopAndSave();
     play('check');
     ui.toast(m ? `Sessão de ${fmtMinutes(m)} registrada nas horas de hoje.` : 'Parado. A sessão teve menos de 1 minuto.');
   };
-  const finish = () => {
+  const doFinish = () => {
     const m = stopAndSave({ correctionDoneAt: today() });
     play('check');
     ui.toast(`Correção de ${sim.name} finalizada · ${fmtMinutes(logged + m)} no total.`);
+  };
+  const askIfLong = (fin: boolean) => {
+    if (sessionMs > LONG_MS) {
+      update({ correctionTimer: pauseTimer(timer) });
+      setBigStop({ finish: fin, hh: '', mm: '' });
+      return true;
+    }
+    return false;
+  };
+  const stop = () => { if (!askIfLong(false)) doStop(); };
+  const finish = () => { if (!askIfLong(true)) doFinish(); };
+  const bigRegisterAll = () => { const f = bigStop?.finish; setBigStop(null); if (f) doFinish(); else doStop(); };
+  const bigDiscard = () => {
+    const f = bigStop?.finish;
+    update({ correctionTimer: emptyTimer(), ...(f ? { correctionDoneAt: today() } : {}) });
+    setBigStop(null);
+    play('pop');
+    ui.toast('Sessão descartada: nada foi para as horas do dia.');
+  };
+  const bigAdjust = () => {
+    if (!bigStop) return;
+    const wanted = (numOrNull(bigStop.hh) ?? 0) * 60 + (numOrNull(bigStop.mm) ?? 0);
+    const snap = snapshot();
+    const t = pauseTimer(snap.simulados.find((x) => x.id === sim.id)?.correctionTimer);
+    for (const [date, minutes] of minutesByDay(t, wanted)) {
+      const prev = snap.sessions.find((x) => x.type === 'correcao' && x.simuladoId === sim.id && x.date === date);
+      if (prev) saveSession({ ...prev, minutes: (prev.minutes ?? 0) + minutes });
+      else saveSession({
+        id: uid(), date, topicId: '', missionId: null, activityId: null, type: 'correcao', minutes,
+        questions: null, correct: null, errorTopics: [], notes: '', createdAt: new Date().toISOString(), simuladoId: sim.id,
+      } as Session);
+    }
+    update({ correctionTimer: emptyTimer(), ...(bigStop.finish ? { correctionDoneAt: today() } : {}) });
+    setBigStop(null);
+    play('check');
+    ui.toast(wanted ? `Registrado ${fmtMinutes(wanted)} de correção.` : 'Sessão descartada.');
   };
   const saveEdit = () => {
     if (!editing) return;
@@ -446,6 +485,21 @@ function CorrectionLog({ sim }: { sim: Simulado }) {
           {ms > 0 && !done && <button className="cw-finish" onClick={finish}>🏁 Finalizar</button>}
         </div>
       </div>
+      {bigStop && (
+        <div className="corr-big" role="alertdialog" aria-label="Sessão muito longa">
+          <strong>😅 Eita, {fmtClock(sessionMs)} seguidas! Esqueceu o cronômetro ligado?</strong>
+          <span className="muted small">Escolha o que vai para as horas do dia. Nada foi registrado ainda.</span>
+          <div className="corr-big-row">
+            <span className="time-pair">
+              <input inputMode="numeric" placeholder="0" value={bigStop.hh} onChange={(e) => setBigStop({ ...bigStop, hh: e.target.value.replace(/\D/g, '') })} aria-label="Horas de verdade" /> h
+              <input inputMode="numeric" placeholder="0" value={bigStop.mm} onChange={(e) => setBigStop({ ...bigStop, mm: e.target.value.replace(/\D/g, '') })} aria-label="Minutos de verdade" /> min
+            </span>
+            <button className="btn btn-primary btn-sm" onClick={bigAdjust} disabled={!bigStop.hh && !bigStop.mm}>Registrar só isso</button>
+            <button className="btn btn-quiet btn-sm" onClick={bigDiscard}>Descartar a sessão</button>
+            <button className="btn btn-quiet btn-sm" onClick={bigRegisterAll}>Foi tudo isso mesmo</button>
+          </div>
+        </div>
+      )}
       {logs.length > 0 && <span className="muted small corr-log-cap">Registros desta correção por dia · toque no tempo para ajustar</span>}
       {logs.length > 0 && (
         <ul className="corr-log-list">
