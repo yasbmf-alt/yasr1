@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { play } from '../../logic/sound';
+import { sfx } from '../battle/sfx';
 import { Bioma } from '../scene/Bioma';
 import { sprites } from '../battle/sprites';
 import { islandOf } from '../data';
@@ -28,10 +29,10 @@ export function Cutscene({ cena, onEnd }: { cena: Cena; onEnd: () => void }) {
     if (!beat) return undefined;
     if (reduced()) { setN(text.length); return undefined; }
     setN(0);
-    const t = window.setInterval(() => setN((x) => { if (x + 2 >= text.length) { window.clearInterval(t); return text.length; } return x + 2; }), 22);
+    const t = window.setInterval(() => setN((x) => { if (x % 4 === 0) sfx('letra'); if (x + 2 >= text.length) { window.clearInterval(t); return text.length; } return x + 2; }), 22);
     return () => window.clearInterval(t);
   }, [i]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (i === bossIdx && bossIdx >= 0) play('ghost'); }, [i]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (i === bossIdx && bossIdx >= 0) sfx('chefao'); }, [i]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const next = () => {
     if (beat && !done) { setN(text.length); return; }

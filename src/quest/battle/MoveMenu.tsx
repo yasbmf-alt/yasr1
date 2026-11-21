@@ -1,6 +1,7 @@
 // Menu de "golpes": cada alternativa é um golpe. 2×2 no desktop (a 5ª ocupa a linha
 // inteira); uma coluna em telas estreitas.
 import { motion } from 'framer-motion';
+import { sfx } from './sfx';
 
 export function MoveMenu({ alternativas, gabarito, pick, locked, onPick }: {
   alternativas: Record<string, string>;
@@ -15,7 +16,7 @@ export function MoveMenu({ alternativas, gabarito, pick, locked, onPick }: {
       {keys.map((k) => {
         const state = !locked ? '' : k === gabarito ? 'is-right' : k === pick ? 'is-wrong' : 'is-dim';
         return (
-          <button key={k} className={`bt-move ${state}`} disabled={locked} onClick={() => onPick(k)} aria-label={`${k}) ${alternativas[k]}`}>
+          <button key={k} className={`bt-move ${state}`} disabled={locked} onPointerEnter={() => !locked && sfx('foco')} onClick={() => onPick(k)} aria-label={`${k}) ${alternativas[k]}`}>
             <b className="bt-move-key">{locked && k === gabarito ? '✓' : locked && k === pick ? '✕' : k}</b>
             <span className="bt-move-txt">{alternativas[k]}</span>
           </button>

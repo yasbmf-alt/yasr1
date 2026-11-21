@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { BattleSprite } from './BattleSprite';
 import { sprites } from './sprites';
+import { sfx } from './sfx';
 
 const reduced = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
@@ -22,7 +23,7 @@ export function DialogBox({ text, speaker, onAdvance, onTyped, fast, canAdvance 
     if (reduced()) { setN(text.length); return undefined; }
     setN(0);
     const step = fast ? Math.max(3, Math.ceil(text.length / 90)) : 1;
-    const t = window.setInterval(() => setN((x) => { if (x + step >= text.length) { window.clearInterval(t); return text.length; } return x + step; }), fast ? 16 : 24);
+    const t = window.setInterval(() => setN((x) => { if (!fast && x % 3 === 0) sfx('letra'); if (x + step >= text.length) { window.clearInterval(t); return text.length; } return x + step; }), fast ? 16 : 24);
     return () => window.clearInterval(t);
   }, [text, fast]);
 

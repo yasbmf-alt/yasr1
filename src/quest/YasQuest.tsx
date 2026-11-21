@@ -24,6 +24,7 @@ import {
 import { dossieCardId, isDossiePack, parseDossies, recoveryCards, type DossieCard, type DossieImport, type YqDossie } from './dossie';
 import { Recuperacao, ResumoMestre } from './DossieViews';
 import { sprites } from './battle/sprites';
+import { sfx } from './battle/sfx';
 import { Bioma, BIOMA_NOME, biomaOf, type BiomaId } from './scene/Bioma';
 import { WorldMap, type MapIsland } from './scene/WorldMap';
 import { Cutscene } from './story/Cutscene';
@@ -343,7 +344,7 @@ function Hub({ st, byTema, total, saveSt, onMission, onGo, onStory }: { st: YqSt
 
   const route = r && !fz ? r.list : [];
   const [sel, setSel] = useState<string>(() => current ?? route[0] ?? ISLANDS[0].tema);
-  const choose = (t: string) => { if (t !== sel) play('pop'); setSel(t); };
+  const choose = (t: string) => { if (t !== sel) sfx('remo'); setSel(t); };
   const isFinal = sel === FINAL;
   const isl = islandOf(sel);
   const stat = islandStat(isFinal ? [] : byTema.get(sel) ?? []);

@@ -4599,3 +4599,56 @@ body:has(.yq-shell) .toasts, body:has(.yq-shell) .celebration, body:has(.yq-shel
 @media (prefers-reduced-motion: reduce) {
   .wm, .wm-route, .wm-boat, .wm-boss, .cs-actor.is-talking, .cs.is-impact { animation: none !important; }
 }
+
+/* ══════════ YAS QUEST · efeitos da batalha (golpe, dano, contra-ataque) ══════════ */
+.bt-foe-spot, .bt-me-side { overflow: visible; }
+.bt-foe { position: relative; }
+.fx-on-foe, .fx-on-me { position: absolute; inset: 0; z-index: 5; pointer-events: none; display: grid; place-items: center; }
+.fx-on-me { inset: 0 0 20px; }
+/* rastro do golpe: três cortes diagonais */
+.fx-slash { position: absolute; left: 50%; top: 45%; width: 150%; height: 7px; background: linear-gradient(90deg, transparent, #fff 20%, #fff3b0 50%, #fff 80%, transparent); box-shadow: 0 0 0 2px rgba(224, 82, 94, .9), 0 0 14px 4px rgba(255, 255, 255, .8); transform-origin: center; opacity: 0; animation: fxSlash .34s steps(6) forwards; }
+.fx-slash.s1 { rotate: -35deg; translate: -50% -14px; }
+.fx-slash.s2 { rotate: -35deg; translate: -50% 4px; animation-delay: .06s; }
+.fx-slash.s3 { rotate: -35deg; translate: -50% 22px; animation-delay: .12s; }
+@keyframes fxSlash { 0% { opacity: 1; clip-path: inset(0 100% 0 0); } 50% { opacity: 1; clip-path: inset(0 0 0 0); } 100% { opacity: 0; clip-path: inset(0 0 0 100%); } }
+.is-efetivo .fx-slash { background: linear-gradient(90deg, transparent, #fff 20%, #d9ee76 50%, #fff 80%, transparent); box-shadow: 0 0 0 2px #8a2763, 0 0 18px 6px rgba(217, 238, 118, .8); }
+/* onda do impacto */
+.fx-ring { position: absolute; left: 50%; top: 50%; width: 24px; height: 24px; translate: -50% -50%; border: 4px solid #fff; box-shadow: 0 0 0 3px #e0525e; animation: fxRing .5s steps(5) .1s forwards; opacity: 0; }
+@keyframes fxRing { 0% { opacity: 1; scale: .4; } 100% { opacity: 0; scale: 5; } }
+.is-desmaio .fx-ring { border-color: #fff3b0; box-shadow: 0 0 0 3px #f6c46b; animation-duration: .8s; }
+/* faíscas em pixel */
+.fx-spark { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; box-shadow: 0 0 0 1px #1d2541; opacity: 0; animation: fxSpark .55s steps(7) .12s forwards; }
+@keyframes fxSpark { 0% { opacity: 1; transform: translate(-50%, -50%); } 100% { opacity: 0; transform: translate(calc(-50% + var(--dx) * 1.6), calc(-50% + var(--dy) * 1.6)) scale(.4); } }
+.is-desmaio .fx-spark { width: 8px; height: 8px; animation-duration: 1s; }
+/* número de dano e etiqueta */
+.fx-dmg { position: absolute; z-index: 2; left: 60%; top: 30%; font-family: var(--font-pixel); font-weight: 500; font-size: 44px; color: #ff3b4a; line-height: 1; text-shadow: 3px 0 0 #fff, -3px 0 0 #fff, 0 3px 0 #fff, 0 -3px 0 #fff, 3px 3px 0 #fff, -3px 3px 0 #fff, 3px -3px 0 #fff, -3px -3px 0 #fff, 0 7px 0 #5a0f18; animation: fxDmg .9s cubic-bezier(.2, 1.6, .4, 1) forwards; }
+@keyframes fxDmg { 0% { opacity: 0; transform: translateY(14px) scale(.4); } 25% { opacity: 1; transform: translateY(-14px) scale(1.25); } 70% { opacity: 1; transform: translateY(-22px) scale(1); } 100% { opacity: 0; transform: translateY(-40px) scale(.9); } }
+.fx-label { position: absolute; z-index: 1; left: 50%; top: -22%; translate: -50% 0; white-space: nowrap; font-style: normal; font-family: var(--font-pixel); font-weight: 500; font-size: 17px; letter-spacing: .04em; color: #fff3b0; border: 8px solid transparent; border-image: var(--pf-pink) 4 fill / 8px; padding: 0 4px; animation: fxLabel 1s steps(8) forwards; }
+.is-efetivo .fx-label { border-image: var(--pf-lime) 4 fill / 8px; color: #1d2541; }
+.is-desmaio .fx-label { border-image: var(--pf-gold) 4 fill / 8px; color: #3a2208; top: 10%; font-size: 20px; }
+.fx-label.is-contra { top: -24%; border-image: var(--pf-dark) 4 fill / 8px; color: #ffd9da; }
+@keyframes fxLabel { 0% { opacity: 0; transform: scale(.5); } 20% { opacity: 1; transform: scale(1.15); } 35% { transform: scale(1); } 85% { opacity: 1; } 100% { opacity: 0; transform: translateY(-8px); } }
+/* garras do contra-ataque */
+.fx-claw { position: absolute; left: 50%; top: 40%; width: 8px; height: 110%; background: linear-gradient(180deg, transparent, #fff 15%, #ff5a64 50%, #fff 85%, transparent); box-shadow: 0 0 10px 3px rgba(255, 90, 100, .7); rotate: 28deg; opacity: 0; animation: fxClaw .36s steps(6) forwards; }
+.fx-claw.c1 { translate: -24px -50%; } .fx-claw.c2 { translate: -4px -50%; animation-delay: .05s; } .fx-claw.c3 { translate: 16px -50%; animation-delay: .1s; }
+@keyframes fxClaw { 0% { opacity: 1; clip-path: inset(0 0 100% 0); } 55% { opacity: 1; clip-path: inset(0); } 100% { opacity: 0; clip-path: inset(100% 0 0 0); } }
+/* tela piscando */
+.fx-vignette { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
+.fx-vignette.is-contra { background: radial-gradient(circle at 30% 75%, transparent 20%, rgba(224, 40, 60, .55) 75%); }
+.fx-vignette.is-golpe, .fx-vignette.is-efetivo { background: radial-gradient(circle at 72% 35%, rgba(255, 255, 255, .7), transparent 45%); }
+/* barra de HP: rastro vermelho escoando + tremida no golpe */
+.bt-hptrack { position: relative; }
+.bt-hpfill { position: relative; z-index: 1; transition: width .25s steps(6, end), background-color .3s; }
+.bt-hplag { position: absolute; left: 0; top: 0; bottom: 0; background: #ff5a64; transition: width .7s ease-in; }
+.bt-hpbox.is-hit { animation: hpHit .45s steps(5); }
+@keyframes hpHit { 20% { transform: translate(-4px, 2px); } 40% { transform: translate(4px, -2px); filter: brightness(1.4); } 60% { transform: translate(-3px, 1px); } 80% { transform: translate(2px, 0); } }
+.bt-hpbox.is-danger .bt-hpfill { animation: hpDanger .6s steps(2) infinite; }
+@keyframes hpDanger { 50% { background: #ffb3b8; } }
+/* entrada da batalha: blocos de pixel abrindo a cena */
+.bt-wipe { position: absolute; inset: 0; z-index: 9; display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(6, 1fr); pointer-events: none; }
+.bt-wipe i { background: #0f0a26; animation: btWipe .35s steps(4) forwards; }
+@keyframes btWipe { to { transform: scale(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .fx-slash, .fx-ring, .fx-spark, .fx-claw, .bt-hpbox.is-hit, .bt-hpbox.is-danger .bt-hpfill, .bt-wipe { animation: none !important; }
+  .bt-wipe { display: none; }
+}
