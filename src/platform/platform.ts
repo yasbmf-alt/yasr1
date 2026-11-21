@@ -53,13 +53,13 @@ export async function canUpload(): Promise<boolean> {
   return false;
 }
 
-export async function uploadFile(file: File | Blob, kind: 'image' | 'audio', name = 'arquivo'): Promise<UploadResult> {
+export async function uploadFile(file: File | Blob, kind: 'image' | 'audio' | 'doc', name = 'arquivo'): Promise<UploadResult> {
   const k = platformKind();
   if (k === 'claude') {
     const assets = await claudeCapability('assets');
     if (!assets) return { error: 'O envio de arquivos não está disponível nesta janela.' };
     const f = file instanceof File ? file : new File([file], name, { type: file.type });
-    const type = kind === 'image' ? imageType(f) : f.name.toLowerCase().endsWith('.webm') || f.type.includes('webm') ? 'video/webm' : 'video/mp4';
+    const type = kind === 'doc' ? 'application/pdf' : kind === 'image' ? imageType(f) : f.name.toLowerCase().endsWith('.webm') || f.type.includes('webm') ? 'video/webm' : 'video/mp4';
     try {
       const r = await assets.upload(f, { type });
       return { id: r.id };

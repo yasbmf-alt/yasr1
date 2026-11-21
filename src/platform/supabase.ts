@@ -260,7 +260,7 @@ const extOf = (f: Blob, name: string) => {
   return t.replace('svg+xml', 'svg').replace('mpeg', 'mp3');
 };
 
-export async function uploadToStorage(file: Blob, kind: 'image' | 'audio', name: string): Promise<UploadResult> {
+export async function uploadToStorage(file: Blob, kind: 'image' | 'audio' | 'doc', name: string): Promise<UploadResult> {
   const s = await currentSession();
   if (!s) return { error: 'Entre na sua conta para enviar arquivos.' };
   if (file.size > 20 * 1024 * 1024) return { error: 'Arquivo grande demais (até 20 MB).' };

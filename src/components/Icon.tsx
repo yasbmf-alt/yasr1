@@ -1,6 +1,12 @@
 import React from 'react';
 
 const PATHS: Record<string, React.ReactNode> = {
+  game: (
+    <>
+      <path d="M7 8h10a5 5 0 0 1 4.7 6.7l-.6 1.7a2.5 2.5 0 0 1-4.1.9L15 15.3H9l-2 2a2.5 2.5 0 0 1-4.1-.9l-.6-1.7A5 5 0 0 1 7 8z" />
+      <path d="M8 10.5v3M6.5 12h3M15.5 11.5h.01M17.5 13h.01" />
+    </>
+  ),
   trilha: <path d="M5 20c0-4 3-5 7-5s7-1 7-5-3-5-7-5M5 5h.01M19 20h.01" />,
   biblioteca: (
     <>

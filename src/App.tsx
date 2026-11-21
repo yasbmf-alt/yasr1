@@ -11,6 +11,7 @@ import { Icon } from './components/Icon';
 import { TopicSheet } from './components/TopicSheet';
 import { RewardWatcher } from './components/useRewards';
 import { TodoNote } from './components/TodoNote';
+import { YasQuest } from './quest/YasQuest';
 import { Trilha } from './pages/Trilha';
 import { Evolucao } from './pages/Evolucao';
 import { Configuracoes } from './pages/Configuracoes';
@@ -34,6 +35,7 @@ const NAV: { id: Page; label: string; icon: string }[] = [
   { id: 'painel', label: 'Painel', icon: 'chart' },
   { id: 'simulados', label: 'Simulados', icon: 'simulados' },
   { id: 'flashcards', label: 'Flashcards', icon: 'flashcards' },
+  { id: 'quest', label: 'Yas Quest', icon: 'game' },
   { id: 'config', label: 'Configurações', icon: 'config' },
 ];
 
@@ -177,6 +179,7 @@ function Main() {
                 {page === 'painel' && <Painel />}
                 {page === 'quarto' && <Quarto />}
                 {page === 'flashcards' && <Flashcards />}
+                {page === 'quest' && <YasQuest />}
                 {page === 'config' && <Configuracoes />}
               </motion.div>
             </AnimatePresence>
