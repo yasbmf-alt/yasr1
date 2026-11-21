@@ -4257,3 +4257,21 @@ html.corr-wide .corr-log .cw-clock { font-size: 20px; }
 .dz-card-ans { color: var(--fg); }
 .dz-skip { align-self: flex-end; border: 0; background: rgba(255, 255, 255, .16); color: #fff; font: inherit; font-weight: 700; font-size: 13px; padding: 6px 12px; border-radius: 999px; cursor: pointer; }
 .px-ilha { font-family: var(--font-hand); font-size: 22px; color: var(--butter); margin-top: -6px; }
+
+/* ilustrações dos personagens */
+.px-art { position: relative; flex: none; display: inline-grid; place-items: center; line-height: 1; }
+.px-art img { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 6px 8px rgba(20, 16, 50, .35)); user-select: none; -webkit-user-drag: none; }
+.px-art-bigode img { animation: qeBob 2.8s ease-in-out infinite; }
+.px-art-bigode .px-bigode-acc { top: -10%; }
+.px-art-boss.is-fog img { filter: grayscale(.55) brightness(1.1) drop-shadow(0 6px 8px rgba(20, 16, 50, .35)); opacity: .72; }
+.bt-sprite.is-raster { image-rendering: auto; }
+.bt-foe-spot { width: 168px; }
+.bt-foe-spot .bt-plat { bottom: -8px; }
+.bt-me-side .bt-plat { bottom: -4px; }
+.bt-dialog-face { border-radius: 50%; background: var(--butter); }
+@media (prefers-reduced-motion: reduce) { .px-art-bigode img { animation: none; } }
+
+.px-isle .px-art-boss { transition: transform .2s; }
+.px-isle:hover .px-art-boss { transform: translateY(-3px) scale(1.04); }
+.px-isle small.px-isle-boss { font-size: 11.5px; opacity: .8; font-weight: 600; }
+.px-duo { display: flex; align-items: flex-end; justify-content: center; gap: 4px; }

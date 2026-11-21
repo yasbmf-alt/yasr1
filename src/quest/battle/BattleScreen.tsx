@@ -96,7 +96,7 @@ export function BattleScreen({ cast, questions, title, onAnswer, onExit, onFinis
               <BattleSprite src={sprites.plataforma()} alt="" w={144} h={27} className="bt-plat" />
               <motion.div className="bt-foe" initial={{ x: 120, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ type: 'spring', stiffness: 120, damping: 16 }}>
                 <motion.div animate={foe}>
-                  <BattleSprite src={sprites.monstro(cast.slug)} alt={cast.monstro} w={96} h={96} className="bt-foe-img" />
+                  <BattleSprite src={sprites.monstro(cast.slug)} alt={cast.monstro} w={120} h={120} className="bt-foe-img" />
                 </motion.div>
               </motion.div>
             </div>
@@ -105,7 +105,7 @@ export function BattleScreen({ cast, questions, title, onAnswer, onExit, onFinis
             <BattleSprite src={sprites.plataforma()} alt="" w={168} h={31} className="bt-plat" />
             <motion.div className="bt-me" initial={{ x: -120, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ type: 'spring', stiffness: 120, damping: 16, delay: 0.1 }}>
               <motion.div animate={me}>
-                <BattleSprite src={sprites.yas()} alt="Yas" w={64} h={88} className="bt-me-img" />
+                <BattleSprite src={sprites.yas()} alt="Yasmin" w={112} h={112} className="bt-me-img" />
               </motion.div>
             </motion.div>
           </div>

@@ -34,7 +34,7 @@ export function DialogBox({ text, speaker, onAdvance, onTyped, fast, canAdvance 
     if (!done) { setN(text.length); return; }
     if (canAdvance) onAdvance?.();
   };
-  const name = speaker === 'bigode' ? (serio ? 'Guia' : 'Dr. Bigode') : 'Questão';
+  const name = speaker === 'bigode' ? (serio ? 'Guia' : 'Dr. Bigodes') : 'Questão';
 
   return (
     <div
@@ -46,7 +46,7 @@ export function DialogBox({ text, speaker, onAdvance, onTyped, fast, canAdvance 
       aria-live="polite"
       aria-label={done ? text : undefined}
     >
-      {speaker === 'bigode' && <BattleSprite src={sprites.bigode()} alt="" w={40} h={42} className="bt-dialog-face" />}
+      {speaker === 'bigode' && <BattleSprite src={sprites.bigode()} alt="" w={48} h={48} className="bt-dialog-face" />}
       <div className="bt-dialog-body">
         <span className="bt-dialog-name">{name}</span>
         <p className="bt-dialog-text">

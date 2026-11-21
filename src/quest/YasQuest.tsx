@@ -23,6 +23,7 @@ import {
 } from './data';
 import { dossieCardId, isDossiePack, parseDossies, recoveryCards, type DossieCard, type DossieImport, type YqDossie } from './dossie';
 import { Recuperacao, ResumoMestre } from './DossieViews';
+import { sprites } from './battle/sprites';
 import { BattleScreen, DEMO_CAST, DEMO_QUESTIONS, type BattleCast, type BattleQuestion, type TurnResult } from './battle';
 
 type Screen = { s: 'intro' } | { s: 'hub' } | { s: 'mission'; tema: string } | { s: 'porto' } | { s: 'loja' } | { s: 'caderno' } | { s: 'config' } | { s: 'demo'; n: number };
@@ -57,20 +58,33 @@ function PixelEmoji({ e, size = 64, className }: { e: string; size?: number; res
   return <span className={`px-emoji ${className ?? ''}`} style={{ fontSize: Math.round(size * 0.82), width: size, height: size }} aria-hidden="true">{e}</span>;
 }
 
-/** Dr. Bigode: gato médico num orbe brilhante, com estetoscópio e o acessório da loja */
+/** Dr. Bigodes (ilustração), com o acessório da loja por cima */
 function BigodeSprite({ size = 72, st }: { size?: number; st?: YqState }) {
   const acc = st ? wearEmoji(st, 'cat') : '';
+  const src = sprites.bigode();
   return (
-    <span className="px-bigode" style={{ width: size, height: size, fontSize: Math.round(size * 0.56) }} aria-hidden="true">
-      <span className="px-bigode-face">🐱</span>
-      <span className="px-bigode-steth" style={{ fontSize: Math.round(size * 0.3) }}>🩺</span>
-      {acc && <span className="px-bigode-acc" style={{ fontSize: Math.round(size * 0.34) }}>{acc}</span>}
+    <span className="px-art px-art-bigode" style={{ width: size, height: size }} aria-hidden="true">
+      {src ? <img src={src} alt="" draggable={false} /> : <span style={{ fontSize: Math.round(size * 0.56) }}>🐱</span>}
+      {acc && <span className="px-bigode-acc" style={{ fontSize: Math.round(size * 0.3) }}>{acc}</span>}
     </span>
   );
 }
 
+/** Yasmin, a protagonista */
+function YasArt({ size = 96 }: { size?: number }) {
+  const src = sprites.yas();
+  return <span className="px-art px-art-yas" style={{ width: size, height: size }} aria-hidden="true">{src ? <img src={src} alt="" draggable={false} /> : '👩‍⚕️'}</span>;
+}
+
+/** chefão da ilha (ilustração); Ilha Final e Revanche seguem com emoji */
+function BossArt({ tema, size = 64, fog }: { tema: string; size?: number; fog?: boolean }) {
+  const i = islandOf(tema);
+  if (!i) return <PixelEmoji e={emojiOf(tema)} size={size} />;
+  return <span className={`px-art px-art-boss ${fog ? 'is-fog' : ''}`} style={{ width: size, height: size }} aria-hidden="true"><img src={sprites.monstro(i.slug)} alt="" draggable={false} /></span>;
+}
+
 /** caixa de diálogo de RPG com texto digitando; toque completa / avança */
-function Dialog({ name = 'DR. BIGODE', lines, onDone, children, serious }: { name?: string; lines: string[]; onDone?: () => void; children?: React.ReactNode; serious?: boolean }) {
+function Dialog({ name = 'DR. BIGODES', lines, onDone, children, serious }: { name?: string; lines: string[]; onDone?: () => void; children?: React.ReactNode; serious?: boolean }) {
   const [i, setI] = useState(0);
   const [n, setN] = useState(0);
   const line = lines[Math.min(i, lines.length - 1)] ?? '';
@@ -272,7 +286,7 @@ function Intro({ st, onStart }: { st: YqState; onStart: () => void }) {
         <span className="px-title-sub">O arquipélago da R1</span>
       </div>
       <motion.div className="px-hero" animate={{ y: [0, -6, 0] }} transition={{ repeat: Infinity, duration: 1.6 }}>
-        <BigodeSprite size={104} st={st} />
+        <span className="px-duo"><YasArt size={116} /><BigodeSprite size={116} st={st} /></span>
       </motion.div>
       <Dialog lines={lines}>
         <PxBtn onClick={onStart}>▶ BORA!</PxBtn>
@@ -330,7 +344,7 @@ function Hub({ st, byTema, total, saveSt, onMission, onGo }: { st: YqState; byTe
                 <li key={t} className={`${ok ? 'is-done' : ''} ${cur ? 'is-cur' : ''}`}>
                   <button onClick={() => onMission(t)}>
                     <span className="px-stage-n">{i + 1}</span>
-                    <PixelEmoji e={ok ? '🚩' : emojiOf(t)} size={40} res={16} />
+                    {ok ? <PixelEmoji e="🚩" size={40} /> : <BossArt tema={t} size={44} />}
                     <span className="px-stage-name">{labelOf(t)}{islandOf(t)?.capital ? <i> ★3 garantidas</i> : null}</span>
                     <span className="px-stage-st">{ok ? 'OK!' : prog ? STEP_ICON[prog.step] : cur ? '▶' : ''}</span>
                   </button>
@@ -350,8 +364,9 @@ function Hub({ st, byTema, total, saveSt, onMission, onGo }: { st: YqState; byTe
             const s = islandStat(byTema.get(i.tema) ?? []);
             return (
               <button key={i.tema} className={`px-isle ${i.capital ? 'is-capital' : ''} ${s.fog ? 'is-fog' : ''}`} onClick={() => !fz && onMission(i.tema)} disabled={fz}>
-                <PixelEmoji e={s.fog ? '☁️' : i.bossEmoji} size={40} res={16} />
+                <BossArt tema={i.tema} size={68} fog={s.fog} />
                 <b>{i.short}</b>
+                <small className="px-isle-boss">{i.boss}</small>
                 <small>{'★'.repeat(i.prio)} · {Math.round(s.pct * 100)}%</small>
                 <span className="px-bar"><span style={{ width: `${Math.round(s.pct * 100)}%` }} /></span>
               </button>
@@ -432,9 +447,9 @@ function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, ma
           {dossie && <span className="px-ilha">{dossie.ilha}</span>}
           {island?.capital && <span className="px-gold">★ 3 QUESTÕES GARANTIDAS ★</span>}
           <div className="px-vs">
-            <BigodeSprite size={80} st={st} />
+            <motion.span initial={{ x: -40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ type: 'spring', stiffness: 140, damping: 16 }}><YasArt size={112} /></motion.span>
             <span className="px-vs-x">VS</span>
-            <motion.span animate={{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 1.4 }}><PixelEmoji e={emojiOf(tema)} size={88} res={18} /></motion.span>
+            <motion.span initial={{ x: 40, opacity: 0 }} animate={{ x: 0, opacity: 1, y: [0, -5, 0] }} transition={{ x: { type: 'spring', stiffness: 140, damping: 16 }, y: { repeat: Infinity, duration: 1.6 } }}><BossArt tema={tema} size={120} /></motion.span>
           </div>
           {island && <p className="px-boss-name">{island.boss}</p>}
         </div>

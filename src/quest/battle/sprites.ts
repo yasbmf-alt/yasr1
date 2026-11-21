@@ -10,10 +10,13 @@ export function sprite(name: string): string | undefined {
   return undefined;
 }
 
+/** desenho em pixel de verdade (SVG) amplia sem borrar; ilustrações (PNG/WebP) reduzem suave */
+export const isVector = (url?: string) => !!url && (url.startsWith('data:image/svg') || /\.svg(\?|$)/.test(url));
+
 export const sprites = {
   monstro: (slug: string) => sprite(`monstros/${slug}`) ?? sprite('monstros/srag'),
   ilha: (slug: string) => sprite(`ilhas/${slug}`) ?? sprite('ilhas/srag'),
   bigode: () => sprite('bigode'),
-  yas: () => sprite('yas-costas'),
+  yas: () => sprite('yas') ?? sprite('yas-costas'),
   plataforma: () => sprite('plataforma'),
 };
