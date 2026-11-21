@@ -48,6 +48,8 @@ export interface YqState {
   bestCombo: number;
   waves: number;
   nightShown?: Record<string, boolean>;
+  missions?: Record<string, MissionProg>; // data:tema → progresso da missão (modo história)
+  introDay?: string; // dia em que a abertura do Bigode já foi vista
 }
 
 export const STATE_ID = 'yl:yq:state';
@@ -385,3 +387,105 @@ export const wearEmoji = (st: YqState, slot: 'hat' | 'boat' | 'cat') => SHOP.fin
 
 export const dayLabel = (d: string) => ROUTES[d]?.label ?? d;
 export const tomorrow = () => addDays(today(), 1);
+
+// ══ Modo história ══════════════════════════════════════════════
+
+export type Step = 'chamado' | 'dojo' | 'arena' | 'cicatrizes' | 'chefao' | 'oraculo' | 'fim';
+export interface Res { id: string; ok: boolean; pick: string; why?: Why }
+export interface MissionProg {
+  step: Step;
+  dojoStart?: string | null; // ISO de quando começou a leitura
+  dojoMin?: number; // minutos registrados de leitura
+  arena?: string[]; // ids das questões da arena
+  aRes?: Res[];
+  arenaStart?: string | null;
+  boss?: string[]; // fila do chefão (errou → volta pro fim)
+  bRes?: Res[];
+  wins?: number;
+}
+export const missionKey = (tema: string, day = today()) => `${day}:${tema}`;
+
+/** fala do Bigode ao apresentar cada missão */
+export const CHAMADO: Record<string, string[]> = {
+  SRAG: ['Missão: SRAG. O professor JUROU que caem 3 questões. Eu chamo isso de presente com laço.', 'Lembra: PaO₂/FiO₂ abaixo de 100 não é "levinha". É o dragão acordado.'],
+  'Insuficiência respiratória': ['Insuficiência respiratória. Respira fundo. Literalmente, que ajuda.', 'Tipo I, tipo II, mista… parece nome de sorvete, mas cai na prova.'],
+  'Distúrbios do equilíbrio acidobásico': ['Acidobásico: onde a gasometria mente e só a fórmula de Winter fala a verdade.', 'Se o pH tá normal e o resto tá doido, desconfia. Eu desconfio de tudo.'],
+  'Ventilação mecânica e traqueostomia': ['Ventilação mecânica. Hoje você é a máquina. Platô abaixo de 30, combinado?', 'Desmame: o paciente precisa passar no teste. Você também.'],
+  'Vias aéreas básica e avançada': ['Vias aéreas. "Não intubo, não oxigeno": decora isso como se fosse seu CPF.', 'Hoje tem sequência rápida. De estudo, no caso.'],
+  'Intoxicações exógenas agudas': ['Intoxicações. Pele seca ou suada? Pupila grande ou pequena? Eu sou um gato, eu vejo tudo.', 'Cada veneno tem seu antídoto. O seu é estudar.'],
+  'Lesão renal aguda': ['LRA: pré, renal ou pós. Tipo novela, só que com creatinina.', 'FeNa abaixo de 1%… guarda esse número no bolso do jaleco.'],
+  'PCR: BLS, ACLS e PALS': ['PCR. Se o ritmo não choca, você não choca. Simples assim.', 'Adrenalina a cada 3 a 5 min. Café a cada 45, no seu caso.'],
+  'Drogas vasoativas': ['Drogas vasoativas. Noradrenalina primeiro, drama depois.', 'mcg/kg/min: a unidade que separa a R1 de "quase R1".'],
+  'Psicofarmacologia: antidepressivos': ['Antidepressivos. Tricíclico, IMAO, ISRS… parece sigla de banco, mas é ponto na prova.', 'Lembra: antidepressivo leva semanas. Paciência com ele e com você.'],
+  'Emergências em psiquiatria': ['Emergências em psiquiatria. Aqui a gente vai com calma e cuidado: avaliação de risco e segurança primeiro.'],
+  'Psicopatologia e exame do estado mental': ['Psicopatologia. Ilusão tem objeto, alucinação não. Eu sou real, juro.', 'Exame do estado mental: o checklist que o professor ama.'],
+  'Esquizofrenia e transtornos psicóticos': ['Transtornos psicóticos. Hoje é dia de decorar tempo de duração. 1 mês, 6 meses… anota.', 'Esquizoafetivo x esquizofrenia: a pegadinha preferida do professor.'],
+  'Cuidados paliativos e manejo da dor': ['Paliativos e dor. Conforto também é tratamento. Escada da OMS, degrau por degrau… ou não.'],
+};
+export const DOJO_NAGS = [
+  'Tá lendo ou tá no Instagram? Eu sei de tudo.',
+  'Grifa só o que cai, não o livro inteiro.',
+  'Água. Agora. Médica desidratada não passa.',
+  'Se bater sono, levanta e lê em pé. Eu fico olhando.',
+  'Anota a pegadinha quando achar uma. Elas voltam.',
+  'Lembra: depois daqui tem arena. Estuda com raiva.',
+];
+export const CICATRIZ_LINE = (n: number) =>
+  n === 0 ? 'Zero cicatrizes?! Quem é você e o que fez com a Yasmim?'
+    : n === 1 ? '1 cicatriz. Charme, quase.'
+      : n <= 3 ? `${n} cicatrizes. Tô montando um álbum.`
+        : `${n} cicatrizes. Ainda bem que foi aqui e não segunda.`;
+export const WIN_LINES = ['Chefão no chão. Eu sempre acreditei em você. (Mentira, mas agora acredito.)', 'YOU WIN! Pode comemorar por 30 segundos. Contei.', 'Vitória. O professor nem sabe o que vem por aí.'];
+export const INTRO = (dias: number) => [
+  'Ah, finalmente. Já tava achando que você ia fazer a prova só com fé e PEEP baixa.',
+  `${dias <= 0 ? 'A prova é HOJE' : dias === 1 ? 'A prova é amanhã' : `Faltam ${dias} dias pra prova`}: Urgência e Emergência e Saúde Mental. 14 temas. Um dragão. E você.`,
+  'Regras do jogo: primeiro o Dojo (leitura), depois a Arena (questões), as Cicatrizes (seus erros), o Chefão e o Oráculo.',
+  'Vamos nos preparar pra prova?',
+];
+export const SNOOZE = ['Claro. O professor também vai te dar mais 5 pontinhos. Só que não.', 'Mais 5 minutinhos? Os temas tão aqui, esperando. Igual a sua aprovação.', 'Tô contando. 1… 2… tá bom, bora logo.'];
+
+/** extras do chefão: difíceis do tema fora da arena (pegadinha e já-erradas primeiro) */
+export function bossExtras(pool: YqQuestion[], arena: string[], n = 3) {
+  const out = pool.filter((q) => !arena.includes(q.id));
+  const score = (q: YqQuestion) => (q.hist.some((h) => !h.ok) ? 3 : 0) + (q.zona === 'pegadinha' ? 2 : 0) + (q.hist.length ? 0 : 1);
+  return [...out].sort((a, b) => score(b) - score(a)).slice(0, n);
+}
+
+/** pedido do Oráculo: questões novas + perguntas e respostas sobre exatamente o que errei */
+export function oraculoPrompt(tema: string, wrong: { q: YqQuestion; why?: Why; pick?: string }[]) {
+  const WHYTXT: Record<Why, string> = { naosabia: 'não sabia o conteúdo', confundi: 'confundiu com outra coisa', pegadinha: 'caiu numa pegadinha', desatencao: 'errou por desatenção' };
+  const slug = islandOf(tema)?.slug ?? 'tema';
+  const lista = wrong.length
+    ? wrong.map(({ q, why, pick }, i) => `${i + 1}. [${q.zona}] ${q.enunciado.slice(0, 260)}${q.enunciado.length > 260 ? '…' : ''}\n   Marquei ${pick ?? '?'}; a certa era ${q.gabarito}) ${q.alternativas[q.gabarito]}. Motivo: ${why ? WHYTXT[why] : 'não informado'}.`).join('\n')
+    : '(não errei nada; reforce os pontos que mais caem e as pegadinhas clássicas do tema)';
+  return `Sou estudante de medicina e tenho prova de Urgência e Emergência / Saúde Mental. No tema "${tema}" eu errei estas questões:
+${lista}
+
+Crie um REFORÇO focado exatamente no que eu errei (e no motivo do erro), cobrindo também os detalhes vizinhos que o professor pode cobrar.
+Responda SÓ com um JSON (objeto), sem texto antes ou depois, neste formato:
+{
+  "questoes": [
+    { "id": "ined-${slug}-01", "tema": "${tema}", "zona": "pegadinha", "prioridade": ${islandOf(tema)?.prio ?? 2}, "origem": "inédita",
+      "enunciado": "...", "alternativas": {"A":"...","B":"...","C":"...","D":"..."}, "gabarito": "C", "comentario": "..." }
+  ],
+  "flashcards": [
+    { "pergunta": "...", "resposta": "...", "zona": "tratamento" }
+  ]
+}
+Quero 6 questões de múltipla escolha (casos curtos, nível prova, com pegadinhas plausíveis e comentário) e 10 flashcards de pergunta e resposta CURTA e específica (uma ideia por card).
+Regras: "tema" exatamente "${tema}"; "zona" uma de diagnostico, tratamento, conduta, mecanismo, pegadinha (sem acento); ids únicos (…-01, …-02…) e diferentes de reforços anteriores (pode usar a data no id).`;
+}
+
+export interface Duel { pergunta: string; resposta: string; zona: Zona }
+export function parseOraculo(text: string, existing: Map<string, YqQuestion>) {
+  const t = text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+  let raw: unknown;
+  try { raw = JSON.parse(t); } catch (e) { return { error: `não é um JSON válido: ${(e as Error).message.slice(0, 100)}`, q: null as ImportResult | null, duels: [] as Duel[] }; }
+  const obj = (Array.isArray(raw) ? { questoes: raw } : raw) as { questoes?: unknown[]; flashcards?: unknown[] };
+  const q = Array.isArray(obj.questoes) && obj.questoes.length ? parseImport(JSON.stringify(obj.questoes), existing) : null;
+  const duels: Duel[] = (Array.isArray(obj.flashcards) ? obj.flashcards : []).map((f) => {
+    const r = (f ?? {}) as Record<string, unknown>;
+    return { pergunta: String(r.pergunta ?? r.frente ?? '').trim(), resposta: String(r.resposta ?? r.verso ?? '').trim(), zona: normZona(r.zona) ?? 'pegadinha' };
+  }).filter((d) => d.pergunta && d.resposta);
+  return { error: null as string | null, q, duels };
+}

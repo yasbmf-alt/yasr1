@@ -1,7 +1,8 @@
-// Yas Quest — modo jogo da maratona de prova: arquipélago de ilhas (temas), cada
-// uma com 5 zonas; batalhas por ondas com as questões importadas no Porto;
-// grimório dos erros (que viram cartas de feitiço no FSRS); pergaminho de
-// reforço para pedir questões novas à IA; e o Doutor Bigode narrando tudo.
+// Yas Quest — modo história em pixel. O Dr. Bigode (gato médico) abre o jogo,
+// e cada tema vira uma missão: 📜 Chamado → 📖 Dojo (leitura, 45 min flexíveis)
+// → ⚔️ Arena (questões do banco) → 🩹 Cicatrizes (os erros e o porquê) →
+// 👑 Chefão (revanche + extras difíceis) → 🔮 Oráculo (reforço com IA: questões
+// novas + duelo de perguntas e respostas, que viram cartas no FSRS).
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -9,19 +10,20 @@ import { useStore } from '../data/store';
 import { useUI } from '../components/ui';
 import { burst } from '../logic/fx';
 import { play } from '../logic/sound';
-import { today, uid } from '../logic/dates';
+import { diffDays, today, uid } from '../logic/dates';
 import { newCardState } from '../logic/fsrs';
 import { resolveAssetUrl, uploadFile } from '../platform/platform';
+import type { Session } from '../types';
 import type { YlDoc } from '../yasland/types';
 import {
-  ISLANDS, REGIOES, ZONAS, NIVEL, FINAL, REVANCHE, EXAM, SHOP, STATE_ID, SAMPLE,
-  emptyState, islandOf, zonaOf, islandStat, routeOf, visitDone, frozen, buildWave, buildFinal, buildRevanche,
-  xpFor, levelOf, levelXp, parseImport, isOld, reforcoPrompt, bigode, wearEmoji, last,
-  type YqQuestion, type YqState, type Zona, type Why, type Island, type ImportResult, type PdfRef, type Deboche,
+  ISLANDS, ZONAS, FINAL, REVANCHE, EXAM, SHOP, STATE_ID, SAMPLE, CHAMADO, DOJO_NAGS, CICATRIZ_LINE, WIN_LINES, INTRO, SNOOZE,
+  emptyState, islandOf, zonaOf, islandStat, routeOf, visitDone, frozen, buildFinal, buildRevanche, bossExtras, missionKey,
+  xpFor, levelOf, parseImport, parseOraculo, isOld, oraculoPrompt, bigode, wearEmoji, last,
+  type YqQuestion, type YqState, type Zona, type Why, type Island, type ImportResult, type PdfRef, type Deboche, type MissionProg, type Res, type Duel,
 } from './data';
 
-type Screen = { s: 'title' } | { s: 'map' } | { s: 'island'; tema: string } | { s: 'porto' } | { s: 'loja' } | { s: 'grimorio'; tema?: string } | { s: 'config' };
-interface BattleSpec { kind: 'ilha' | 'zona' | 'final' | 'revanche'; tema?: string; zona?: Zona; qs: YqQuestion[] }
+type Screen = { s: 'intro' } | { s: 'hub' } | { s: 'mission'; tema: string } | { s: 'porto' } | { s: 'loja' } | { s: 'caderno' } | { s: 'config' };
+type SaveSt = (p: Partial<YqState> | ((s: YqState) => Partial<YqState>)) => void;
 
 const WHY: { id: Why; emoji: string; nome: string }[] = [
   { id: 'naosabia', emoji: '🤷', nome: 'Não sabia' },
@@ -29,7 +31,113 @@ const WHY: { id: Why; emoji: string; nome: string }[] = [
   { id: 'pegadinha', emoji: '🪤', nome: 'Pegadinha' },
   { id: 'desatencao', emoji: '😵', nome: 'Desatenção' },
 ];
-const stars = (n: number) => '⭐'.repeat(n);
+const DOJO_MIN = 45;
+const labelOf = (t: string) => (t === FINAL ? 'Ilha Final' : t === REVANCHE ? 'Revanche geral' : islandOf(t)?.short ?? t);
+const emojiOf = (t: string) => (t === FINAL ? '🏥' : t === REVANCHE ? '👻' : islandOf(t)?.bossEmoji ?? '⭐');
+
+// ── Arte em pixel ──────────────────────────────────────────────
+
+/** qualquer emoji vira sprite em pixel (desenha pequeno e amplia sem suavizar) */
+function PixelEmoji({ e, size = 64, res = 18, className }: { e: string; size?: number; res?: number; className?: string }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const c = ref.current;
+    const ctx = c?.getContext('2d');
+    if (!c || !ctx) return;
+    ctx.clearRect(0, 0, res, res);
+    ctx.font = `${Math.round(res * 0.86)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(e, res / 2, res / 2 + res * 0.07);
+  }, [e, res]);
+  return <canvas ref={ref} width={res} height={res} className={`px-emoji ${className ?? ''}`} style={{ width: size, height: size }} aria-hidden="true" />;
+}
+
+// Dr. Bigode: gato cinza de óculos, jaleco e estetoscópio (16×17)
+const BIGODE = [
+  '..kk........kk..',
+  '.kgpk......kpgk.',
+  '.kgppkkkkkkppgk.',
+  '.kggggggggggggk.',
+  'kggggggggggggggk',
+  'kgkkkggggggkkkgk',
+  'kgkykggggggkykgk',
+  'kgkkkggggggkkkgk',
+  'kggggggppggggggk',
+  'kgggggkggkgggggk',
+  '.kggggggggggggk.',
+  '..kkwwwwwwwwkk..',
+  '.kwwwbwwwwbwwwk.',
+  'kwwwwbwwwwbwwwwk',
+  'kwwwwwbbbbwwwwwk',
+  'kwwwwwwbbwwwwwwk',
+  'kkkkkkkkkkkkkkkk',
+];
+const PAL: Record<string, string> = { k: '#2b2b3a', g: '#c9c3d6', p: '#f38cb8', y: '#f6c46b', w: '#fffdf8', b: '#2e4a7f' };
+function Sprite({ rows, size = 72, className }: { rows: string[]; size?: number; className?: string }) {
+  const w = rows[0].length;
+  const h = rows.length;
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} width={size} height={(size * h) / w} className={`px-sprite ${className ?? ''}`} shapeRendering="crispEdges" aria-hidden="true">
+      {rows.flatMap((r, y) => [...r].map((ch, x) => (PAL[ch] ? <rect key={`${x}-${y}`} x={x} y={y} width={1} height={1} fill={PAL[ch]} /> : null)))}
+    </svg>
+  );
+}
+function BigodeSprite({ size = 72, st }: { size?: number; st?: YqState }) {
+  const acc = st ? wearEmoji(st, 'cat') : '';
+  return (
+    <span className="px-bigode" style={{ width: size }}>
+      <Sprite rows={BIGODE} size={size} />
+      {acc && <PixelEmoji e={acc} size={size * 0.45} res={12} className="px-bigode-acc" />}
+    </span>
+  );
+}
+
+/** caixa de diálogo de RPG com texto digitando; toque completa / avança */
+function Dialog({ name = 'DR. BIGODE', lines, onDone, children, serious }: { name?: string; lines: string[]; onDone?: () => void; children?: React.ReactNode; serious?: boolean }) {
+  const [i, setI] = useState(0);
+  const [n, setN] = useState(0);
+  const line = lines[Math.min(i, lines.length - 1)] ?? '';
+  const full = n >= line.length;
+  useEffect(() => { setI(0); setN(0); }, [lines.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (full) return undefined;
+    const t = window.setInterval(() => setN((x) => Math.min(line.length, x + 2)), 28);
+    return () => window.clearInterval(t);
+  }, [line, full]);
+  const last = i >= lines.length - 1;
+  const tap = () => {
+    if (!full) { setN(line.length); return; }
+    if (!last) { setI(i + 1); setN(0); play('pop'); return; }
+    onDone?.();
+  };
+  return (
+    <div className={`px-dialog ${serious ? 'is-serious' : ''}`}>
+      <span className="px-dialog-name">{serious ? 'GUIA' : name}</span>
+      <button className="px-dialog-text" onClick={tap} aria-label="Avançar diálogo">
+        {line.slice(0, n)}
+        {full && (!last || onDone) && <span className="px-dialog-next">▼</span>}
+      </button>
+      {full && last && children && <div className="px-dialog-choices">{children}</div>}
+    </div>
+  );
+}
+
+function PxBtn({ children, onClick, kind = 'main', disabled }: { children: React.ReactNode; onClick?: () => void; kind?: 'main' | 'alt' | 'ghost' | 'gold'; disabled?: boolean }) {
+  return <button className={`px-btn px-btn-${kind}`} onClick={() => { play('pop'); onClick?.(); }} disabled={disabled}>{children}</button>;
+}
+
+function Scene({ children, kind = 'day' }: { children: React.ReactNode; kind?: 'day' | 'night' | 'dojo' | 'arena' | 'oracle' }) {
+  return (
+    <div className={`px-scene px-sc-${kind}`}>
+      <span className="px-cloud c1" aria-hidden="true" /><span className="px-cloud c2" aria-hidden="true" /><span className="px-cloud c3" aria-hidden="true" />
+      <div className="px-scene-body">{children}</div>
+      <span className="px-ground" aria-hidden="true" />
+    </div>
+  );
+}
+
+// ── Página ─────────────────────────────────────────────────────
 
 export function YasQuest() {
   const store = useStore();
@@ -44,637 +152,654 @@ export function YasQuest() {
     return m;
   }, [questions]);
 
-  // sempre grava em cima da versão mais nova (várias gravações seguidas na batalha)
   const freshState = (): YqState => ({ ...emptyState(), ...((snapshot().yasland ?? []).find((d) => d.id === STATE_ID) as unknown as YqState) });
-  const saveSt = (p: Partial<YqState> | ((s: YqState) => Partial<YqState>)) => {
+  const saveSt: SaveSt = (p) => {
     const cur = freshState();
     const patch = typeof p === 'function' ? p(cur) : p;
     saveYl({ ...cur, ...patch } as unknown as YlDoc);
   };
   const saveQ = (q: YqQuestion) => saveYl(q as unknown as YlDoc);
-  const markVisit = (tema: string, step: 'estudar' | 'batalha' | 'grimorio') => saveSt((s) => {
+  const markVisit = (tema: string, steps: ('estudar' | 'batalha' | 'grimorio')[]) => saveSt((s) => {
     const d = today();
     const day = { ...(s.visits[d] ?? {}) };
-    day[tema] = { ...(day[tema] ?? {}), [step]: true };
+    day[tema] = { ...(day[tema] ?? {}), ...Object.fromEntries(steps.map((x) => [x, true])) };
     return { visits: { ...s.visits, [d]: day } };
   });
-
-  const [screen, setScreen] = useState<Screen>(() => {
-    try { return sessionStorage.getItem('yq-started') ? { s: 'map' } : { s: 'title' }; } catch { return { s: 'title' }; }
-  });
-  const [battle, setBattle] = useState<BattleSpec | null>(null);
-  const [scroll, setScroll] = useState<{ tema: string; zona: Zona | null } | null>(null);
-  const go = (s: Screen) => { setScreen(s); play('pop'); window.scrollTo({ top: 0 }); };
-
-  const startBattle = (spec: Omit<BattleSpec, 'qs'>) => {
-    const all = questions;
-    const qs = spec.kind === 'final' ? buildFinal(all) : spec.kind === 'revanche' ? buildRevanche(all)
-      : buildWave((byTema.get(spec.tema!) ?? []).filter((q) => !spec.zona || q.zona === spec.zona), spec.kind === 'zona' ? 6 : 7);
-    if (!qs.length) {
-      ui.toast(spec.kind === 'revanche' ? 'Nenhum erro pra revanche. Que audácia! 👑' : 'Sem questões aqui ainda: importe no ⚓ Porto ou peça reforço.');
-      return;
-    }
-    play('ignite');
-    setBattle({ ...spec, qs });
+  // o tempo do jogo entra nas horas do dia (pote do Painel)
+  const logSession = (type: 'leitura' | 'questoes', minutes: number, tema: string, q?: { n: number; ok: number }) => {
+    if (minutes <= 0 && !q) return;
+    const s: Session = {
+      id: uid(), date: today(), topicId: '', missionId: null, activityId: null, type, minutes: Math.max(1, Math.round(minutes)),
+      questions: q?.n ?? null, correct: q?.ok ?? null, errorTopics: [], notes: `Yas Quest · ${labelOf(tema)}`, createdAt: new Date().toISOString(),
+    };
+    store.saveSession(s);
   };
-
-  // cartas de feitiço → flashcards (FSRS) num baralho por ilha
-  const makeCard = (q: YqQuestion) => {
-    if (q.cardId && data.cards.some((c) => c.id === q.cardId)) { ui.toast('Essa já virou carta 🃏'); return; }
-    const is = islandOf(q.tema)!;
-    const s = freshState();
-    let deckId = s.decks[q.tema];
-    if (!deckId || !snapshot().decks.some((d) => d.id === deckId)) {
-      deckId = uid();
-      store.saveDeck({ id: deckId, name: `🃏 Yas Quest · ${is.short}`, area: 'clinica', topicId: null, createdAt: new Date().toISOString() });
-    }
+  const makeCard = (q: YqQuestion, silent = false) => {
+    if (q.cardId && snapshot().cards.some((c) => c.id === q.cardId)) { if (!silent) ui.toast('Essa já virou carta 🃏'); return; }
+    const deckId = ensureDeck(q.tema);
     const cardId = uid();
     const enun = q.enunciado.length > 420 ? `${q.enunciado.slice(0, 420)}…` : q.enunciado;
     store.saveCard({
       id: cardId, deckId, tags: ['yasquest', q.zona], fsrs: newCardState(), createdAt: new Date().toISOString(),
-      front: `${zonaOf(q.zona).emoji} ${enun}`,
-      back: `${q.gabarito}) ${q.alternativas[q.gabarito]}${q.comentario ? `\n\n${q.comentario}` : ''}`,
+      front: `${zonaOf(q.zona).emoji} ${enun}`, back: `${q.gabarito}) ${q.alternativas[q.gabarito]}${q.comentario ? `\n\n${q.comentario}` : ''}`,
     });
     saveQ({ ...q, cardId });
-    saveSt((cur) => ({ decks: { ...cur.decks, [q.tema]: deckId! } }));
-    play('flip');
-    ui.toast('🃏 Virou carta de feitiço! Ela aparece nos seus flashcards.');
+    if (!silent) { play('flip'); ui.toast('🃏 Virou carta de feitiço! Ela está nos seus flashcards.'); }
+  };
+  const ensureDeck = (tema: string) => {
+    const s = freshState();
+    let deckId = s.decks[tema];
+    if (!deckId || !snapshot().decks.some((d) => d.id === deckId)) {
+      deckId = uid();
+      store.saveDeck({ id: deckId, name: `🃏 Yas Quest · ${labelOf(tema)}`, area: 'clinica', topicId: null, createdAt: new Date().toISOString() });
+      saveSt((c) => ({ decks: { ...c.decks, [tema]: deckId! } }));
+    }
+    return deckId;
+  };
+  const saveDuelCards = (tema: string, duels: Duel[]) => {
+    const deckId = ensureDeck(tema);
+    for (const d of duels) store.saveCard({ id: uid(), deckId, tags: ['yasquest', 'oraculo', d.zona], fsrs: newCardState(), createdAt: new Date().toISOString(), front: `${zonaOf(d.zona).emoji} ${d.pergunta}`, back: d.resposta });
   };
 
-  const level = levelOf(st.xp);
-  const lvFrom = levelXp(level);
-  const lvTo = levelXp(level + 1);
+  const [screen, setScreen] = useState<Screen>(() => {
+    let seen = false;
+    try { seen = !!sessionStorage.getItem('yq-intro'); } catch { /* ok */ }
+    return seen ? { s: 'hub' } : { s: 'intro' };
+  });
+  const go = (s: Screen) => { setScreen(s); window.scrollTo({ top: 0 }); };
 
   return (
-    <div className="page yq">
-      {screen.s !== 'title' && (
-        <Hud st={st} level={level} pct={(st.xp - lvFrom) / (lvTo - lvFrom)} onGo={go} current={screen.s} />
-      )}
-      {screen.s === 'title' && <Title onStart={() => { try { sessionStorage.setItem('yq-started', '1'); } catch { /* ok */ } play('mission'); setScreen({ s: 'map' }); }} empty={!questions.length} />}
-      {screen.s === 'map' && (
-        <WorldMap st={st} byTema={byTema} total={questions.length} onIsland={(t) => go({ s: 'island', tema: t })} onBattle={startBattle} onPorto={() => go({ s: 'porto' })} saveSt={saveSt} />
-      )}
-      {screen.s === 'island' && (
-        <IslandView
-          island={islandOf(screen.tema)!}
-          qs={byTema.get(screen.tema) ?? []}
-          st={st}
-          saveSt={saveSt}
-          onBack={() => go({ s: 'map' })}
-          onBattle={startBattle}
-          onGrimorio={() => go({ s: 'grimorio', tema: screen.tema })}
-          onScroll={(z) => setScroll({ tema: screen.tema, zona: z })}
-          markVisit={markVisit}
-        />
-      )}
-      {screen.s === 'grimorio' && <Grimorio qs={screen.tema ? byTema.get(screen.tema) ?? [] : questions} tema={screen.tema} onBack={() => go(screen.tema ? { s: 'island', tema: screen.tema } : { s: 'map' })} makeCard={makeCard} saveQ={saveQ} onDone={screen.tema ? () => { markVisit(screen.tema!, 'grimorio'); ui.toast('📜 Grimório revisado ✓'); } : undefined} st={st} />}
-      {screen.s === 'porto' && <Porto questions={questions} onBack={() => go({ s: 'map' })} saveQ={saveQ} />}
-      {screen.s === 'loja' && <Loja st={st} saveSt={saveSt} onBack={() => go({ s: 'map' })} />}
-      {screen.s === 'config' && <Config st={st} saveSt={saveSt} onBack={() => go({ s: 'map' })} />}
-
-      {battle && (
-        <Battle
-          spec={battle}
+    <div className="page yq px">
+      {screen.s !== 'intro' && <Hud st={st} onGo={go} current={screen.s} />}
+      {screen.s === 'intro' && <Intro st={st} onStart={() => { try { sessionStorage.setItem('yq-intro', '1'); } catch { /* ok */ } saveSt({ introDay: today() }); play('mission'); go({ s: 'hub' }); }} />}
+      {screen.s === 'hub' && <Hub st={st} byTema={byTema} total={questions.length} saveSt={saveSt} onMission={(t) => { play('ignite'); go({ s: 'mission', tema: t }); }} onGo={go} />}
+      {screen.s === 'mission' && (
+        <Mission
+          key={screen.tema}
+          tema={screen.tema}
           st={st}
           all={questions}
-          saveQ={saveQ}
+          pool={screen.tema === FINAL || screen.tema === REVANCHE ? questions : byTema.get(screen.tema) ?? []}
           saveSt={saveSt}
+          saveQ={saveQ}
+          markVisit={markVisit}
+          logSession={logSession}
           makeCard={makeCard}
-          onScroll={(t, z) => setScroll({ tema: t, zona: z })}
-          onExit={(won) => {
-            const key = battle.kind === 'final' ? FINAL : battle.kind === 'revanche' ? REVANCHE : battle.tema!;
-            markVisit(key, 'batalha');
-            if (won && battle.tema) saveSt((s) => ({ bossesBeaten: s.bossesBeaten.includes(battle.tema!) ? s.bossesBeaten : [...s.bossesBeaten, battle.tema!] }));
-            setBattle(null);
-          }}
+          saveDuelCards={saveDuelCards}
+          onHub={() => go({ s: 'hub' })}
+          onPorto={() => go({ s: 'porto' })}
+          onNext={(t) => go({ s: 'mission', tema: t })}
         />
       )}
-      {scroll && <Pergaminho tema={scroll.tema} zona={scroll.zona} onClose={() => setScroll(null)} onPorto={() => { setScroll(null); go({ s: 'porto' }); }} />}
+      {screen.s === 'porto' && <Porto questions={questions} onBack={() => go({ s: 'hub' })} saveQ={saveQ} />}
+      {screen.s === 'loja' && <Loja st={st} saveSt={saveSt} onBack={() => go({ s: 'hub' })} />}
+      {screen.s === 'caderno' && <Caderno qs={questions} st={st} onBack={() => go({ s: 'hub' })} makeCard={makeCard} />}
+      {screen.s === 'config' && <Config st={st} saveSt={saveSt} onBack={() => go({ s: 'hub' })} onIntro={() => go({ s: 'intro' })} />}
     </div>
   );
 }
 
-// ── HUD e Bigode ───────────────────────────────────────────────
+// ── HUD ────────────────────────────────────────────────────────
 
-function Hud({ st, level, pct, onGo, current }: { st: YqState; level: number; pct: number; onGo: (s: Screen) => void; current: string }) {
-  const hat = wearEmoji(st, 'hat');
+function Hud({ st, onGo, current }: { st: YqState; onGo: (s: Screen) => void; current: string }) {
+  const lv = levelOf(st.xp);
   return (
-    <header className="yq-hud">
-      <button className="yq-avatar" onClick={() => onGo({ s: 'map' })} aria-label="Mapa">
-        <span className="yq-avatar-hat" aria-hidden="true">{hat}</span>
-        <span aria-hidden="true">👩‍⚕️</span>
+    <header className="px-hud">
+      <button className="px-hud-score" onClick={() => onGo({ s: 'hub' })} aria-label="Mapa de missões">
+        <span>SCORE</span><b>{String(st.xp).padStart(5, '0')}</b>
       </button>
-      <div className="yq-hud-mid">
-        <div className="yq-hud-top"><b>Nv {level}</b><span>🪙 {st.coins}</span><span>✨ {st.xp} XP</span></div>
-        <div className="yq-xp"><span style={{ width: `${Math.max(3, Math.min(100, pct * 100))}%` }} /></div>
-      </div>
-      <nav className="yq-hud-nav" aria-label="Menu do jogo">
-        {([['map', '🗺️', 'Mapa'], ['grimorio', '📜', 'Grimório'], ['porto', '⚓', 'Porto'], ['loja', '🛍️', 'Loja'], ['config', '⚙️', 'Ajustes']] as const).map(([s, e, l]) => (
-          <button key={s} className={current === s ? 'is-on' : ''} onClick={() => onGo({ s } as Screen)} aria-label={l} title={l}>{e}</button>
+      <span className="px-hud-lv">NV {lv}</span>
+      <span className="px-hud-coins"><PixelEmoji e="🪙" size={18} res={12} /> {st.coins}</span>
+      <nav className="px-hud-nav" aria-label="Menu do jogo">
+        {([['hub', '🗺️', 'Missões'], ['caderno', '🩹', 'Cicatrizes'], ['porto', '⚓', 'Porto'], ['loja', '🛍️', 'Loja'], ['config', '⚙️', 'Ajustes']] as const).map(([s, e, l]) => (
+          <button key={s} className={current === s || (s === 'hub' && current === 'mission') ? 'is-on' : ''} onClick={() => onGo({ s } as Screen)} aria-label={l} title={l}>
+            <PixelEmoji e={e} size={22} res={12} />
+          </button>
         ))}
       </nav>
     </header>
   );
 }
 
-function Bigode({ st, ctx, serious, line }: { st: YqState; ctx: Parameters<typeof bigode>[1]; serious?: boolean; line?: string }) {
-  const [txt, setTxt] = useState(() => line ?? bigode(st.deboche, ctx, serious));
-  useEffect(() => { if (line) setTxt(line); }, [line]);
-  const cat = wearEmoji(st, 'cat');
+// ── Abertura ───────────────────────────────────────────────────
+
+function Intro({ st, onStart }: { st: YqState; onStart: () => void }) {
+  const dias = diffDays(EXAM.date, today());
+  const [snooze, setSnooze] = useState<string | null>(null);
+  const lines = snooze ? [snooze, 'Vamos nos preparar pra prova?'] : INTRO(dias);
   return (
-    <div className={`yq-bigode ${serious ? 'is-serious' : ''}`}>
-      <button className="yq-cat" onClick={() => { play('meow'); setTxt(bigode(st.deboche, ctx, serious)); }} aria-label="Doutor Bigode">
-        <span aria-hidden="true">🐱</span>{cat && <i aria-hidden="true">{cat}</i>}
-      </button>
-      <motion.p key={txt} initial={{ opacity: 0, y: 6, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }}>
-        <b>{serious ? 'Guia' : 'Doutor Bigode'}:</b> {txt}
-      </motion.p>
-    </div>
+    <Scene kind="night">
+      <div className="px-title">
+        <span className="px-title-logo">YAS<br />QUEST</span>
+        <span className="px-title-sub">O arquipélago da R1</span>
+      </div>
+      <motion.div className="px-hero" animate={{ y: [0, -6, 0] }} transition={{ repeat: Infinity, duration: 1.6 }}>
+        <BigodeSprite size={104} st={st} />
+      </motion.div>
+      <Dialog lines={lines}>
+        <PxBtn onClick={onStart}>▶ BORA!</PxBtn>
+        <PxBtn kind="ghost" onClick={() => { play('meow'); setSnooze(SNOOZE[Math.floor(Math.random() * SNOOZE.length)]); }}>Mais 5 minutinhos…</PxBtn>
+      </Dialog>
+    </Scene>
   );
 }
 
-// ── Tela título ────────────────────────────────────────────────
+// ── Mapa de missões (hub) ──────────────────────────────────────
 
-function Title({ onStart, empty }: { onStart: () => void; empty: boolean }) {
-  return (
-    <motion.button className="yq-title" onClick={onStart} initial={{ opacity: 0 }} animate={{ opacity: 1 }} aria-label="Começar o jogo">
-      <span className="yq-title-sea" aria-hidden="true">
-        {['🏝️', '🌴', '🏝️', '🌋', '🏝️'].map((e, i) => <i key={i} style={{ left: `${8 + i * 19}%`, animationDelay: `${i * 0.4}s` }}>{e}</i>)}
-        <b className="yq-title-boat">⛵</b>
-      </span>
-      <span className="yq-title-logo">YAS<br />QUEST</span>
-      <span className="yq-title-sub">O Arquipélago da R1</span>
-      <span className="yq-start">▶ PRESSIONE START</span>
-      {empty && <span className="yq-title-hint">dica: comece pelo ⚓ Porto, importando as questões</span>}
-    </motion.button>
-  );
-}
+const STEP_ICON: Record<string, string> = { chamado: '📜', dojo: '📖', arena: '⚔️', cicatrizes: '🩹', chefao: '👑', oraculo: '🔮', fim: '🏆' };
 
-// ── Mapa-mundo ─────────────────────────────────────────────────
-
-function WorldMap({ st, byTema, total, onIsland, onBattle, onPorto, saveSt }: {
-  st: YqState; byTema: Map<string, YqQuestion[]>; total: number; onIsland: (t: string) => void; onBattle: (s: Omit<BattleSpec, 'qs'>) => void; onPorto: () => void; saveSt: (p: Partial<YqState> | ((s: YqState) => Partial<YqState>)) => void;
-}) {
-  const stats = useMemo(() => new Map(ISLANDS.map((i) => [i.tema, islandStat(byTema.get(i.tema) ?? [])])), [byTema]);
-  const painted = ISLANDS.filter((i) => (stats.get(i.tema)?.pct ?? 0) >= 0.6).length;
-  return (
-    <div className="yq-map">
-      <Bigode st={st} ctx="abrir" />
-      {total === 0 && (
-        <button className="yq-empty" onClick={onPorto}>
-          <b>⚓ O arquipélago está vazio</b>
-          <span>Vá ao Porto e importe o JSON com as questões. Os navios trazem os monstros!</span>
-        </button>
-      )}
-      <Rota st={st} saveSt={saveSt} onIsland={onIsland} onBattle={onBattle} />
-      <p className="yq-painted">🎨 Mapa pintado: <b>{painted}/{ISLANDS.length}</b> ilhas · {total} questões no arquipélago</p>
-      {REGIOES.map((r) => (
-        <section key={r.id} className="yq-region" style={{ ['--mar' as string]: r.mar }}>
-          <h3>{r.emoji} {r.nome}</h3>
-          <div className="yq-isles">
-            {ISLANDS.filter((i) => i.regiao === r.id).map((i, k) => {
-              const s = stats.get(i.tema)!;
-              return (
-                <motion.button
-                  key={i.tema}
-                  className={`yq-isle p${i.prio} ${i.capital ? 'is-capital' : ''} ${s.fog ? 'is-fog' : ''} ${s.conquered ? 'is-conquered' : ''}`}
-                  style={{ ['--pct' as string]: `${Math.round(s.pct * 100)}%`, animationDelay: `${k * 0.3}s` }}
-                  onClick={() => onIsland(i.tema)}
-                  whileTap={{ scale: 0.93 }}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0, transition: { delay: k * 0.05 } }}
-                >
-                  {i.capital && <span className="yq-capital">👑 3 questões garantidas</span>}
-                  <span className="yq-isle-blob" aria-hidden="true">
-                    <span className="yq-isle-boss">{s.fog ? '☁️' : i.bossEmoji}</span>
-                    {s.conquered && <span className="yq-flag">🚩</span>}
-                    {s.alerts.length > 0 && <span className="yq-siren">🚨</span>}
-                  </span>
-                  <span className="yq-isle-name">{i.short}</span>
-                  <span className="yq-isle-meta">{stars(i.prio)} · {Math.round(s.pct * 100)}%</span>
-                  <span className="yq-dots" aria-hidden="true">
-                    {s.zones.map((z) => <i key={z.zona} className={`lv-${z.nivel} ${z.alerta ? 'is-alert' : ''}`} />)}
-                  </span>
-                </motion.button>
-              );
-            })}
-          </div>
-        </section>
-      ))}
-      {!frozen() && <button className={`yq-final-isle ${today() === EXAM.date ? 'is-open' : ''}`} onClick={() => onBattle({ kind: 'final' })}>
-        <span aria-hidden="true">🏥</span>
-        <b>Ilha Final · Hospital da Prova</b>
-        <small>SRAG + suas revanches + doses de todas as ilhas</small>
-      </button>}
-    </div>
-  );
-}
-
-function Rota({ st, saveSt, onIsland, onBattle }: { st: YqState; saveSt: (p: Partial<YqState> | ((s: YqState) => Partial<YqState>)) => void; onIsland: (t: string) => void; onBattle: (s: Omit<BattleSpec, 'qs'>) => void }) {
+function Hub({ st, byTema, total, saveSt, onMission, onGo }: { st: YqState; byTema: Map<string, YqQuestion[]>; total: number; saveSt: SaveSt; onMission: (t: string) => void; onGo: (s: Screen) => void }) {
   const d = today();
   const r = routeOf(st, d);
   const fz = frozen();
-  const nightRef = useRef(false);
   const visits = st.visits[d] ?? {};
   const doneAll = !!r && r.list.length > 0 && r.list.every((t) => visitDone(visits[t], t));
+  const current = r?.list.find((t) => !visitDone(visits[t], t));
+  const [line] = useState(() => bigode(st.deboche, 'abrir'));
   useEffect(() => {
-    if (doneAll && !nightRef.current && !st.nightShown?.[d]) {
-      nightRef.current = true;
-      play('chapter');
-      saveSt((s) => ({ nightShown: { ...(s.nightShown ?? {}), [d]: true } }));
-    }
-  }, [doneAll, d, st.nightShown, saveSt]);
-  if (fz) return <div className="yq-route is-zen"><b>🧘 Modo pré-prova</b><span>Nada novo agora. Almoça, respira e vai pra prova às {EXAM.start}. Você treinou pra isso. 👑</span></div>;
-  if (!r) return <div className="yq-route"><b>🧭 Rota livre</b><span>Hoje não tem rota marcada. Escolha uma ilha (as ⭐⭐⭐ primeiro).</span></div>;
-  const current = r.list.find((t) => !visitDone(visits[t], t));
-  const label = (t: string) => (t === FINAL ? '🏥 Ilha Final' : t === REVANCHE ? '🔁 Revanche geral' : islandOf(t)?.short ?? t);
-  const open = (t: string) => (t === FINAL ? onBattle({ kind: 'final' }) : t === REVANCHE ? onBattle({ kind: 'revanche' }) : onIsland(t));
+    if (doneAll && !st.nightShown?.[d]) { play('chapter'); saveSt((s) => ({ nightShown: { ...(s.nightShown ?? {}), [d]: true } })); }
+  }, [doneAll]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
-    <div className={`yq-route ${doneAll ? 'is-night' : ''}`}>
-      <div className="yq-route-head">
-        <b>🗺️ Rota de {r.label}{d === '2026-11-23' ? ` · até ${EXAM.freezeAfter}` : ''}</b>
-        {r.family.length > 0 && (
-          <label className="yq-fam">
-            <input type="checkbox" checked={r.fam} onChange={(e) => saveSt((s) => ({ family: { ...s.family, [d]: e.target.checked } }))} />
-            dia com família
-          </label>
+    <div className="px-hub">
+      <Scene kind={doneAll || fz ? 'night' : 'day'}>
+        <div className="px-hub-top">
+          <BigodeSprite size={64} st={st} />
+          <Dialog lines={[fz ? 'Modo pré-prova: nada novo agora. Almoça, respira e vai. Você treinou pra isso.' : doneAll ? bigode(st.deboche, 'noite') : total === 0 ? 'O arquipélago tá vazio. Passa no ⚓ Porto e traz as questões, senão eu jogo sozinho.' : current ? `${line} Próxima missão: ${labelOf(current)}.` : line]} />
+        </div>
+        {doneAll && (
+          <motion.div className="px-nightok" initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
+            <PixelEmoji e="🌙" size={72} res={16} />
+            <b>NOITE LIBERADA!</b>
+          </motion.div>
         )}
-      </div>
-      {doneAll ? (
-        <motion.div className="yq-night" initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
-          <span aria-hidden="true">🌙</span>
-          <b>Noite liberada!</b>
-          <small>{bigode(st.deboche, 'noite')}</small>
-        </motion.div>
-      ) : (
-        <ol className="yq-route-list">
-          {r.list.map((t) => {
-            const v = visits[t];
-            const ok = visitDone(v, t);
-            const cur = t === current;
+      </Scene>
+
+      {r && !fz && (
+        <section className="px-panel">
+          <div className="px-panel-head">
+            <b>🗺️ ROTA DE {r.label.toUpperCase()}</b>
+            {r.family.length > 0 && (
+              <label className="px-fam"><input type="checkbox" checked={r.fam} onChange={(e) => saveSt((s) => ({ family: { ...s.family, [d]: e.target.checked } }))} /> dia com família</label>
+            )}
+          </div>
+          <ol className="px-path">
+            {r.list.map((t, i) => {
+              const ok = visitDone(visits[t], t);
+              const prog = st.missions?.[missionKey(t, d)];
+              const cur = t === current;
+              return (
+                <li key={t} className={`${ok ? 'is-done' : ''} ${cur ? 'is-cur' : ''}`}>
+                  <button onClick={() => onMission(t)}>
+                    <span className="px-stage-n">{i + 1}</span>
+                    <PixelEmoji e={ok ? '🚩' : emojiOf(t)} size={40} res={16} />
+                    <span className="px-stage-name">{labelOf(t)}{islandOf(t)?.capital ? <i> ★3 garantidas</i> : null}</span>
+                    <span className="px-stage-st">{ok ? 'OK!' : prog ? STEP_ICON[prog.step] : cur ? '▶' : ''}</span>
+                  </button>
+                  {cur && r.list.length > 1 && <button className="px-skip" onClick={() => saveSt((s) => ({ skipped: { ...s.skipped, [d]: [...(s.skipped[d] ?? []).filter((x) => x !== t), t] } }))}>pular ↓</button>}
+                </li>
+              );
+            })}
+          </ol>
+          {current && <PxBtn kind="gold" onClick={() => onMission(current)}>▶ JOGAR: {labelOf(current).toUpperCase()}</PxBtn>}
+        </section>
+      )}
+
+      <section className="px-panel">
+        <div className="px-panel-head"><b>🏝️ TODAS AS ILHAS</b><small>{total} monstros no arquipélago</small></div>
+        <div className="px-isles">
+          {ISLANDS.map((i) => {
+            const s = islandStat(byTema.get(i.tema) ?? []);
             return (
-              <li key={t} className={`${ok ? 'is-done' : ''} ${cur ? 'is-cur' : ''}`}>
-                <button onClick={() => open(t)}>
-                  <span className="yq-rl-ico">{ok ? '✅' : cur ? '⛵' : '○'}</span>
-                  <span className="yq-rl-name">{label(t)}</span>
-                  {t !== FINAL && t !== REVANCHE && !ok && (
-                    <span className="yq-rl-steps" aria-hidden="true">{v?.estudar ? '📖' : '·'}{v?.batalha ? '⚔️' : '·'}{v?.grimorio ? '📜' : '·'}</span>
-                  )}
-                </button>
-                {cur && r.list.length > 1 && (
-                  <button className="yq-skip" onClick={() => saveSt((s) => ({ skipped: { ...s.skipped, [d]: [...(s.skipped[d] ?? []).filter((x) => x !== t), t] } }))}>pular ↓</button>
-                )}
-              </li>
+              <button key={i.tema} className={`px-isle ${i.capital ? 'is-capital' : ''} ${s.fog ? 'is-fog' : ''}`} onClick={() => !fz && onMission(i.tema)} disabled={fz}>
+                <PixelEmoji e={s.fog ? '☁️' : i.bossEmoji} size={40} res={16} />
+                <b>{i.short}</b>
+                <small>{'★'.repeat(i.prio)} · {Math.round(s.pct * 100)}%</small>
+                <span className="px-bar"><span style={{ width: `${Math.round(s.pct * 100)}%` }} /></span>
+              </button>
             );
           })}
-        </ol>
-      )}
-      <small className="yq-route-tip">Cada ilha: 📖 estudar → ⚔️ batalha → 📜 grimório. Pulou? Vai pro fim, sem drama.</small>
+        </div>
+        {!fz && <PxBtn kind="alt" onClick={() => onMission(FINAL)}>🏥 ILHA FINAL</PxBtn>}
+      </section>
+      {total === 0 && <PxBtn kind="gold" onClick={() => onGo({ s: 'porto' })}>⚓ IR PRO PORTO</PxBtn>}
     </div>
   );
 }
 
-// ── Ilha ───────────────────────────────────────────────────────
+// ── Missão ─────────────────────────────────────────────────────
 
-function IslandView({ island, qs, st, saveSt, onBack, onBattle, onGrimorio, onScroll, markVisit }: {
-  island: Island; qs: YqQuestion[]; st: YqState; saveSt: (p: Partial<YqState> | ((s: YqState) => Partial<YqState>)) => void; onBack: () => void;
-  onBattle: (s: Omit<BattleSpec, 'qs'>) => void; onGrimorio: () => void; onScroll: (z: Zona | null) => void; markVisit: (t: string, step: 'estudar' | 'batalha' | 'grimorio') => void;
+function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, makeCard, saveDuelCards, onHub, onPorto, onNext }: {
+  tema: string; st: YqState; all: YqQuestion[]; pool: YqQuestion[]; saveSt: SaveSt; saveQ: (q: YqQuestion) => void;
+  markVisit: (t: string, s: ('estudar' | 'batalha' | 'grimorio')[]) => void; logSession: (type: 'leitura' | 'questoes', min: number, tema: string, q?: { n: number; ok: number }) => void;
+  makeCard: (q: YqQuestion, silent?: boolean) => void; saveDuelCards: (tema: string, d: Duel[]) => void; onHub: () => void; onPorto: () => void; onNext: (t: string) => void;
 }) {
   const ui = useUI();
-  const s = islandStat(qs);
-  const v = st.visits[today()]?.[island.tema] ?? {};
-  const cfg = st.islands[island.tema] ?? {};
+  const key = missionKey(tema);
+  const special = tema === FINAL || tema === REVANCHE;
+  const island: Island | undefined = islandOf(tema);
+  const serious = !!island?.serious;
+  const prog: MissionProg = st.missions?.[key] ?? { step: 'chamado' };
+  const updProg = (f: (cur: MissionProg) => Partial<MissionProg>) => saveSt((s) => {
+    const cur = (s.missions ?? {})[key] ?? { step: 'chamado' as const };
+    return { missions: { ...(s.missions ?? {}), [key]: { ...cur, ...f(cur) } } };
+  });
+  const setProg = (p: Partial<MissionProg>) => updProg(() => p);
+  const qmap = useMemo(() => new Map(all.map((q) => [q.id, q])), [all]);
+  const wrongList = [...(prog.aRes ?? []), ...(prog.bRes ?? [])].filter((r) => !r.ok);
+  const uniqWrong = [...new Map(wrongList.map((r) => [r.id, r])).values()].map((r) => ({ q: qmap.get(r.id)!, why: r.why, pick: r.pick })).filter((x) => x.q);
+
+  const buildArena = () => {
+    if (tema === FINAL) return buildFinal(all).map((q) => q.id);
+    if (tema === REVANCHE) return buildRevanche(all).map((q) => q.id);
+    // arena: as que você nunca fez e as que errou primeiro, até 12
+    const fresh = pool.filter((q) => !q.hist.length);
+    const wrong = pool.filter((q) => q.hist.length && !last(q).ok);
+    const rest = pool.filter((q) => q.hist.length && last(q).ok);
+    return [...fresh, ...wrong, ...rest].slice(0, 12).map((q) => q.id);
+  };
+  const toArena = () => setProg({ step: 'arena', arena: buildArena(), aRes: [], arenaStart: new Date().toISOString() });
+  const nextInRoute = () => {
+    const r = routeOf(st);
+    const v = st.visits[today()] ?? {};
+    return r?.list.find((t) => t !== tema && !visitDone(v[t], t));
+  };
+
+  // 📜 Chamado
+  if (prog.step === 'chamado') {
+    const lines = special
+      ? [tema === FINAL ? 'Ilha Final. O Hospital da Prova. SRAG, suas revanches e as doses de todas as ilhas.' : 'Revanche geral: todos os fantasmas dos seus erros, juntos. Que lindo.', 'Sem Dojo agora: direto pra Arena. Bora?']
+      : [...(CHAMADO[tema] ?? [`Missão: ${tema}.`]).slice(0, 2), `Primeiro o Dojo: ${DOJO_MIN} min de leitura (pode parar antes ou ir além). Depois a Arena.`];
+    return (
+      <Scene kind="day">
+        <button className="px-back" onClick={onHub}>◀ MAPA</button>
+        <div className="px-chamado">
+          <span className="px-mission-tag">📜 O CHAMADO</span>
+          <h2 className="px-h">{labelOf(tema).toUpperCase()}</h2>
+          {island?.capital && <span className="px-gold">★ 3 QUESTÕES GARANTIDAS ★</span>}
+          <div className="px-vs">
+            <BigodeSprite size={80} st={st} />
+            <span className="px-vs-x">VS</span>
+            <motion.span animate={{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 1.4 }}><PixelEmoji e={emojiOf(tema)} size={88} res={18} /></motion.span>
+          </div>
+          {island && <p className="px-boss-name">{island.boss}</p>}
+        </div>
+        <Dialog lines={lines} serious={serious}>
+          <PxBtn kind="gold" onClick={() => (special ? toArena() : setProg({ step: 'dojo', dojoStart: new Date().toISOString() }))}>⚔️ ACEITAR MISSÃO</PxBtn>
+          <PxBtn kind="ghost" onClick={onHub}>Depois</PxBtn>
+        </Dialog>
+      </Scene>
+    );
+  }
+
+  // 📖 Dojo
+  if (prog.step === 'dojo') {
+    return <Dojo tema={tema} island={island!} st={st} saveSt={saveSt} start={prog.dojoStart ?? new Date().toISOString()} onBack={onHub} onDone={(min) => {
+      logSession('leitura', min, tema);
+      markVisit(tema, ['estudar']);
+      setProg({ dojoMin: min });
+      toArena();
+      play('ignite');
+    }} />;
+  }
+
+  // ⚔️ Arena
+  if (prog.step === 'arena') {
+    const qs = (prog.arena ?? []).map((id) => qmap.get(id)).filter(Boolean) as YqQuestion[];
+    if (!qs.length) {
+      return (
+        <Scene kind="arena">
+          <button className="px-back" onClick={onHub}>◀ MAPA</button>
+          <Dialog lines={[special ? 'Não achei monstros pra essa arena ainda. Joga umas ilhas primeiro.' : 'Essa ilha ainda não tem monstros (questões). Importa no Porto, ou pede pro Oráculo criar do zero.']}>
+            <PxBtn onClick={onPorto}>⚓ PORTO</PxBtn>
+            {!special && <PxBtn kind="alt" onClick={() => setProg({ step: 'oraculo' })}>🔮 ORÁCULO</PxBtn>}
+            <PxBtn kind="ghost" onClick={onHub}>Voltar</PxBtn>
+          </Dialog>
+        </Scene>
+      );
+    }
+    const doneIds = new Set((prog.aRes ?? []).map((r) => r.id));
+    const left = qs.filter((q) => !doneIds.has(q.id));
+    return (
+      <Battle
+        mode="arena"
+        title={`ARENA · ${labelOf(tema).toUpperCase()}`}
+        bossEmoji={emojiOf(tema)}
+        bossName={island?.boss ?? (tema === FINAL ? 'Chefão da Prova' : 'Fantasmas dos Erros')}
+        queue={left}
+        total={qs.length}
+        st={st}
+        serious={serious}
+        saveQ={saveQ}
+        saveSt={saveSt}
+        makeCard={makeCard}
+        onRes={(r) => updProg((c) => ({ aRes: [...(c.aRes ?? []).filter((x) => x.id !== r.id), r] }))}
+        onWhy={(id, why) => updProg((c) => ({ aRes: (c.aRes ?? []).map((x) => (x.id === id ? { ...x, why } : x)) }))}
+        onExit={onHub}
+        onFinish={() => {
+          const allRes = st.missions?.[key]?.aRes ?? [];
+          const min = prog.arenaStart ? Math.min(120, (Date.now() - new Date(prog.arenaStart).getTime()) / 60000) : allRes.length * 2;
+          logSession('questoes', min, tema, { n: allRes.length, ok: allRes.filter((r) => r.ok).length });
+          setProg({ step: 'cicatrizes' });
+          play('page');
+        }}
+      />
+    );
+  }
+
+  // 🩹 Cicatrizes
+  if (prog.step === 'cicatrizes') {
+    const aRes = prog.aRes ?? [];
+    const wrong = aRes.filter((r) => !r.ok).map((r) => ({ r, q: qmap.get(r.id)! })).filter((x) => x.q);
+    const ok = aRes.length - wrong.length;
+    const startBoss = () => {
+      const wrongIds = wrong.map((x) => x.q.id);
+      const extras = special ? (tema === FINAL ? bossExtras(all.filter((q) => q.tema === 'SRAG'), prog.arena ?? [], 2) : []) : bossExtras(pool, prog.arena ?? [], 3);
+      const queue = [...wrongIds, ...extras.map((q) => q.id)];
+      if (!queue.length) { setProg({ step: special ? 'fim' : 'oraculo' }); return; }
+      setProg({ step: 'chefao', boss: queue, bRes: [] });
+      play('ignite');
+    };
+    return (
+      <Scene kind="dojo">
+        <button className="px-back" onClick={onHub}>◀ MAPA</button>
+        <div className="px-cic">
+          <span className="px-mission-tag">🩹 CADERNO DAS CICATRIZES</span>
+          <p className="px-score-line"><b>{ok}</b>/{aRes.length} acertos na Arena</p>
+          {wrong.length === 0 ? <p className="px-empty">Nenhuma cicatriz. Pele de pêssego.</p> : (
+            <ul className="px-cic-list">
+              {wrong.map(({ r, q }) => {
+                const w = WHY.find((x) => x.id === r.why);
+                return (
+                  <li key={q.id}>
+                    <details>
+                      <summary><span className="px-chip">{zonaOf(q.zona).emoji} {zonaOf(q.zona).nome}</span>{w && <span className="px-chip is-why">{w.emoji} {w.nome}</span>}<span className="px-cic-enun">{q.enunciado.slice(0, 100)}…</span></summary>
+                      <p><b>Você:</b> {r.pick}) {q.alternativas[r.pick]}</p>
+                      <p><b>Certa: {q.gabarito})</b> {q.alternativas[q.gabarito]}</p>
+                      {q.comentario && <p className="px-coment">{q.comentario}</p>}
+                      {!w && (
+                        <div className="px-why">{WHY.map((x) => <button key={x.id} onClick={() => setProg({ aRes: aRes.map((y) => (y.id === q.id ? { ...y, why: x.id } : y)) })}>{x.emoji} {x.nome}</button>)}</div>
+                      )}
+                      <button className="px-mini" onClick={() => makeCard(q)}>{q.cardId ? '🃏 já é carta' : '🃏 virar carta de feitiço'}</button>
+                    </details>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+        <Dialog lines={[CICATRIZ_LINE(wrong.length), wrong.length ? 'O chefão vai usar exatamente essas contra você. E umas extras difíceis. Pronta?' : 'O chefão vai trazer umas difíceis extras. Pronta?']} serious={serious}>
+          <PxBtn kind="gold" onClick={startBoss}>👑 ENFRENTAR O CHEFÃO</PxBtn>
+        </Dialog>
+      </Scene>
+    );
+  }
+
+  // 👑 Chefão
+  if (prog.step === 'chefao') {
+    const queue = (prog.boss ?? []).map((id) => qmap.get(id)).filter(Boolean) as YqQuestion[];
+    return (
+      <Battle
+        mode="boss"
+        title={`CHEFÃO · ${labelOf(tema).toUpperCase()}`}
+        bossEmoji={emojiOf(tema)}
+        bossName={island?.boss ?? (tema === FINAL ? 'Chefão da Prova' : 'Rei dos Fantasmas')}
+        queue={queue}
+        total={queue.length}
+        st={st}
+        serious={serious}
+        saveQ={saveQ}
+        saveSt={saveSt}
+        makeCard={makeCard}
+        onRes={(r) => updProg((c) => ({ bRes: [...(c.bRes ?? []), r] }))}
+        onWhy={(id, why) => updProg((c) => { const b = [...(c.bRes ?? [])]; const i = b.map((y) => y.id).lastIndexOf(id); if (i >= 0) b[i] = { ...b[i], why }; return { bRes: b }; })}
+        onExit={onHub}
+        onFinish={() => {
+          markVisit(tema, ['batalha', 'grimorio']);
+          if (island) saveSt((s) => ({ bossesBeaten: s.bossesBeaten.includes(tema) ? s.bossesBeaten : [...s.bossesBeaten, tema], coins: s.coins + 15 }));
+          setProg({ step: special ? 'fim' : 'oraculo', wins: (prog.wins ?? 0) + 1 });
+        }}
+      />
+    );
+  }
+
+  // 🔮 Oráculo
+  if (prog.step === 'oraculo') {
+    return <Oraculo tema={tema} st={st} wrong={uniqWrong} all={all} saveQ={saveQ} saveSt={saveSt} saveDuelCards={saveDuelCards} onBack={onHub} onDone={() => { setProg({ step: 'fim' }); markVisit(tema, ['estudar', 'batalha', 'grimorio']); }} />;
+  }
+
+  // 🏆 Fim
+  const next = nextInRoute();
+  return (
+    <WinScreen st={st} title="MISSÃO COMPLETA!" sub={labelOf(tema)} onGo={() => { markVisit(tema, ['estudar', 'batalha', 'grimorio']); if (next) onNext(next); else onHub(); }} goLabel={next ? `▶ PRÓXIMA: ${labelOf(next).toUpperCase()}` : '▶ VOLTAR AO MAPA'}
+      extra={<PxBtn kind="ghost" onClick={() => { setProg({ step: 'chamado', aRes: [], bRes: [], boss: [], arena: [] }); ui.toast('Missão reiniciada.'); }}>Jogar de novo</PxBtn>} />
+  );
+}
+
+// ── Dojo (leitura) ─────────────────────────────────────────────
+
+function Dojo({ tema, island, st, saveSt, start, onBack, onDone }: { tema: string; island: Island; st: YqState; saveSt: SaveSt; start: string; onBack: () => void; onDone: (min: number) => void }) {
+  const ui = useUI();
+  const [now, setNow] = useState(Date.now());
+  const [ending, setEnding] = useState<string | null>(null);
+  useEffect(() => { const t = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(t); }, []);
+  const ms = Math.max(0, now - new Date(start).getTime());
+  const min = ms / 60000;
+  const over = min >= DOJO_MIN;
+  const mm = Math.floor(ms / 60000);
+  const ss = Math.floor((ms % 60000) / 1000);
+  const nag = DOJO_NAGS[Math.floor(min / 8) % DOJO_NAGS.length];
+  const cfg = st.islands[tema] ?? {};
   const pdf = st.pdfs.find((p) => p.id === cfg.pdfId);
   const [cfgOpen, setCfgOpen] = useState(false);
-  const [taunt] = useState(() => island.taunts[Math.floor(Math.random() * island.taunts.length)]);
-  const old = qs.filter(isOld).length;
-  const fz = frozen();
-
-  const openPdf = async (zona: Zona | null) => {
-    if (!pdf) { setCfgOpen(true); ui.toast('Escolha o PDF desta ilha primeiro 👇'); return; }
-    const page = (zona && cfg.pages?.[zona]) || cfg.page || null;
+  const openPdf = async () => {
+    if (!pdf) { setCfgOpen(true); return; }
     const base = pdf.assetId ? await resolveAssetUrl(pdf.assetId) : pdf.url;
-    if (!base) { ui.toast('Não consegui abrir o PDF. Confira o link nos ⚙️ Ajustes.'); return; }
-    window.open(page ? `${base.split('#')[0]}#page=${page}` : base, '_blank', 'noopener');
+    if (!base) { ui.toast('Não consegui abrir o PDF. Confira o link.'); return; }
+    window.open(cfg.page ? `${base.split('#')[0]}#page=${cfg.page}` : base, '_blank', 'noopener');
   };
-
   return (
-    <div className={`yq-island ${island.serious ? 'is-serious' : ''} ${island.capital ? 'is-capital' : ''}`}>
-      <button className="yq-back" onClick={onBack}>← Mapa</button>
-      <header className="yq-island-head">
-        <motion.span className="yq-boss-big" animate={{ y: [0, -6, 0] }} transition={{ repeat: Infinity, duration: 2.4 }} aria-hidden="true">{island.bossEmoji}</motion.span>
-        <div>
-          <span className="yq-eyebrow">{stars(island.prio)} {island.capital ? '· 👑 ilha-capital · 3 questões garantidas' : ''}</span>
-          <h2>{island.tema}</h2>
-          <p className="yq-boss-line"><b>{island.boss}:</b> “{taunt}”</p>
-          <span className="yq-island-meta">{qs.length} questões · {old} já caíram · {Math.round(s.pct * 100)}% dominada</span>
+    <Scene kind="dojo">
+      <button className="px-back" onClick={onBack}>◀ MAPA</button>
+      <div className="px-dojo">
+        <span className="px-mission-tag">📖 TREINO NO DOJO</span>
+        <h2 className="px-h">{island.short.toUpperCase()}</h2>
+        <motion.span animate={{ rotate: over ? 0 : [0, 0, 180, 180] }} transition={{ repeat: Infinity, duration: 4, times: [0, 0.45, 0.5, 1] }}>
+          <PixelEmoji e={over ? '⏰' : '⏳'} size={80} res={16} />
+        </motion.span>
+        <span className={`px-clock ${over ? 'is-over' : ''}`}>{String(mm).padStart(2, '0')}:{String(ss).padStart(2, '0')}</span>
+        <span className="px-bar px-bar-big"><span style={{ width: `${Math.min(100, (min / DOJO_MIN) * 100)}%` }} /></span>
+        <small className="px-dojo-meta">{over ? `Passou dos ${DOJO_MIN} min. Pode continuar lendo ou ir pra Arena.` : `meta: ${DOJO_MIN} min · pode parar antes ou ir além`}</small>
+        <div className="px-row">
+          <PxBtn kind="alt" onClick={() => void openPdf()}>📖 ABRIR PDF</PxBtn>
+          <PxBtn kind="gold" onClick={() => setEnding(String(Math.max(1, Math.round(Math.min(min, 180)))))}>✅ JÁ LI, BORA!</PxBtn>
         </div>
-      </header>
-
-      <Bigode st={st} ctx={s.alerts.length ? 'reforco' : 'ilha'} serious={island.serious} />
-
-      <section className="yq-steps" aria-label="Etapas da visita">
-        <button className={v.estudar ? 'is-done' : ''} onClick={() => { void openPdf(null); if (!v.estudar && pdf) markVisit(island.tema, 'estudar'); }}>
-          <span>📖</span><b>Estudar</b><small>{v.estudar ? 'feito ✓' : pdf ? '~45 min' : 'escolher PDF'}</small>
-        </button>
-        <button className={v.batalha ? 'is-done' : ''} disabled={fz} onClick={() => onBattle({ kind: 'ilha', tema: island.tema })}>
-          <span>⚔️</span><b>Batalha</b><small>{v.batalha ? 'feito ✓' : '~30 min'}</small>
-        </button>
-        <button className={v.grimorio ? 'is-done' : ''} onClick={onGrimorio}>
-          <span>📜</span><b>Grimório</b><small>{v.grimorio ? 'feito ✓' : '~15 min'}</small>
-        </button>
-      </section>
-      {!v.estudar && pdf && <button className="yq-link" onClick={() => markVisit(island.tema, 'estudar')}>Já estudei por outro lugar ✓</button>}
-
-      <section className="yq-zones">
-        {s.zones.map((z) => {
-          const zi = zonaOf(z.zona);
-          return (
-            <div key={z.zona} className={`yq-zone lv-${z.nivel} ${z.alerta ? 'is-alert' : ''}`}>
-              <div className="yq-zone-top">
-                <span className="yq-zone-ico" aria-hidden="true">{zi.emoji}</span>
-                <span className="yq-zone-name"><b>{zi.lugar}</b><small>{NIVEL[z.nivel].emoji} {NIVEL[z.nivel].nome}{z.total ? ` · ${z.answered}/${z.total} · ${Math.round(z.acc * 100)}% acerto` : ' · sem questões'}</small></span>
-                <span className="yq-zone-val" title="valor da zona">{'◆'.repeat(zi.valor)}</span>
-              </div>
-              <div className="yq-zone-bar"><span style={{ width: `${Math.round(z.score * 100)}%` }} /></div>
-              {z.alerta && <p className="yq-invasion">🚨 INVASÃO! {zi.lugar} está sendo tomada.</p>}
-              <div className="yq-zone-actions">
-                {z.total > 0 && !fz && <button onClick={() => onBattle({ kind: 'zona', tema: island.tema, zona: z.zona })}>⚔️ Onda da zona</button>}
-                {(z.alerta || z.nivel === 'explorada') && <button onClick={() => void openPdf(z.zona)}>📖 Estudar esta zona</button>}
-                {(z.alerta || z.nivel === 'vazia') && <button className="is-scroll" onClick={() => onScroll(z.zona)}>📜 Pergaminho de reforço</button>}
-              </div>
-            </div>
-          );
-        })}
-      </section>
-      <button className="yq-link" onClick={() => onScroll(null)}>📜 Pedir reforço da ilha inteira</button>
-
-      <details className="yq-cfg" open={cfgOpen} onToggle={(e) => setCfgOpen((e.target as HTMLDetailsElement).open)}>
-        <summary>📚 PDF de estudo desta ilha</summary>
-        <IslandPdfCfg island={island} st={st} saveSt={saveSt} />
-      </details>
-    </div>
-  );
-}
-
-function IslandPdfCfg({ island, st, saveSt }: { island: Island; st: YqState; saveSt: (p: Partial<YqState> | ((s: YqState) => Partial<YqState>)) => void }) {
-  const cfg = st.islands[island.tema] ?? {};
-  const set = (p: Partial<typeof cfg>) => saveSt((s) => ({ islands: { ...s.islands, [island.tema]: { ...(s.islands[island.tema] ?? {}), ...p } } }));
-  const num = (v: string) => (v.trim() ? Math.max(1, Number(v.replace(/\D/g, '')) || 1) : null);
-  return (
-    <div className="yq-cfg-body">
-      {st.pdfs.length === 0 && <p className="muted small">Nenhum PDF ainda. Adicione os seus (Urgência, Psiquiatria) aqui embaixo ou em ⚙️ Ajustes.</p>}
-      <label className="yq-field">
-        <span>PDF</span>
-        <select value={cfg.pdfId ?? ''} onChange={(e) => set({ pdfId: e.target.value || null })}>
-          <option value="">— escolher —</option>
-          {st.pdfs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-      </label>
-      <label className="yq-field"><span>Página onde começa o tema</span><input inputMode="numeric" value={cfg.page ?? ''} onChange={(e) => set({ page: num(e.target.value) })} placeholder="ex.: 42" /></label>
-      <p className="muted small">Página de cada zona (opcional) — o atalho “estudar esta zona” abre direto nela:</p>
-      <div className="yq-pages">
-        {ZONAS.map((z) => (
-          <label key={z.id}><span>{z.emoji} {z.nome}</span><input inputMode="numeric" value={cfg.pages?.[z.id] ?? ''} onChange={(e) => set({ pages: { ...(cfg.pages ?? {}), [z.id]: num(e.target.value) ?? undefined } })} placeholder="pág." /></label>
-        ))}
+        {cfgOpen && <div className="px-cfg-inline"><IslandPdfCfg island={island} st={st} saveSt={saveSt} /></div>}
+        {!cfgOpen && <button className="px-mini" onClick={() => setCfgOpen(true)}>📚 escolher PDF e página desta ilha</button>}
+        {ending != null && (
+          <div className="px-ending">
+            <label>Tempo de leitura (entra nas suas horas): <input inputMode="numeric" value={ending} onChange={(e) => setEnding(e.target.value.replace(/\D/g, ''))} /> min</label>
+            <PxBtn kind="gold" onClick={() => onDone(Number(ending) || 0)}>⚔️ IR PRA ARENA</PxBtn>
+          </div>
+        )}
       </div>
-      <PdfAdder st={st} saveSt={saveSt} onAdded={(id) => set({ pdfId: id })} />
-    </div>
+      <Dialog lines={[over ? 'Deu o tempo! Mas se tiver no embalo, continua. Eu espero. Reclamando, mas espero.' : nag]} serious={island.serious} />
+    </Scene>
   );
 }
 
-function PdfAdder({ st, saveSt, onAdded }: { st: YqState; saveSt: (p: Partial<YqState> | ((s: YqState) => Partial<YqState>)) => void; onAdded?: (id: string) => void }) {
-  const ui = useUI();
-  const [name, setName] = useState('');
-  const [url, setUrl] = useState('');
-  const [busy, setBusy] = useState(false);
-  const add = (p: PdfRef) => { saveSt((s) => ({ pdfs: [...s.pdfs, p] })); onAdded?.(p.id); setName(''); setUrl(''); play('pop'); ui.toast(`📚 PDF “${p.name}” guardado.`); };
-  const upload = async (f: File | undefined) => {
-    if (!f) return;
-    setBusy(true);
-    const r = await uploadFile(f, 'doc', f.name);
-    setBusy(false);
-    if ('error' in r) { ui.toast(`${r.error} Dica: cole o link do PDF (Drive, por exemplo).`); return; }
-    add({ id: uid(), name: name.trim() || f.name.replace(/\.pdf$/i, ''), assetId: r.id });
-  };
-  void st;
-  return (
-    <div className="yq-pdf-add">
-      <b>➕ Adicionar PDF</b>
-      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome (ex.: Urgência)" aria-label="Nome do PDF" />
-      <div className="yq-pdf-row">
-        <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Cole o link do PDF" aria-label="Link do PDF" />
-        <button className="btn btn-primary btn-sm" disabled={!url.trim()} onClick={() => add({ id: uid(), name: name.trim() || 'PDF', url: url.trim() })}>Guardar link</button>
-      </div>
-      <label className={`btn btn-quiet btn-sm ${busy ? 'is-busy' : ''}`}>
-        {busy ? 'Enviando…' : '📎 Anexar o arquivo PDF'}
-        <input type="file" accept="application/pdf,.pdf" hidden onChange={(e) => void upload(e.target.files?.[0])} />
-      </label>
-    </div>
-  );
-}
+// ── Batalha (arena e chefão) ───────────────────────────────────
 
-// ── Batalha ────────────────────────────────────────────────────
-
-function Battle({ spec, st, all, saveQ, saveSt, makeCard, onScroll, onExit }: {
-  spec: BattleSpec; st: YqState; all: YqQuestion[]; saveQ: (q: YqQuestion) => void; saveSt: (p: Partial<YqState> | ((s: YqState) => Partial<YqState>)) => void;
-  makeCard: (q: YqQuestion) => void; onScroll: (t: string, z: Zona | null) => void; onExit: (won: boolean) => void;
+function Battle({ mode, title, bossEmoji, bossName, queue: q0, total, st, serious, saveQ, saveSt, makeCard, onRes, onWhy, onExit, onFinish }: {
+  mode: 'arena' | 'boss'; title: string; bossEmoji: string; bossName: string; queue: YqQuestion[]; total: number; st: YqState; serious: boolean;
+  saveQ: (q: YqQuestion) => void; saveSt: SaveSt; makeCard: (q: YqQuestion, silent?: boolean) => void; onRes: (r: Res) => void; onWhy: (id: string, w: Why) => void; onExit: () => void; onFinish: (res: Res[]) => void;
 }) {
-  const island = spec.tema ? islandOf(spec.tema) : islandOf('SRAG');
-  const serious = !!island?.serious && spec.kind !== 'final' && spec.kind !== 'revanche';
-  const title = spec.kind === 'final' ? '🏥 Ilha Final · Hospital da Prova' : spec.kind === 'revanche' ? '🔁 Revanche geral' : `${island!.bossEmoji} ${island!.short}${spec.zona ? ` · ${zonaOf(spec.zona).lugar}` : ''}`;
-  const bossName = spec.kind === 'final' ? 'Chefão da Prova' : spec.kind === 'revanche' ? 'Fantasmas dos Erros' : island!.boss;
-  const bossEmoji = spec.kind === 'final' ? '🏥' : spec.kind === 'revanche' ? '👻' : island!.bossEmoji;
-  const qs = spec.qs;
-  const before = useRef(new Map(ISLANDS.map((i) => [i.tema, islandStat(all.filter((q) => q.tema === i.tema)).zones.map((z) => z.nivel)])));
-  const wasWrong = useRef(new Set(qs.filter((q) => q.hist.length && !last(q).ok).map((q) => q.id)));
-  const [idx, setIdx] = useState(0);
+  const [queue, setQueue] = useState(q0);
   const [pick, setPick] = useState<string | null>(null);
   const [hearts, setHearts] = useState(3);
   const [combo, setCombo] = useState(0);
-  const [best, setBest] = useState(0);
   const [charge, setCharge] = useState(0);
-  const [shield, setShield] = useState(false);
   const [hidden, setHidden] = useState<string[]>([]);
   const [why, setWhy] = useState<Why | null>(null);
-  const [faint, setFaint] = useState(false);
-  const [gain, setGain] = useState({ xp: 0, coins: 0, ok: 0 });
-  const [results, setResults] = useState<{ q: YqQuestion; ok: boolean }[]>([]);
-  const [line, setLine] = useState(() => (serious ? 'Vamos com calma e atenção.' : island!.taunts[0]));
+  const [over, setOver] = useState(false);
+  const [win, setWin] = useState(false);
+  const [res, setRes] = useState<Res[]>([]);
+  const [gain, setGain] = useState(0);
+  const [pop, setPop] = useState<{ t: string; n: number } | null>(null);
+  const [shake, setShake] = useState(0);
   const [hit, setHit] = useState(0);
-  const [hurt, setHurt] = useState(0);
-  const [done, setDone] = useState(false);
-  const boxRef = useRef<HTMLDivElement>(null);
-  const q = qs[idx];
-  const isBoss = idx === qs.length - 1;
+  const [line, setLine] = useState(() => (serious ? 'Com calma e atenção.' : mode === 'boss' ? `${bossName}: “Você de novo? Vamos ver se aprendeu.”` : islandOf(q0[0]?.tema ?? '')?.taunts[0] ?? 'Que comece a batalha!'));
+  const box = useRef<HTMLDivElement>(null);
+  const q = queue[0];
+  const answeredCount = mode === 'boss' ? total - queue.length + (pick && pick === q?.gabarito ? 1 : 0) : total - queue.length + (pick ? 1 : 0);
+  const hp = Math.max(0, total - answeredCount);
 
-  useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = ''; };
-  }, []);
-  useEffect(() => { boxRef.current?.scrollTo({ top: 0 }); }, [idx, done]);
-  // depois de responder, desce até o grimório da questão
+  useEffect(() => { document.body.style.overflow = 'hidden'; return () => { document.body.style.overflow = ''; }; }, []);
   useEffect(() => {
     if (!pick) return undefined;
-    const t = window.setTimeout(() => boxRef.current?.querySelector('.yq-grim')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 650);
+    const t = window.setTimeout(() => box.current?.querySelector('.px-grim')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 600);
     return () => window.clearTimeout(t);
   }, [pick]);
 
   const answer = (k: string, e: React.MouseEvent) => {
-    if (pick) return;
+    if (pick || !q) return;
     setPick(k);
     const ok = k === q.gabarito;
-    const nq: YqQuestion = { ...q, hist: [...q.hist, { at: new Date().toISOString(), pick: k, ok }] };
-    saveQ(nq);
-    setResults((r) => [...r, { q: nq, ok }]);
+    const rev = q.hist.some((h) => !h.ok);
+    saveQ({ ...q, hist: [...q.hist, { at: new Date().toISOString(), pick: k, ok }] });
+    const r: Res = { id: q.id, ok, pick: k };
+    setRes((x) => [...x, r]);
+    onRes(r);
     if (ok) {
-      const rev = wasWrong.current.has(q.id);
-      const xp = xpFor(q, rev, isBoss);
-      const coins = 1 + (isBoss ? 9 : 0);
-      setGain((g) => ({ xp: g.xp + xp, coins: g.coins + coins, ok: g.ok + 1 }));
-      saveSt((s) => ({ xp: s.xp + xp, coins: s.coins + coins }));
-      const c = combo + 1;
-      setCombo(c);
-      setBest((b) => Math.max(b, c));
-      setCharge((x) => Math.min(3, x + 1));
+      const xp = xpFor(q, rev, mode === 'boss');
+      setGain((g) => g + xp);
+      saveSt((s) => ({ xp: s.xp + xp, coins: s.coins + 1 }));
+      setCombo((c) => c + 1);
+      setCharge((c) => Math.min(3, c + 1));
       setHit((h) => h + 1);
-      burst(e, isBoss ? 'confete' : 'brilho', isBoss ? 26 : 12);
-      play(isBoss ? 'mission' : 'check');
-      setLine(c >= 3 && c % 3 === 0 ? bigode(st.deboche, 'combo', serious) : bigode(st.deboche, 'acerto', serious));
+      setPop({ t: `+${xp}`, n: Date.now() });
+      burst(e, mode === 'boss' ? 'confete' : 'brilho', 14);
+      play(mode === 'boss' ? 'mission' : 'check');
+      setLine(bigode(st.deboche, combo + 1 >= 3 && (combo + 1) % 3 === 0 ? 'combo' : 'acerto', serious));
     } else {
       setCombo(0);
-      setHurt((h) => h + 1);
+      setShake((s) => s + 1);
       play('fizzle');
-      if (shield) setShield(false);
-      else setHearts((h) => { const n = h - 1; if (n <= 0) window.setTimeout(() => { setFaint(true); play('ghost'); }, 900); return Math.max(0, n); });
-      setLine(q.zona === 'pegadinha' ? bigode(st.deboche, 'pegadinha', serious) : bigode(st.deboche, 'erro', serious));
+      setHearts((h) => { const n = h - 1; if (n <= 0) window.setTimeout(() => { setOver(true); play('ghost'); }, 900); return Math.max(0, n); });
+      setLine(bigode(st.deboche, q.zona === 'pegadinha' ? 'pegadinha' : 'erro', serious));
     }
   };
-  const setReason = (w: Why) => {
-    setWhy(w);
-    const cur = results[results.length - 1]?.q;
-    if (!cur) return;
-    const h = [...cur.hist];
-    h[h.length - 1] = { ...h[h.length - 1], why: w };
-    const nq = { ...cur, hist: h };
-    saveQ(nq);
-    setResults((r) => r.map((x, i) => (i === r.length - 1 ? { ...x, q: nq } : x)));
-  };
   const next = () => {
-    if (idx + 1 >= qs.length) { finish(); return; }
-    setIdx(idx + 1); setPick(null); setHidden([]); setWhy(null);
+    const wasOk = pick === q.gabarito;
+    // no chefão, errou → a questão volta pro fim da fila
+    const rest = queue.slice(1);
+    const nq = mode === 'boss' && !wasOk ? [...rest, q] : rest;
+    setPick(null); setHidden([]); setWhy(null);
+    if (!nq.length) {
+      if (mode === 'boss') { setWin(true); play('chapter'); saveSt((s) => ({ waves: s.waves + 1 })); }
+      else onFinish(res);
+      return;
+    }
+    setQueue(nq);
     play('pop');
+    box.current?.scrollTo({ top: 0 });
   };
-  const finish = () => {
-    setDone(true);
-    const won = results[results.length - 1]?.ok ?? false;
-    const coins = 5;
-    setGain((g) => ({ ...g, coins: g.coins + coins }));
-    saveSt((s) => ({ coins: s.coins + coins, waves: s.waves + 1, bestCombo: Math.max(s.bestCombo, best) }));
-    play(won ? 'chapter' : 'page');
-  };
-  const usePower = (p: 'cafe' | 'dica' | 'escudo') => {
+  const power = (p: 'cafe' | 'dica') => {
     if (charge < 3) return;
     setCharge(0);
     play('ignite');
     if (p === 'cafe') setHearts((h) => Math.min(3, h + 1));
-    if (p === 'escudo') setShield(true);
     if (p === 'dica' && q && !pick) {
       const wrong = Object.keys(q.alternativas).filter((k) => k !== q.gabarito && !hidden.includes(k));
       if (wrong.length > 1) setHidden([...hidden, wrong[Math.floor(Math.random() * wrong.length)]]);
     }
   };
+  const ok = q && pick === q.gabarito;
 
-  const ok = pick === q?.gabarito;
-  const remaining = qs.length - idx - (pick ? 1 : 0);
-  const afterLv = done ? new Map(ISLANDS.map((i) => [i.tema, islandStat(all.filter((x) => x.tema === i.tema).map((x) => results.find((r) => r.q.id === x.id)?.q ?? x)).zones])) : null;
+  if (win) {
+    return createPortal(
+      <div className="px-overlay">
+        <WinScreen st={st} title="YOU WIN!" sub={`${bossName} derrotado · +${gain}`} onGo={() => onFinish(res)} goLabel="▶ CONTINUAR" />
+      </div>,
+      document.body,
+    );
+  }
 
   return createPortal(
-    <div className={`yq-battle ${serious ? 'is-serious' : ''}`} role="dialog" aria-label={`Batalha: ${title}`}>
-      <div className="yq-battle-scroll" ref={boxRef}>
-        <header className="yq-bhud">
-          <button className="yq-flee" onClick={() => (done ? onExit(results[results.length - 1]?.ok ?? false) : window.confirm('Fugir da batalha? O que você já respondeu fica salvo.') && onExit(false))} aria-label="Sair">✕</button>
-          <span className="yq-hearts" aria-label={`${hearts} corações`}>{[0, 1, 2].map((i) => <i key={i} className={i < hearts ? '' : 'is-lost'}>❤️</i>)}{shield && <i>🛡️</i>}</span>
-          <span className="yq-combo">{combo >= 2 ? `⚡ x${combo}` : ''}</span>
-          <span className="yq-gain">+{gain.xp} XP · 🪙{gain.coins}</span>
+    <div className={`px-battle ${serious ? 'is-serious' : ''} ${mode === 'boss' ? 'is-boss' : ''}`} role="dialog" aria-label={title}>
+      <div className="px-battle-scroll" ref={box}>
+        <header className="px-bhud">
+          <button className="px-flee" onClick={() => window.confirm('Sair da batalha? O que você já respondeu fica salvo.') && onExit()} aria-label="Sair">✕</button>
+          <span className="px-hearts">{[0, 1, 2].map((i) => <PixelEmoji key={i} e="❤️" size={22} res={10} className={i < hearts ? '' : 'is-lost'} />)}</span>
+          <span className="px-combo">{combo >= 2 ? `COMBO x${combo}` : ''}</span>
+          <span className="px-gain">+{gain}</span>
         </header>
+        <div className="px-battle-title">{title}</div>
+        <section className="px-field">
+          <motion.div className="px-foe" key={`h${hit}`} animate={hit ? { x: [0, -8, 8, -4, 0], opacity: [1, 0.3, 1, 0.3, 1] } : {}} transition={{ duration: 0.45 }}>
+            <div className="px-foe-hud"><b>{bossName.toUpperCase()}</b><span className="px-hp"><span style={{ width: `${(hp / Math.max(1, total)) * 100}%` }} /></span><small>HP {hp}/{total}</small></div>
+            <PixelEmoji e={bossEmoji} size={mode === 'boss' ? 120 : 96} res={18} className="px-foe-sprite" />
+            <AnimatePresence>{pop && <motion.span key={pop.n} className="px-pop" initial={{ y: 0, opacity: 1 }} animate={{ y: -40, opacity: 0 }} transition={{ duration: 0.9 }}>{pop.t}</motion.span>}</AnimatePresence>
+          </motion.div>
+          <div className="px-me">
+            <PixelEmoji e="👩‍⚕️" size={72} res={16} />
+            <BigodeSprite size={44} st={st} />
+          </div>
+        </section>
+        <p className="px-taunt">{line}</p>
 
-        {!done ? (
-          <>
-            <section className="yq-arena">
-              <motion.div className="yq-boss" key={`h${hit}-u${hurt}`} animate={hit ? { x: [0, -10, 10, -6, 0], rotate: [0, -6, 6, 0] } : {}} transition={{ duration: 0.4 }}>
-                <span className="yq-boss-emoji" aria-hidden="true">{isBoss ? '😈' : bossEmoji}</span>
-                <div className="yq-boss-hp"><span style={{ width: `${(remaining / qs.length) * 100}%` }} /></div>
-                <small>{isBoss ? `CHEFÃO · ${bossName}` : bossName} · {remaining} de vida</small>
-              </motion.div>
-              <motion.p className="yq-taunt" key={line} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
-                <span aria-hidden="true">{serious ? '🧭' : '🐱'}</span> {line}
-              </motion.p>
-            </section>
-
-            <motion.article key={q.id} className={`yq-q ${pick ? (ok ? 'is-ok' : 'is-bad') : ''}`} initial={{ opacity: 0, y: 16 }} animate={hurt && pick && !ok ? { opacity: 1, y: 0, x: [0, -8, 8, -4, 0] } : { opacity: 1, y: 0 }}>
-              <div className="yq-q-tags">
-                <span>{idx + 1}/{qs.length}</span>
-                <span className="yq-tag-zona">{zonaOf(q.zona).emoji} {zonaOf(q.zona).nome}</span>
-                <span className={isOld(q) ? 'yq-tag-old' : 'yq-tag-new'}>{isOld(q) ? `📌 já caiu · ${q.origem}` : '✨ inédita'}</span>
-                {wasWrong.current.has(q.id) && <span className="yq-tag-rev">🔁 revanche x2</span>}
-                {spec.kind !== 'ilha' && spec.kind !== 'zona' && <span>{islandOf(q.tema)?.bossEmoji} {islandOf(q.tema)?.short}</span>}
-              </div>
-              <p className="yq-enun">{q.enunciado}</p>
-              <div className="yq-alts">
-                {Object.entries(q.alternativas).map(([k, txt]) => (
-                  <button
-                    key={k}
-                    className={`yq-alt ${hidden.includes(k) ? 'is-hidden' : ''} ${pick ? (k === q.gabarito ? 'is-right' : k === pick ? 'is-wrong' : 'is-dim') : ''}`}
-                    disabled={!!pick || hidden.includes(k)}
-                    onClick={(e) => answer(k, e)}
-                  >
-                    <b>{k}</b><span>{txt}</span>
-                  </button>
-                ))}
-              </div>
-            </motion.article>
-
+        {q && (
+          <motion.article key={`${q.id}-${queue.length}`} className={`px-qbox ${pick ? (ok ? 'is-ok' : 'is-bad') : ''}`} initial={{ opacity: 0, y: 14 }} animate={shake && pick && !ok ? { opacity: 1, y: 0, x: [0, -8, 8, -4, 0] } : { opacity: 1, y: 0 }}>
+            <div className="px-qtags">
+              <span>{mode === 'boss' ? '👑' : '⚔️'} {Math.min(total, answeredCount + (pick ? 0 : 1))}/{total}</span>
+              <span>{zonaOf(q.zona).emoji} {zonaOf(q.zona).nome}</span>
+              <span className={isOld(q) ? 'is-old' : 'is-new'}>{isOld(q) ? `📌 já caiu · ${q.origem}` : '✨ inédita'}</span>
+            </div>
+            <p className="px-enun">{q.enunciado}</p>
+            <div className="px-alts">
+              {Object.entries(q.alternativas).map(([k, txt]) => (
+                <button key={k} className={`px-alt ${hidden.includes(k) ? 'is-hidden' : ''} ${pick ? (k === q.gabarito ? 'is-right' : k === pick ? 'is-wrong' : 'is-dim') : ''}`} disabled={!!pick || hidden.includes(k)} onClick={(e) => answer(k, e)}>
+                  <b>{pick && k === q.gabarito ? '▶' : k}</b><span>{txt}</span>
+                </button>
+              ))}
+            </div>
             {!pick && (
-              <section className={`yq-powers ${charge >= 3 ? 'is-ready' : ''}`}>
-                <span className="yq-charge">{[0, 1, 2].map((i) => <i key={i} className={i < charge ? 'is-on' : ''} />)}</span>
-                <button disabled={charge < 3 || hearts >= 3} onClick={() => usePower('cafe')}>☕ Supercafé</button>
-                <button disabled={charge < 3} onClick={() => usePower('dica')}>🩺 Dica do preceptor</button>
-                <button disabled={charge < 3 || shield} onClick={() => usePower('escudo')}>🛡️ Escudo</button>
-              </section>
+              <div className={`px-powers ${charge >= 3 ? 'is-ready' : ''}`}>
+                <span className="px-charge">{[0, 1, 2].map((i) => <i key={i} className={i < charge ? 'is-on' : ''} />)}</span>
+                <button disabled={charge < 3 || hearts >= 3} onClick={() => power('cafe')}>☕ SUPERCAFÉ</button>
+                <button disabled={charge < 3} onClick={() => power('dica')}>🩺 DICA</button>
+              </div>
             )}
+          </motion.article>
+        )}
 
-            <AnimatePresence>
-              {pick && (
-                <motion.section className={`yq-grim ${ok ? 'is-ok' : 'is-bad'}`} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-                  <h4>{ok ? (isBoss ? '💥 CHEFÃO DERROTADO!' : '✨ Golpe certeiro!') : `💥 Resposta: ${q.gabarito}`}</h4>
-                  {q.comentario && <p className="yq-coment"><b>📜 Grimório:</b> {q.comentario}</p>}
-                  {!ok && (
-                    <div className="yq-why">
-                      <span>Por que errou?</span>
-                      <div>{WHY.map((w) => <button key={w.id} className={why === w.id ? 'is-on' : ''} onClick={() => setReason(w.id)}>{w.emoji} {w.nome}</button>)}</div>
-                    </div>
-                  )}
-                  <div className="yq-grim-actions">
-                    <button className="btn btn-quiet btn-sm" onClick={() => makeCard(results[results.length - 1]?.q ?? q)}>🃏 Virar carta de feitiço</button>
-                    <button className="btn btn-primary" onClick={next}>{idx + 1 >= qs.length ? 'Ver relatório 🏁' : 'Próximo ▶'}</button>
-                  </div>
-                </motion.section>
-              )}
-            </AnimatePresence>
-          </>
-        ) : (
-          <Report spec={spec} results={results} gain={gain} best={best} st={st} serious={serious} before={before.current} after={afterLv!} onScroll={onScroll} makeCard={makeCard} onExit={() => onExit(results[results.length - 1]?.ok ?? false)} />
+        {pick && q && (
+          <motion.section className={`px-grim ${ok ? 'is-ok' : 'is-bad'}`} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
+            <h4>{ok ? '✨ GOLPE CERTEIRO!' : `💥 ERROU! A CERTA ERA ${q.gabarito}`}</h4>
+            {q.comentario && <p className="px-coment"><b>📜</b> {q.comentario}</p>}
+            {!ok && (
+              <div className="px-why-wrap">
+                <span>POR QUE ERROU?</span>
+                <div className="px-why">{WHY.map((w) => <button key={w.id} className={why === w.id ? 'is-on' : ''} onClick={() => { setWhy(w.id); onWhy(q.id, w.id); setRes((x) => x.map((y, i) => (i === x.length - 1 ? { ...y, why: w.id } : y))); }}>{w.emoji} {w.nome}</button>)}</div>
+              </div>
+            )}
+            {!ok && mode === 'boss' && <small className="px-note">Essa volta pro fim da fila do chefão. Ele não esquece.</small>}
+            <div className="px-row">
+              {!ok && <button className="px-mini" onClick={() => makeCard(q)}>🃏 virar carta</button>}
+              <PxBtn kind="gold" onClick={next}>{queue.length <= 1 && (ok || mode === 'arena') ? (mode === 'boss' ? '👑 FINALIZAR' : '🩹 VER CICATRIZES') : '▶ PRÓXIMA'}</PxBtn>
+            </div>
+          </motion.section>
         )}
       </div>
 
       <AnimatePresence>
-        {faint && (
-          <motion.div className="yq-faint" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <span aria-hidden="true">😵</span>
-            <b>{serious ? 'Pausa.' : 'Você desmaiou depois de um plantão de 36h.'}</b>
+        {over && (
+          <motion.div className="px-gameover" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <b className="px-go-title">GAME OVER</b>
+            <span>{serious ? 'Pausa. Respira e continue.' : '…mas o plantão continua.'}</span>
+            <BigodeSprite size={72} st={st} />
             <small>{bigode(st.deboche, 'desmaio', serious)}</small>
-            <button className="btn btn-primary" onClick={() => { setFaint(false); setHearts(1); play('pop'); }}>☕ Acordar e continuar</button>
+            <PxBtn kind="gold" onClick={() => { setOver(false); setHearts(3); }}>▶ CONTINUAR (3 ❤️)</PxBtn>
           </motion.div>
         )}
       </AnimatePresence>
@@ -683,105 +808,151 @@ function Battle({ spec, st, all, saveQ, saveSt, makeCard, onScroll, onExit }: {
   );
 }
 
-function Report({ spec, results, gain, best, st, serious, before, after, onScroll, makeCard, onExit }: {
-  spec: BattleSpec; results: { q: YqQuestion; ok: boolean }[]; gain: { xp: number; coins: number; ok: number }; best: number; st: YqState; serious: boolean;
-  before: Map<string, string[]>; after: Map<string, ReturnType<typeof islandStat>['zones']>; onScroll: (t: string, z: Zona | null) => void; makeCard: (q: YqQuestion) => void; onExit: () => void;
-}) {
-  const total = results.length;
-  const good = gain.ok / Math.max(1, total) >= 0.6 || !!results[results.length - 1]?.ok;
-  const temas = [...new Set(results.map((r) => r.q.tema))];
-  const changes: { tema: string; zona: Zona; de: string; para: string; alerta: boolean }[] = [];
-  for (const t of temas) {
-    const b = before.get(t) ?? [];
-    (after.get(t) ?? []).forEach((z, i) => {
-      if (z.answered && (b[i] !== z.nivel || z.alerta)) changes.push({ tema: t, zona: z.zona, de: b[i], para: z.nivel, alerta: z.alerta });
-    });
-  }
-  const wrong = results.filter((r) => !r.ok);
-  const bossWon = results[results.length - 1]?.ok;
+// ── YOU WIN ────────────────────────────────────────────────────
+
+function WinScreen({ st, title, sub, onGo, goLabel, extra }: { st: YqState; title: string; sub: string; onGo: () => void; goLabel: string; extra?: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const [line] = useState(() => WIN_LINES[Math.floor(Math.random() * WIN_LINES.length)]);
+  useEffect(() => { const t = window.setTimeout(() => { setOpen(true); play('jingle'); }, 700); return () => window.clearTimeout(t); }, []);
   return (
-    <motion.section className="yq-report" initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }}>
-      <span className="yq-report-big" aria-hidden="true">{bossWon ? '🏆' : good ? '⚔️' : '📜'}</span>
-      <h3>{bossWon ? 'Vitória!' : good ? 'Onda vencida!' : 'Onda difícil'}</h3>
-      <p className="yq-report-score"><b>{gain.ok}/{total}</b> acertos · <b>+{gain.xp}</b> XP · <b>🪙 {gain.coins}</b> · combo máx. <b>{best}</b></p>
-      <Bigode st={st} ctx={good ? 'onda-boa' : 'onda-ruim'} serious={serious} />
-      {changes.length > 0 && (
-        <ul className="yq-changes">
-          {changes.map((c) => (
-            <li key={`${c.tema}-${c.zona}`} className={c.alerta ? 'is-alert' : ''}>
-              <span>{zonaOf(c.zona).emoji} {islandOf(c.tema)?.short} · {zonaOf(c.zona).nome}</span>
-              <b>{NIVEL[c.de as keyof typeof NIVEL]?.emoji ?? '🌫️'} → {NIVEL[c.para as keyof typeof NIVEL].emoji} {NIVEL[c.para as keyof typeof NIVEL].nome}</b>
-              {c.alerta && <button onClick={() => onScroll(c.tema, c.zona)}>🚨 invasão · pedir reforço</button>}
-            </li>
-          ))}
-        </ul>
-      )}
-      {wrong.length > 0 && (
-        <div className="yq-report-wrong">
-          <b>📜 Grimório desta onda</b>
-          {wrong.map(({ q }) => (
-            <details key={q.id}>
-              <summary>{zonaOf(q.zona).emoji} {q.enunciado.slice(0, 90)}…</summary>
-              <p><b>Certa: {q.gabarito})</b> {q.alternativas[q.gabarito]}</p>
-              {q.comentario && <p className="muted small">{q.comentario}</p>}
-              <button className="btn btn-quiet btn-sm" onClick={() => makeCard(q)}>{q.cardId ? '🃏 já é carta' : '🃏 Virar carta de feitiço'}</button>
-            </details>
-          ))}
-        </div>
-      )}
-      <button className="btn btn-primary yq-report-go" onClick={onExit}>{spec.kind === 'final' ? 'Voltar ao mapa' : 'Voltar à ilha'} ▶</button>
-    </motion.section>
+    <Scene kind="day">
+      <div className="px-win">
+        <span className="px-sparkles" aria-hidden="true">{Array.from({ length: 14 }).map((_, i) => <i key={i} style={{ left: `${(i * 37) % 96}%`, top: `${(i * 23) % 60}%`, animationDelay: `${(i % 7) * 0.2}s` }}>✦</i>)}</span>
+        <motion.b className="px-win-title" initial={{ scale: 0.3, y: -30 }} animate={{ scale: 1, y: 0 }} transition={{ type: 'spring', stiffness: 300, damping: 12 }}>{title}</motion.b>
+        <span className="px-win-sub">{sub}</span>
+        <motion.span className="px-chest" animate={open ? { y: [0, -10, 0] } : {}} transition={{ duration: 0.5 }}>
+          <PixelEmoji e={open ? '💰' : '🎁'} size={110} res={18} />
+          {open && <span className="px-coins-fly" aria-hidden="true">{[0, 1, 2, 3, 4].map((i) => <i key={i} style={{ animationDelay: `${i * 0.1}s`, left: `${20 + i * 15}%` }}>🪙</i>)}</span>}
+        </motion.span>
+        <span className="px-win-score">SCORE {String(st.xp).padStart(5, '0')}</span>
+      </div>
+      <Dialog lines={[line]}>
+        <PxBtn kind="gold" onClick={onGo}>{goLabel}</PxBtn>
+        {extra}
+      </Dialog>
+    </Scene>
   );
 }
 
-// ── Grimório ───────────────────────────────────────────────────
+// ── Oráculo ────────────────────────────────────────────────────
 
-function Grimorio({ qs, tema, onBack, makeCard, saveQ, onDone, st }: { qs: YqQuestion[]; tema?: string; onBack: () => void; makeCard: (q: YqQuestion) => void; saveQ: (q: YqQuestion) => void; onDone?: () => void; st: YqState }) {
-  const [filtro, setFiltro] = useState<'agora' | 'sempre'>('agora');
-  const list = qs.filter((q) => (filtro === 'agora' ? q.hist.length && !last(q).ok : q.hist.some((h) => !h.ok)))
-    .sort((a, b) => (last(b)?.at ?? '').localeCompare(last(a)?.at ?? ''));
-  const island = tema ? islandOf(tema) : null;
-  void saveQ;
+function Oraculo({ tema, st, wrong, all, saveQ, saveSt, saveDuelCards, onBack, onDone }: {
+  tema: string; st: YqState; wrong: { q: YqQuestion; why?: Why; pick?: string }[]; all: YqQuestion[]; saveQ: (q: YqQuestion) => void; saveSt: SaveSt; saveDuelCards: (tema: string, d: Duel[]) => void; onBack: () => void; onDone: () => void;
+}) {
+  const ui = useUI();
+  const [text, setText] = useState('');
+  const [duels, setDuels] = useState<Duel[] | null>(null);
+  const prompt = oraculoPrompt(tema, wrong);
+  const existing = useMemo(() => new Map(all.map((q) => [q.qid, q])), [all]);
+  const parsed = useMemo(() => (text.trim() ? parseOraculo(text, existing) : null), [text, existing]);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(prompt); play('paper'); ui.toast('🔮 Pedido copiado! Cole na IA e traga a resposta aqui.'); } catch { ui.toast('Não deu para copiar: selecione o texto.'); }
+  };
+  const invoke = () => {
+    if (!parsed || parsed.error) return;
+    parsed.q?.ok.forEach((q) => saveQ(q));
+    if (parsed.duels.length) saveDuelCards(tema, parsed.duels);
+    play('mission');
+    ui.toast(`🔮 ${parsed.q?.ok.length ?? 0} questões novas na ilha · ${parsed.duels.length} cartas no FSRS`);
+    if (parsed.duels.length) setDuels(parsed.duels); else onDone();
+  };
+  if (duels) return <DuelRun duels={duels} st={st} saveSt={saveSt} onDone={onDone} />;
   return (
-    <div className="yq-grimorio">
-      <button className="yq-back" onClick={onBack}>← {island ? island.short : 'Mapa'}</button>
-      <h2>📜 Grimório {island ? `· ${island.short}` : 'de todas as ilhas'}</h2>
-      <p className="muted small">Os erros viram feitiço: leia o comentário, entenda o porquê e transforme em carta (vai pro seu FSRS).</p>
-      <div className="seg">
-        <button className={filtro === 'agora' ? 'is-on' : ''} onClick={() => setFiltro('agora')}>Ainda errando</button>
-        <button className={filtro === 'sempre' ? 'is-on' : ''} onClick={() => setFiltro('sempre')}>Já errei alguma vez</button>
+    <Scene kind="oracle">
+      <button className="px-back" onClick={onBack}>◀ MAPA</button>
+      <div className="px-oracle">
+        <span className="px-mission-tag">🔮 O ORÁCULO</span>
+        <motion.span animate={{ y: [0, -8, 0], rotate: [0, 3, -3, 0] }} transition={{ repeat: Infinity, duration: 2.6 }}><PixelEmoji e="🔮" size={96} res={16} /></motion.span>
+        <p className="px-oracle-txt">{wrong.length ? `O Oráculo leu suas ${wrong.length} cicatriz${wrong.length > 1 ? 'es' : ''} e vai criar um reforço sob medida: questões novas + duelo de perguntas e respostas.` : 'Sem cicatrizes, o Oráculo vai reforçar os pontos que mais caem e as pegadinhas clássicas.'}</p>
+        <ol className="px-steps">
+          <li><PxBtn kind="alt" onClick={copy}>📋 COPIAR PEDIDO</PxBtn> e cole numa IA (Claude, por exemplo).</li>
+          <li>Cole aqui a resposta dela:</li>
+        </ol>
+        <textarea className="px-text" rows={7} value={text} onChange={(e) => setText(e.target.value)} placeholder='{ "questoes": [ … ], "flashcards": [ … ] }' aria-label="Resposta da IA" />
+        {parsed && (parsed.error ? <p className="px-err">⚠️ {parsed.error}</p> : (
+          <p className="px-ok">✨ {parsed.q?.ok.length ?? 0} questões novas{parsed.q?.out.length ? ` (${parsed.q.out.length} de fora: ${parsed.q.out.slice(0, 2).map((o) => o.why).join('; ')})` : ''} · {parsed.duels.length} perguntas pro duelo</p>
+        ))}
+        <details className="px-prompt"><summary>ver o pedido</summary><pre>{prompt}</pre></details>
       </div>
-      {list.length === 0 && <p className="yq-grim-empty">{qs.some((q) => q.hist.length) ? 'Nenhum erro aqui. O Bigode está desconfiado. 🐱' : 'Nada ainda: jogue uma batalha primeiro.'}</p>}
-      <ul className="yq-grim-list">
+      <Dialog lines={['O Oráculo não erra. Quem erra é você. Por isso ele existe.']}>
+        <PxBtn kind="gold" disabled={!parsed || !!parsed.error || (!parsed.q?.ok.length && !parsed.duels.length)} onClick={invoke}>✨ INVOCAR REFORÇO</PxBtn>
+        <PxBtn kind="ghost" onClick={onDone}>Pular por agora</PxBtn>
+      </Dialog>
+    </Scene>
+  );
+}
+
+function DuelRun({ duels, st, saveSt, onDone }: { duels: Duel[]; st: YqState; saveSt: SaveSt; onDone: () => void }) {
+  const [i, setI] = useState(0);
+  const [flip, setFlip] = useState(false);
+  const [score, setScore] = useState(0);
+  const d = duels[i];
+  if (!d) {
+    return <WinScreen st={st} title="DUELO VENCIDO!" sub={`${score}/${duels.length} relâmpagos certeiros · as cartas estão no FSRS`} onGo={onDone} goLabel="▶ FINALIZAR MISSÃO" />;
+  }
+  const rate = (ok: boolean) => {
+    if (ok) { setScore((s) => s + 1); saveSt((s) => ({ xp: s.xp + 10 })); play('check'); } else play('fizzle');
+    setFlip(false);
+    setI(i + 1);
+  };
+  return (
+    <Scene kind="oracle">
+      <div className="px-duel">
+        <span className="px-mission-tag">⚡ DUELO RELÂMPAGO · {i + 1}/{duels.length}</span>
+        <motion.div key={`${i}-${flip}`} className={`px-card ${flip ? 'is-back' : ''}`} initial={{ rotateY: 90 }} animate={{ rotateY: 0 }} transition={{ duration: 0.25 }}>
+          <span className="px-chip">{zonaOf(d.zona).emoji} {zonaOf(d.zona).nome}</span>
+          <p>{flip ? d.resposta : d.pergunta}</p>
+        </motion.div>
+        {!flip ? <PxBtn kind="gold" onClick={() => { setFlip(true); play('flip'); }}>🔄 PENSEI · VIRAR</PxBtn> : (
+          <div className="px-row">
+            <PxBtn kind="alt" onClick={() => rate(false)}>✗ ERREI</PxBtn>
+            <PxBtn kind="gold" onClick={() => rate(true)}>✓ ACERTEI</PxBtn>
+          </div>
+        )}
+      </div>
+      <Dialog lines={[flip ? 'Seja honesta. Eu sei quando você mente.' : 'Pensa ou fala a resposta em voz alta ANTES de virar. Nada de espiar.']} />
+    </Scene>
+  );
+}
+
+// ── Caderno das Cicatrizes (todas as ilhas) ────────────────────
+
+function Caderno({ qs, st, onBack, makeCard }: { qs: YqQuestion[]; st: YqState; onBack: () => void; makeCard: (q: YqQuestion) => void }) {
+  const [filtro, setFiltro] = useState<'agora' | 'sempre'>('agora');
+  const list = qs.filter((q) => (filtro === 'agora' ? q.hist.length && !last(q).ok : q.hist.some((h) => !h.ok))).sort((a, b) => (last(b)?.at ?? '').localeCompare(last(a)?.at ?? ''));
+  return (
+    <div className="px-page">
+      <button className="px-back" onClick={onBack}>◀ MAPA</button>
+      <h2 className="px-h">🩹 CADERNO DAS CICATRIZES</h2>
+      <div className="px-seg">
+        <button className={filtro === 'agora' ? 'is-on' : ''} onClick={() => setFiltro('agora')}>AINDA ERRANDO</button>
+        <button className={filtro === 'sempre' ? 'is-on' : ''} onClick={() => setFiltro('sempre')}>JÁ ERREI</button>
+      </div>
+      {list.length === 0 && <p className="px-empty">{qs.some((q) => q.hist.length) ? 'Nenhuma cicatriz aqui. O Bigode desconfia.' : 'Nada ainda: jogue uma missão.'}</p>}
+      <ul className="px-cic-list">
         {list.map((q) => {
-          const l = last(q);
-          const why = WHY.find((w) => w.id === [...q.hist].reverse().find((h) => !h.ok)?.why);
+          const w = WHY.find((x) => x.id === [...q.hist].reverse().find((h) => !h.ok)?.why);
           return (
             <li key={q.id}>
               <details>
-                <summary>
-                  <span className="yq-tag-zona">{zonaOf(q.zona).emoji} {zonaOf(q.zona).nome}</span>
-                  {!island && <span className="muted small"> · {islandOf(q.tema)?.short}</span>}
-                  <span className="yq-grim-enun">{q.enunciado.slice(0, 110)}{q.enunciado.length > 110 ? '…' : ''}</span>
-                </summary>
-                <p className="yq-enun">{q.enunciado}</p>
-                <p><b>Você marcou:</b> {l?.pick}) {q.alternativas[l?.pick ?? ''] ?? '—'} {why ? `· ${why.emoji} ${why.nome}` : ''}</p>
+                <summary><span className="px-chip">{islandOf(q.tema)?.bossEmoji} {islandOf(q.tema)?.short}</span><span className="px-chip">{zonaOf(q.zona).emoji} {zonaOf(q.zona).nome}</span>{w && <span className="px-chip is-why">{w.emoji} {w.nome}</span>}<span className="px-cic-enun">{q.enunciado.slice(0, 110)}…</span></summary>
+                <p className="px-enun">{q.enunciado}</p>
                 <p><b>Certa: {q.gabarito})</b> {q.alternativas[q.gabarito]}</p>
-                {q.comentario && <p className="yq-coment">{q.comentario}</p>}
-                <p className="muted small">{isOld(q) ? `📌 já caiu · ${q.origem}` : '✨ inédita'} · errou {q.hist.filter((h) => !h.ok).length}x</p>
-                <button className="btn btn-quiet btn-sm" onClick={() => makeCard(q)}>{q.cardId ? '🃏 já é carta' : '🃏 Virar carta de feitiço'}</button>
+                {q.comentario && <p className="px-coment">{q.comentario}</p>}
+                <small>errou {q.hist.filter((h) => !h.ok).length}x · {isOld(q) ? `já caiu (${q.origem})` : 'inédita'}</small>
+                <button className="px-mini" onClick={() => makeCard(q)}>{q.cardId ? '🃏 já é carta' : '🃏 virar carta de feitiço'}</button>
               </details>
             </li>
           );
         })}
       </ul>
-      {onDone && <button className="btn btn-primary yq-grim-done" onClick={onDone}>✓ Revisei o grimório desta ilha</button>}
-      <Bigode st={st} ctx={list.length ? 'erro' : 'acerto'} serious={island?.serious} />
+      <Dialog lines={[list.length ? `${list.length} cicatriz${list.length > 1 ? 'es' : ''} ainda abertas. O chefão e o Oráculo cuidam delas.` : 'Tudo cicatrizado. Por enquanto.']} />
+      {void st}
     </div>
   );
 }
 
-// ── Porto (importação) ─────────────────────────────────────────
+// ── Porto ──────────────────────────────────────────────────────
 
 function Porto({ questions, onBack, saveQ }: { questions: YqQuestion[]; onBack: () => void; saveQ: (q: YqQuestion) => void }) {
   const ui = useUI();
@@ -789,12 +960,7 @@ function Porto({ questions, onBack, saveQ }: { questions: YqQuestion[]; onBack: 
   const [res, setRes] = useState<ImportResult | null>(null);
   const existing = useMemo(() => new Map(questions.map((q) => [q.qid, q])), [questions]);
   const check = (t = text) => setRes(t.trim() ? parseImport(t, existing) : null);
-  const readFile = async (f: File | undefined) => {
-    if (!f) return;
-    const t = await f.text();
-    setText(t);
-    check(t);
-  };
+  const readFile = async (f: File | undefined) => { if (!f) return; const t = await f.text(); setText(t); check(t); };
   const apply = () => {
     if (!res?.ok.length) return;
     res.ok.forEach((q) => saveQ(q));
@@ -805,74 +971,82 @@ function Porto({ questions, onBack, saveQ }: { questions: YqQuestion[]; onBack: 
   const novos = res?.ok.filter((q) => !existing.has(q.qid)).length ?? 0;
   const counts = useMemo(() => new Map(ISLANDS.map((i) => [i.tema, questions.filter((q) => q.tema === i.tema).length])), [questions]);
   return (
-    <div className="yq-porto">
-      <button className="yq-back" onClick={onBack}>← Mapa</button>
-      <h2>⚓ Porto</h2>
-      <p className="muted small">Cole o JSON (lista de questões) ou anexe o arquivo. Questão com o mesmo <code>id</code> é atualizada e mantém o seu histórico.</p>
-      <textarea className="yq-porto-text" rows={8} value={text} onChange={(e) => { setText(e.target.value); setRes(null); }} placeholder='[ { "id": "uesm-a-031", "tema": "SRAG", "zona": "conduta", … } ]' aria-label="JSON das questões" />
-      <div className="btn-row">
-        <label className="btn btn-quiet btn-sm">📎 Anexar .json<input type="file" accept=".json,application/json,text/plain" hidden onChange={(e) => void readFile(e.target.files?.[0])} /></label>
-        <button className="btn btn-quiet btn-sm" onClick={() => { setText(SAMPLE); check(SAMPLE); }}>🧪 Usar 3 exemplos</button>
-        <button className="btn btn-secondary btn-sm" disabled={!text.trim()} onClick={() => check()}>🔎 Conferir</button>
+    <div className="px-page">
+      <button className="px-back" onClick={onBack}>◀ MAPA</button>
+      <h2 className="px-h">⚓ PORTO</h2>
+      <p className="px-small">Cole o JSON (lista de questões) ou anexe o arquivo. Mesmo <code>id</code> atualiza e mantém o seu histórico.</p>
+      <textarea className="px-text" rows={8} value={text} onChange={(e) => { setText(e.target.value); setRes(null); }} placeholder='[ { "id": "uesm-a-031", "tema": "SRAG", "zona": "conduta", … } ]' aria-label="JSON das questões" />
+      <div className="px-row">
+        <label className="px-btn px-btn-ghost">📎 ANEXAR .JSON<input type="file" accept=".json,application/json,text/plain" hidden onChange={(e) => void readFile(e.target.files?.[0])} /></label>
+        <PxBtn kind="ghost" onClick={() => { setText(SAMPLE); check(SAMPLE); }}>🧪 3 EXEMPLOS</PxBtn>
+        <PxBtn kind="alt" disabled={!text.trim()} onClick={() => check()}>🔎 CONFERIR</PxBtn>
       </div>
       {res && (
-        <div className="yq-porto-res">
-          <p><b>{res.ok.length}</b> prontas pra desembarcar ({novos} novas, {res.ok.length - novos} atualizadas){res.out.length ? ` · ${res.out.length} ficaram de fora` : ''}</p>
-          {Object.keys(res.perTema).length > 0 && (
-            <ul className="yq-porto-temas">{Object.entries(res.perTema).map(([t, n]) => <li key={t}>{islandOf(t)?.bossEmoji} {islandOf(t)?.short}: <b>{n}</b></li>)}</ul>
-          )}
-          {res.out.length > 0 && (
-            <details className="yq-porto-out" open>
-              <summary>⚠️ Ficaram de fora ({res.out.length})</summary>
-              <ul>{res.out.slice(0, 60).map((o, i) => <li key={i}><code>{o.id}</code>: {o.why}</li>)}</ul>
-            </details>
-          )}
-          <button className="btn btn-primary" disabled={!res.ok.length} onClick={apply}>🚢 Desembarcar {res.ok.length} questões</button>
+        <div className="px-box">
+          <p><b>{res.ok.length}</b> prontas ({novos} novas, {res.ok.length - novos} atualizadas){res.out.length ? ` · ${res.out.length} ficaram de fora` : ''}</p>
+          {Object.keys(res.perTema).length > 0 && <ul className="px-list">{Object.entries(res.perTema).map(([t, n]) => <li key={t}>{islandOf(t)?.bossEmoji} {islandOf(t)?.short}: <b>{n}</b></li>)}</ul>}
+          {res.out.length > 0 && <details open><summary>⚠️ FICARAM DE FORA ({res.out.length})</summary><ul className="px-list">{res.out.slice(0, 60).map((o, i) => <li key={i}><code>{o.id}</code>: {o.why}</li>)}</ul></details>}
+          <PxBtn kind="gold" disabled={!res.ok.length} onClick={apply}>🚢 DESEMBARCAR {res.ok.length}</PxBtn>
         </div>
       )}
-      <h3 className="yq-h3">🏝️ Questões por ilha</h3>
-      <ul className="yq-porto-count">
-        {ISLANDS.map((i) => {
-          const n = counts.get(i.tema) ?? 0;
-          return <li key={i.tema} className={n < i.banco ? 'is-short' : ''}><span>{i.bossEmoji} {i.short}</span><b>{n}</b><small>/{i.banco} do banco</small></li>;
-        })}
+      <h3 className="px-h3">🏝️ MONSTROS POR ILHA</h3>
+      <ul className="px-count">
+        {ISLANDS.map((i) => { const n = counts.get(i.tema) ?? 0; return <li key={i.tema} className={n < i.banco ? 'is-short' : ''}><span>{i.bossEmoji} {i.short}</span><b>{n}</b><small>/{i.banco}</small></li>; })}
       </ul>
     </div>
   );
 }
 
-// ── Pergaminho de reforço ──────────────────────────────────────
+// ── PDF de estudo ──────────────────────────────────────────────
 
-function Pergaminho({ tema, zona, onClose, onPorto }: { tema: string; zona: Zona | null; onClose: () => void; onPorto: () => void }) {
+function IslandPdfCfg({ island, st, saveSt }: { island: Island; st: YqState; saveSt: SaveSt }) {
+  const cfg = st.islands[island.tema] ?? {};
+  const set = (p: Partial<typeof cfg>) => saveSt((s) => ({ islands: { ...s.islands, [island.tema]: { ...(s.islands[island.tema] ?? {}), ...p } } }));
+  const num = (v: string) => (v.trim() ? Math.max(1, Number(v.replace(/\D/g, '')) || 1) : null);
+  return (
+    <div className="px-cfg">
+      <label><span>PDF</span>
+        <select value={cfg.pdfId ?? ''} onChange={(e) => set({ pdfId: e.target.value || null })}>
+          <option value="">— escolher —</option>
+          {st.pdfs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </label>
+      <label><span>Página onde começa o tema</span><input inputMode="numeric" value={cfg.page ?? ''} onChange={(e) => set({ page: num(e.target.value) })} placeholder="ex.: 42" /></label>
+      <PdfAdder saveSt={saveSt} onAdded={(id) => set({ pdfId: id })} />
+    </div>
+  );
+}
+
+function PdfAdder({ saveSt, onAdded }: { saveSt: SaveSt; onAdded?: (id: string) => void }) {
   const ui = useUI();
-  const [n, setN] = useState(10);
-  const txt = reforcoPrompt(tema, zona, n);
-  const copy = async () => {
-    try { await navigator.clipboard.writeText(txt); play('paper'); ui.toast('📜 Pergaminho copiado! Cole na IA e traga o JSON pro Porto.'); } catch { ui.toast('Não deu para copiar: selecione o texto.'); }
+  const [name, setName] = useState('');
+  const [url, setUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  const add = (p: PdfRef) => { saveSt((s) => ({ pdfs: [...s.pdfs, p] })); onAdded?.(p.id); setName(''); setUrl(''); ui.toast(`📚 PDF “${p.name}” guardado.`); };
+  const upload = async (f: File | undefined) => {
+    if (!f) return;
+    setBusy(true);
+    const r = await uploadFile(f, 'doc', f.name);
+    setBusy(false);
+    if ('error' in r) { ui.toast(`${r.error} Dica: cole o link do PDF.`); return; }
+    add({ id: uid(), name: name.trim() || f.name.replace(/\.pdf$/i, ''), assetId: r.id });
   };
-  return createPortal(
-    <div className="yq-modal" role="dialog" aria-label="Pergaminho de reforço" onClick={onClose}>
-      <motion.div className="yq-scroll" initial={{ scaleY: 0.2, opacity: 0 }} animate={{ scaleY: 1, opacity: 1 }} onClick={(e) => e.stopPropagation()}>
-        <h3>📜 Pergaminho de reforço</h3>
-        <p className="small"><b>{islandOf(tema)?.bossEmoji} {islandOf(tema)?.short}</b>{zona ? ` · ${zonaOf(zona).emoji} ${zonaOf(zona).lugar}` : ' · ilha inteira'}</p>
-        <label className="yq-field"><span>Quantas questões</span>
-          <select value={n} onChange={(e) => setN(Number(e.target.value))}>{[5, 10, 15, 20].map((x) => <option key={x} value={x}>{x}</option>)}</select>
-        </label>
-        <pre>{txt}</pre>
-        <div className="btn-row">
-          <button className="btn btn-primary" onClick={copy}>📋 Copiar pergaminho</button>
-          <button className="btn btn-secondary" onClick={onPorto}>⚓ Ir pro Porto</button>
-          <button className="btn btn-quiet" onClick={onClose}>Fechar</button>
-        </div>
-      </motion.div>
-    </div>,
-    document.body,
+  return (
+    <div className="px-pdf-add">
+      <b>➕ ADICIONAR PDF</b>
+      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome (ex.: Urgência)" aria-label="Nome do PDF" />
+      <div className="px-row">
+        <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Cole o link do PDF" aria-label="Link do PDF" />
+        <PxBtn kind="alt" disabled={!url.trim()} onClick={() => add({ id: uid(), name: name.trim() || 'PDF', url: url.trim() })}>GUARDAR</PxBtn>
+      </div>
+      <label className="px-btn px-btn-ghost">{busy ? 'ENVIANDO…' : '📎 ANEXAR PDF'}<input type="file" accept="application/pdf,.pdf" hidden onChange={(e) => void upload(e.target.files?.[0])} /></label>
+    </div>
   );
 }
 
 // ── Loja ───────────────────────────────────────────────────────
 
-function Loja({ st, saveSt, onBack }: { st: YqState; saveSt: (p: Partial<YqState> | ((s: YqState) => Partial<YqState>)) => void; onBack: () => void }) {
+function Loja({ st, saveSt, onBack }: { st: YqState; saveSt: SaveSt; onBack: () => void }) {
   const ui = useUI();
   const buy = (id: string, preco: number) => {
     if (st.coins < preco) { play('fizzle'); ui.toast('Moedas insuficientes. Vai batalhar! ⚔️'); return; }
@@ -882,21 +1056,20 @@ function Loja({ st, saveSt, onBack }: { st: YqState; saveSt: (p: Partial<YqState
   };
   const wear = (slot: 'hat' | 'boat' | 'cat', id: string) => saveSt((s) => ({ wear: { ...s.wear, [slot]: s.wear[slot] === id ? undefined : id } }));
   return (
-    <div className="yq-loja">
-      <button className="yq-back" onClick={onBack}>← Mapa</button>
-      <h2>🛍️ Lojinha do Porto</h2>
-      <p className="yq-loja-coins">Você tem <b>🪙 {st.coins}</b></p>
-      <div className="yq-shop">
-        {SHOP.map((it) => {
+    <div className="px-page">
+      <button className="px-back" onClick={onBack}>◀ MAPA</button>
+      <h2 className="px-h">🛍️ LOJINHA</h2>
+      <p className="px-small">Você tem <b>🪙 {st.coins}</b></p>
+      <div className="px-shop">
+        {SHOP.filter((it) => it.slot !== 'boat').map((it) => {
           const own = st.owned.includes(it.id);
           const on = st.wear[it.slot] === it.id;
           return (
-            <div key={it.id} className={`yq-item ${own ? 'is-own' : ''} ${on ? 'is-on' : ''}`}>
-              <span className="yq-item-emoji" aria-hidden="true">{it.emoji}</span>
+            <div key={it.id} className={`px-item ${on ? 'is-on' : ''}`}>
+              <PixelEmoji e={it.emoji} size={52} res={14} />
               <b>{it.nome}</b>
-              <small>{it.slot === 'hat' ? 'pra Yas' : it.slot === 'boat' ? 'barco' : 'pro Bigode'}</small>
-              {own ? <button className="btn btn-sm btn-secondary" onClick={() => wear(it.slot, it.id)}>{on ? 'Tirar' : 'Usar'}</button>
-                : <button className="btn btn-sm btn-primary" onClick={() => buy(it.id, it.preco)}>🪙 {it.preco}</button>}
+              <small>{it.slot === 'cat' ? 'pro Bigode' : 'pra Yas'}</small>
+              {own ? <PxBtn kind="alt" onClick={() => wear(it.slot, it.id)}>{on ? 'TIRAR' : 'USAR'}</PxBtn> : <PxBtn kind="gold" onClick={() => buy(it.id, it.preco)}>🪙 {it.preco}</PxBtn>}
             </div>
           );
         })}
@@ -907,37 +1080,29 @@ function Loja({ st, saveSt, onBack }: { st: YqState; saveSt: (p: Partial<YqState
 
 // ── Ajustes ────────────────────────────────────────────────────
 
-function Config({ st, saveSt, onBack }: { st: YqState; saveSt: (p: Partial<YqState> | ((s: YqState) => Partial<YqState>)) => void; onBack: () => void }) {
+function Config({ st, saveSt, onBack, onIntro }: { st: YqState; saveSt: SaveSt; onBack: () => void; onIntro: () => void }) {
   const LEVELS: { id: Deboche; nome: string; ex: string }[] = [
-    { id: 'fofo', nome: '🧸 Fofo', ex: '“Tudo bem errar aqui 💛”' },
-    { id: 'acido', nome: '🍋 Ácido', ex: '“O Dragão mandou um beijo.”' },
-    { id: 'sem', nome: '🌶️ Sem filtro', ex: '“Não quer passar não, porra?”' },
+    { id: 'fofo', nome: '🧸 FOFO', ex: '“Tudo bem errar aqui 💛”' },
+    { id: 'acido', nome: '🍋 ÁCIDO', ex: '“O Dragão mandou um beijo.”' },
+    { id: 'sem', nome: '🌶️ SEM FILTRO', ex: '“Não quer passar não, porra?”' },
   ];
   return (
-    <div className="yq-config">
-      <button className="yq-back" onClick={onBack}>← Mapa</button>
-      <h2>⚙️ Ajustes do jogo</h2>
-      <h3 className="yq-h3">🐱 Deboche do Doutor Bigode</h3>
-      <div className="yq-deboche">
-        {LEVELS.map((l) => (
-          <button key={l.id} className={st.deboche === l.id ? 'is-on' : ''} onClick={() => { saveSt({ deboche: l.id }); play('meow'); }}>
-            <b>{l.nome}</b><small>{l.ex}</small>
-          </button>
-        ))}
+    <div className="px-page">
+      <button className="px-back" onClick={onBack}>◀ MAPA</button>
+      <h2 className="px-h">⚙️ AJUSTES</h2>
+      <h3 className="px-h3">🐱 DEBOCHE DO DR. BIGODE</h3>
+      <div className="px-deboche">
+        {LEVELS.map((l) => <button key={l.id} className={st.deboche === l.id ? 'is-on' : ''} onClick={() => { saveSt({ deboche: l.id }); play('meow'); }}><b>{l.nome}</b><small>{l.ex}</small></button>)}
       </div>
-      <p className="muted small">Na ilha da Tempestade da Crise ele fica sério, sempre.</p>
-      <h3 className="yq-h3">📚 Seus PDFs de estudo</h3>
-      <ul className="yq-pdfs">
-        {st.pdfs.map((p) => (
-          <li key={p.id}>
-            <span>📄 {p.name}</span>
-            <small>{p.url ? 'link' : 'arquivo'}</small>
-            <button className="icon-btn icon-btn-sm" aria-label="Remover" onClick={() => saveSt((s) => ({ pdfs: s.pdfs.filter((x) => x.id !== p.id) }))}>✕</button>
-          </li>
-        ))}
-      </ul>
-      <PdfAdder st={st} saveSt={saveSt} />
-      <p className="muted small">Depois, em cada ilha, abra “📚 PDF de estudo desta ilha” e escolha qual PDF e as páginas.</p>
+      <p className="px-small">Na ilha da Tempestade da Crise ele fica sério, sempre.</p>
+      <h3 className="px-h3">📚 SEUS PDFS</h3>
+      <ul className="px-list">{st.pdfs.map((p) => <li key={p.id}>📄 {p.name} <small>({p.url ? 'link' : 'arquivo'})</small> <button className="px-mini" onClick={() => saveSt((s) => ({ pdfs: s.pdfs.filter((x) => x.id !== p.id) }))}>remover</button></li>)}</ul>
+      <PdfAdder saveSt={saveSt} />
+      <p className="px-small">No Dojo de cada missão você escolhe qual PDF e a página daquela ilha.</p>
+      <PxBtn kind="ghost" onClick={onIntro}>🎬 REVER A ABERTURA</PxBtn>
     </div>
   );
 }
+
+// zonas importadas para usos futuros (mantém o import tipado)
+void ZONAS;
