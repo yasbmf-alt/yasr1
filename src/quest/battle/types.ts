@@ -17,6 +17,7 @@ export interface BattleCast {
   slug: string; // chave dos sprites: monstros/<slug>, ilhas/<slug>
   monstro: string; // nome do monstro do tema
   serio?: boolean; // tema sensível: narrador sem piadas
+  bioma?: 'resp' | 'emerg' | 'mente' | 'cuidado'; // cenário em camadas (padrão: resp)
   falas?: BattleFalas; // falas do dossiê da ilha (opcional)
   cartoesDe?: Record<string, string[]>; // id da questão → cartões de recuperação (para notar erro repetido)
 }

@@ -16,6 +16,8 @@ export const isVector = (url?: string) => !!url && (url.startsWith('data:image/s
 export const sprites = {
   monstro: (slug: string) => sprite(`monstros/${slug}`) ?? sprite('monstros/srag'),
   ilha: (slug: string) => sprite(`ilhas/${slug}`) ?? sprite('ilhas/srag'),
+  /** fundo desenhado por você (PNG/WebP em ilhas/<slug>); sem ele, a batalha usa o cenário do bioma */
+  ilhaPropria: (slug: string) => files[`./sprites/ilhas/${slug}.png`] ?? files[`./sprites/ilhas/${slug}.webp`],
   bigode: () => sprite('bigode'),
   yas: () => sprite('yas') ?? sprite('yas-costas'),
   plataforma: () => sprite('plataforma'),

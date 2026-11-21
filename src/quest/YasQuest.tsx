@@ -18,12 +18,13 @@ import type { YlDoc } from '../yasland/types';
 import {
   ISLANDS, ZONAS, FINAL, REVANCHE, EXAM, SHOP, STATE_ID, SAMPLE, CHAMADO, DOJO_NAGS, CICATRIZ_LINE, WIN_LINES, INTRO, SNOOZE,
   emptyState, islandOf, zonaOf, islandStat, routeOf, visitDone, frozen, buildFinal, buildRevanche, bossExtras, missionKey,
-  xpFor, levelOf, parseImport, parseOraculo, isOld, oraculoPrompt, bigode, wearEmoji, last,
+  xpFor, levelOf, levelXp, parseImport, parseOraculo, isOld, oraculoPrompt, bigode, wearEmoji, last,
   type YqQuestion, type YqState, type Zona, type Why, type Island, type ImportResult, type PdfRef, type Deboche, type MissionProg, type Res, type Duel,
 } from './data';
 import { dossieCardId, isDossiePack, parseDossies, recoveryCards, type DossieCard, type DossieImport, type YqDossie } from './dossie';
 import { Recuperacao, ResumoMestre } from './DossieViews';
 import { sprites } from './battle/sprites';
+import { Bioma, BIOMA_NOME, biomaOf, type BiomaId } from './scene/Bioma';
 import { BattleScreen, DEMO_CAST, DEMO_QUESTIONS, type BattleCast, type BattleQuestion, type TurnResult } from './battle';
 
 type Screen = { s: 'intro' } | { s: 'hub' } | { s: 'mission'; tema: string } | { s: 'porto' } | { s: 'loja' } | { s: 'caderno' } | { s: 'config' } | { s: 'demo'; n: number };
@@ -42,7 +43,7 @@ const castOf = (tema: string, boss = false, d?: YqDossie): BattleCast => {
   const i = islandOf(tema);
   const f = d?.dialogos;
   return {
-    tema: labelOf(tema), slug: i?.slug ?? 'srag', monstro: i?.boss ?? (tema === FINAL ? 'Chefão da Prova' : boss ? 'Rei dos Fantasmas' : 'Fantasmas dos Erros'), serio: !!i?.serious,
+    tema: labelOf(tema), slug: i?.slug ?? 'srag', bioma: biomaOf(tema), monstro: i?.boss ?? (tema === FINAL ? 'Chefão da Prova' : boss ? 'Rei dos Fantasmas' : 'Fantasmas dos Erros'), serio: !!i?.serious,
     ...(f ? {
       falas: { entrada: f.transicao, acerto: f.acerto, erro: f.erro, erroRepetido: f.erroRepetido, durante: [...f.durante, ...f.problema], vitoria: f.vitoria, derrota: f.derrota },
       cartoesDe: Object.fromEntries(Object.entries(d!.mapa.questoes).map(([qid, m]) => [`yl:yq:q:${qid}`, m.cartoes])),
@@ -84,7 +85,7 @@ function BossArt({ tema, size = 64, fog }: { tema: string; size?: number; fog?: 
 }
 
 /** caixa de diálogo de RPG com texto digitando; toque completa / avança */
-function Dialog({ name = 'DR. BIGODES', lines, onDone, children, serious }: { name?: string; lines: string[]; onDone?: () => void; children?: React.ReactNode; serious?: boolean }) {
+function Dialog({ name = 'DR. BIGODES', lines, onDone, children, serious, face = true }: { name?: string; lines: string[]; onDone?: () => void; children?: React.ReactNode; serious?: boolean; face?: boolean }) {
   const [i, setI] = useState(0);
   const [n, setN] = useState(0);
   const line = lines[Math.min(i, lines.length - 1)] ?? '';
@@ -103,6 +104,7 @@ function Dialog({ name = 'DR. BIGODES', lines, onDone, children, serious }: { na
   };
   return (
     <div className={`px-dialog ${serious ? 'is-serious' : ''}`}>
+      {face && <span className="px-dialog-face" aria-hidden="true">{sprites.bigode() && <img src={sprites.bigode()} alt="" draggable={false} />}</span>}
       <span className="px-dialog-name">{serious ? 'GUIA' : name}</span>
       <button className="px-dialog-text" onClick={tap} aria-label="Avançar diálogo">
         {line.slice(0, n)}
@@ -117,12 +119,13 @@ function PxBtn({ children, onClick, kind = 'main', disabled }: { children: React
   return <button className={`px-btn px-btn-${kind}`} onClick={() => { play('pop'); onClick?.(); }} disabled={disabled}>{children}</button>;
 }
 
-function Scene({ children, kind = 'day' }: { children: React.ReactNode; kind?: 'day' | 'night' | 'dojo' | 'arena' | 'oracle' }) {
+const KIND_BIOMA: Record<string, BiomaId> = { day: 'resp', night: 'mente', dojo: 'cuidado', arena: 'emerg', oracle: 'mente' };
+function Scene({ children, kind = 'day', bioma, dim }: { children: React.ReactNode; kind?: 'day' | 'night' | 'dojo' | 'arena' | 'oracle'; bioma?: BiomaId; dim?: boolean }) {
+  const b = bioma ?? KIND_BIOMA[kind];
   return (
-    <div className={`px-scene px-sc-${kind}`}>
-      <span className="px-cloud c1" aria-hidden="true" /><span className="px-cloud c2" aria-hidden="true" /><span className="px-cloud c3" aria-hidden="true" />
+    <div className={`px-scene px-sc-${kind} px-bio-${b} ${dim ? 'is-dim' : ''}`}>
+      <Bioma b={b} />
       <div className="px-scene-body">{children}</div>
-      <span className="px-ground" aria-hidden="true" />
     </div>
   );
 }
@@ -255,17 +258,22 @@ export function YasQuest() {
 
 function Hud({ st, onGo, current }: { st: YqState; onGo: (s: Screen) => void; current: string }) {
   const lv = levelOf(st.xp);
+  const a = levelXp(lv); const b = levelXp(lv + 1);
+  const pct = Math.max(0, Math.min(1, (st.xp - a) / Math.max(1, b - a)));
   return (
     <header className="px-hud">
-      <button className="px-hud-score" onClick={() => onGo({ s: 'hub' })} aria-label="Mapa de missões">
-        <span>SCORE</span><b>{String(st.xp).padStart(5, '0')}</b>
+      <button className="px-hud-me" onClick={() => onGo({ s: 'hub' })} aria-label="Mapa de missões">
+        <span className="px-hud-face"><YasArt size={40} /></span>
+        <span className="px-hud-stats">
+          <span className="px-hud-row"><b className="px-hud-lv">NV {lv}</b><span className="px-hud-coins">🪙 {st.coins}</span></span>
+          <span className="px-hud-xp" title={`${st.xp} pontos`}><span style={{ width: `${pct * 100}%` }} /></span>
+          <span className="px-hud-score">{String(st.xp).padStart(5, '0')}</span>
+        </span>
       </button>
-      <span className="px-hud-lv">NV {lv}</span>
-      <span className="px-hud-coins"><PixelEmoji e="🪙" size={18} res={12} /> {st.coins}</span>
       <nav className="px-hud-nav" aria-label="Menu do jogo">
-        {([['hub', '🗺️', 'Missões'], ['caderno', '🩹', 'Cicatrizes'], ['porto', '⚓', 'Porto'], ['loja', '🛍️', 'Loja'], ['config', '⚙️', 'Ajustes']] as const).map(([s, e, l]) => (
-          <button key={s} className={current === s || (s === 'hub' && current === 'mission') ? 'is-on' : ''} onClick={() => onGo({ s } as Screen)} aria-label={l} title={l}>
-            <PixelEmoji e={e} size={22} res={12} />
+        {([['hub', '🗺️', 'Missões'], ['caderno', '🩹', 'Cicatrizes'], ['porto', '⚓', 'Porto'], ['loja', '🛍️', 'Loja'], ['config', '⚙️', 'Ajustes']] as const).map(([sc, e, l]) => (
+          <button key={sc} className={current === sc || (sc === 'hub' && current === 'mission') ? 'is-on' : ''} onClick={() => onGo({ s: sc } as Screen)} aria-label={l} title={l}>
+            <span aria-hidden="true">{e}</span>
           </button>
         ))}
       </nav>
@@ -282,14 +290,14 @@ function Intro({ st, onStart }: { st: YqState; onStart: () => void }) {
   return (
     <Scene kind="night">
       <div className="px-title">
-        <span className="px-title-logo">YAS<br />QUEST</span>
-        <span className="px-title-sub">O arquipélago da R1</span>
+        <span className="px-title-logo"><i>YAS</i><i>QUEST</i></span>
+        <span className="px-title-sub">★ O arquipélago da R1 ★</span>
       </div>
       <motion.div className="px-hero" animate={{ y: [0, -6, 0] }} transition={{ repeat: Infinity, duration: 1.6 }}>
         <span className="px-duo"><YasArt size={116} /><BigodeSprite size={116} st={st} /></span>
       </motion.div>
-      <Dialog lines={lines}>
-        <PxBtn onClick={onStart}>▶ BORA!</PxBtn>
+      <Dialog lines={lines} face={false}>
+        <PxBtn kind="gold" onClick={onStart}>▶ BORA!</PxBtn>
         <PxBtn kind="ghost" onClick={() => { play('meow'); setSnooze(SNOOZE[Math.floor(Math.random() * SNOOZE.length)]); }}>Mais 5 minutinhos…</PxBtn>
       </Dialog>
     </Scene>
@@ -312,71 +320,114 @@ function Hub({ st, byTema, total, saveSt, onMission, onGo }: { st: YqState; byTe
     if (doneAll && !st.nightShown?.[d]) { play('chapter'); saveSt((s) => ({ nightShown: { ...(s.nightShown ?? {}), [d]: true } })); }
   }, [doneAll]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ordem das cartas: a rota do dia primeiro, depois o resto do arquipélago
+  const route = r && !fz ? r.list : [];
+  const order = [...route, ...ISLANDS.map((i) => i.tema).filter((t) => !route.includes(t))];
+  const [sel, setSel] = useState(() => Math.max(0, order.indexOf(current ?? order[0])));
+  const go = (k: number) => { setSel((x) => (x + k + order.length) % order.length); play('pop'); };
+  const t = order[sel];
+  const isl = islandOf(t)!;
+  const stat = islandStat(byTema.get(t) ?? []);
+  const inRoute = route.indexOf(t);
+  const done = visitDone(visits[t], t);
+  const prog = st.missions?.[missionKey(t, d)];
+  const say = fz ? 'Modo pré-prova: nada novo agora. Almoça, respira e vai. Você treinou pra isso.'
+    : doneAll ? bigode(st.deboche, 'noite')
+    : total === 0 ? 'O arquipélago tá vazio. Passa no ⚓ Porto e traz as questões, senão eu jogo sozinho.'
+    : current ? `${line} Próxima missão: ${labelOf(current)}.` : line;
+
   return (
     <div className="px-hub">
-      <Scene kind={doneAll || fz ? 'night' : 'day'}>
-        <div className="px-hub-top">
-          <BigodeSprite size={64} st={st} />
-          <Dialog lines={[fz ? 'Modo pré-prova: nada novo agora. Almoça, respira e vai. Você treinou pra isso.' : doneAll ? bigode(st.deboche, 'noite') : total === 0 ? 'O arquipélago tá vazio. Passa no ⚓ Porto e traz as questões, senão eu jogo sozinho.' : current ? `${line} Próxima missão: ${labelOf(current)}.` : line]} />
+      <Scene kind={doneAll || fz ? 'night' : 'day'} bioma={doneAll || fz ? 'mente' : biomaOf(current ?? t)}>
+        <div className="hb-hero">
+          <motion.div className="hb-bubble" key={say} initial={{ scale: 0.8, opacity: 0, y: 8 }} animate={{ scale: 1, opacity: 1, y: 0 }} transition={{ type: 'spring', stiffness: 260, damping: 18 }}>
+            <b>DR. BIGODES</b>
+            <p>{say}</p>
+          </motion.div>
+          <div className="hb-duo">
+            <YasArt size={92} />
+            <BigodeSprite size={84} st={st} />
+          </div>
         </div>
         {doneAll && (
           <motion.div className="px-nightok" initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
-            <PixelEmoji e="🌙" size={72} res={16} />
+            <PixelEmoji e="🌙" size={56} />
             <b>NOITE LIBERADA!</b>
           </motion.div>
         )}
       </Scene>
 
-      {r && !fz && (
-        <section className="px-panel">
+      {route.length > 0 && (
+        <section className="px-panel hb-route">
           <div className="px-panel-head">
-            <b>🗺️ ROTA DE {r.label.toUpperCase()}</b>
-            {r.family.length > 0 && (
-              <label className="px-fam"><input type="checkbox" checked={r.fam} onChange={(e) => saveSt((s) => ({ family: { ...s.family, [d]: e.target.checked } }))} /> dia com família</label>
+            <b>🗺️ ROTA DE {r!.label.toUpperCase()}</b>
+            {r!.family.length > 0 && (
+              <label className="px-fam"><input type="checkbox" checked={r!.fam} onChange={(e) => saveSt((s) => ({ family: { ...s.family, [d]: e.target.checked } }))} /> dia com família</label>
             )}
           </div>
-          <ol className="px-path">
-            {r.list.map((t, i) => {
-              const ok = visitDone(visits[t], t);
-              const prog = st.missions?.[missionKey(t, d)];
-              const cur = t === current;
+          <ol className="hb-trail">
+            {route.map((rt, k) => {
+              const ok = visitDone(visits[rt], rt);
+              const cur = rt === current;
               return (
-                <li key={t} className={`${ok ? 'is-done' : ''} ${cur ? 'is-cur' : ''}`}>
-                  <button onClick={() => onMission(t)}>
-                    <span className="px-stage-n">{i + 1}</span>
-                    {ok ? <PixelEmoji e="🚩" size={40} /> : <BossArt tema={t} size={44} />}
-                    <span className="px-stage-name">{labelOf(t)}{islandOf(t)?.capital ? <i> ★3 garantidas</i> : null}</span>
-                    <span className="px-stage-st">{ok ? 'OK!' : prog ? STEP_ICON[prog.step] : cur ? '▶' : ''}</span>
+                <li key={rt} className={`${ok ? 'is-done' : ''} ${cur ? 'is-cur' : ''} ${order[sel] === rt ? 'is-sel' : ''}`}>
+                  <button onClick={() => setSel(order.indexOf(rt))} aria-label={`${k + 1}. ${labelOf(rt)}${ok ? ' (concluída)' : ''}`}>
+                    <span className="hb-node">{ok ? <span className="hb-flag">🚩</span> : <BossArt tema={rt} size={40} />}</span>
+                    <small>{k + 1}</small>
                   </button>
-                  {cur && r.list.length > 1 && <button className="px-skip" onClick={() => saveSt((s) => ({ skipped: { ...s.skipped, [d]: [...(s.skipped[d] ?? []).filter((x) => x !== t), t] } }))}>pular ↓</button>}
                 </li>
               );
             })}
           </ol>
-          {current && <PxBtn kind="gold" onClick={() => onMission(current)}>▶ JOGAR: {labelOf(current).toUpperCase()}</PxBtn>}
+          {current && route.length > 1 && <button className="px-skip" onClick={() => saveSt((s) => ({ skipped: { ...s.skipped, [d]: [...(s.skipped[d] ?? []).filter((x) => x !== current), current] } }))}>pular {labelOf(current)} ↓</button>}
         </section>
       )}
 
-      <section className="px-panel">
-        <div className="px-panel-head"><b>🏝️ TODAS AS ILHAS</b><small>{total} monstros no arquipélago</small></div>
-        <div className="px-isles">
-          {ISLANDS.map((i) => {
-            const s = islandStat(byTema.get(i.tema) ?? []);
-            return (
-              <button key={i.tema} className={`px-isle ${i.capital ? 'is-capital' : ''} ${s.fog ? 'is-fog' : ''}`} onClick={() => !fz && onMission(i.tema)} disabled={fz}>
-                <BossArt tema={i.tema} size={68} fog={s.fog} />
-                <b>{i.short}</b>
-                <small className="px-isle-boss">{i.boss}</small>
-                <small>{'★'.repeat(i.prio)} · {Math.round(s.pct * 100)}%</small>
-                <span className="px-bar"><span style={{ width: `${Math.round(s.pct * 100)}%` }} /></span>
-              </button>
-            );
-          })}
+      <section className="hb-select" aria-label="Seleção de ilha">
+        <h3 className="hb-select-title">SELECIONE A ILHA</h3>
+        <div className="hb-stage">
+          <button className="hb-arrow" onClick={() => go(-1)} aria-label="Ilha anterior">◀</button>
+          <div className="hb-peek is-l" aria-hidden="true"><BossArt tema={order[(sel - 1 + order.length) % order.length]} size={64} /></div>
+          <motion.button
+            key={t}
+            className={`hb-card ${isl.capital ? 'is-capital' : ''} ${stat.fog ? 'is-fog' : ''}`}
+            onClick={() => !fz && onMission(t)}
+            disabled={fz}
+            drag="x" dragConstraints={{ left: 0, right: 0 }} dragElastic={0.35}
+            onDragEnd={(_, info) => { if (info.offset.x < -50) go(1); else if (info.offset.x > 50) go(-1); }}
+            initial={{ opacity: 0, scale: 0.92, rotate: -2 }} animate={{ opacity: 1, scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 300, damping: 22 }}
+          >
+            <span className="hb-card-name">{isl.short.toUpperCase()}</span>
+            <span className="hb-card-scene"><Bioma b={biomaOf(t)} still /></span>
+            <motion.span className="hb-card-boss" animate={{ y: [0, -4, 0] }} transition={{ repeat: Infinity, duration: 1.8 }}><BossArt tema={t} size={132} fog={stat.fog} /></motion.span>
+            {inRoute >= 0 && <span className={`hb-badge ${done ? 'is-done' : ''}`}>{done ? '✓ FEITA HOJE' : `MISSÃO ${inRoute + 1}/${route.length}`}</span>}
+            {isl.capital && <span className="hb-badge is-gold">★ 3 GARANTIDAS</span>}
+          </motion.button>
+          <div className="hb-peek is-r" aria-hidden="true"><BossArt tema={order[(sel + 1) % order.length]} size={64} /></div>
+          <button className="hb-arrow" onClick={() => go(1)} aria-label="Próxima ilha">▶</button>
         </div>
-        {!fz && <PxBtn kind="alt" onClick={() => onMission(FINAL)}>🏥 ILHA FINAL</PxBtn>}
-        <PxBtn kind="ghost" onClick={() => onGo({ s: 'demo', n: 1 })}>🎮 Batalha de demonstração</PxBtn>
+        <div className="hb-info">
+          <b>{isl.boss}</b>
+          <span className="hb-meta">{'★'.repeat(isl.prio)}{'☆'.repeat(3 - isl.prio)} · {BIOMA_NOME[biomaOf(t)]}{prog && !done ? ` · ${STEP_ICON[prog.step]} em andamento` : ''}</span>
+          <span className="hb-pct"><span className="px-bar"><span style={{ width: `${Math.round(stat.pct * 100)}%` }} /></span><small>{stat.fog ? 'sem questões ainda' : `${Math.round(stat.pct * 100)}% dominada`}</small></span>
+        </div>
+        <div className="hb-start">
+          <PxBtn kind="gold" disabled={fz} onClick={() => onMission(t)}>▶ ENTRAR NA ILHA</PxBtn>
+        </div>
+        <div className="hb-minimap" role="list" aria-label="Todas as ilhas">
+          {order.map((o, k) => (
+            <button key={o} role="listitem" className={`${k === sel ? 'is-on' : ''} ${visitDone(visits[o], o) ? 'is-done' : ''}`} onClick={() => setSel(k)} aria-label={labelOf(o)} title={labelOf(o)}>
+              <BossArt tema={o} size={30} fog={islandStat(byTema.get(o) ?? []).fog} />
+            </button>
+          ))}
+        </div>
       </section>
-      {total === 0 && <PxBtn kind="gold" onClick={() => onGo({ s: 'porto' })}>⚓ IR PRO PORTO</PxBtn>}
+
+      <div className="hb-extra">
+        {!fz && <PxBtn kind="alt" onClick={() => onMission(FINAL)}>🏥 ILHA FINAL</PxBtn>}
+        {total === 0 && <PxBtn kind="gold" onClick={() => onGo({ s: 'porto' })}>⚓ IR PRO PORTO</PxBtn>}
+        <PxBtn kind="ghost" onClick={() => onGo({ s: 'demo', n: 1 })}>🎮 Batalha de demonstração</PxBtn>
+      </div>
     </div>
   );
 }
@@ -439,19 +490,22 @@ function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, ma
         : [...(CHAMADO[tema] ?? [`Missão: ${tema}.`]).slice(0, 2), `Primeiro o Dojo: ${DOJO_MIN} min de leitura (pode parar antes ou ir além). Depois a Arena.`];
     const accept = () => (special ? toArena() : setProg({ step: 'dojo', dojoStart: new Date().toISOString() }));
     return (
-      <Scene kind="day">
+      <Scene kind="day" bioma={biomaOf(tema)} dim>
         <button className="px-back" onClick={onHub}>◀ MAPA</button>
         <div className="px-chamado">
           <span className="px-mission-tag">📜 O CHAMADO</span>
           <h2 className="px-h">{labelOf(tema).toUpperCase()}</h2>
-          {dossie && <span className="px-ilha">{dossie.ilha}</span>}
+          <span className="px-ilha">{dossie?.ilha ?? BIOMA_NOME[biomaOf(tema)]}</span>
           {island?.capital && <span className="px-gold">★ 3 QUESTÕES GARANTIDAS ★</span>}
-          <div className="px-vs">
-            <motion.span initial={{ x: -40, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ type: 'spring', stiffness: 140, damping: 16 }}><YasArt size={112} /></motion.span>
-            <span className="px-vs-x">VS</span>
-            <motion.span initial={{ x: 40, opacity: 0 }} animate={{ x: 0, opacity: 1, y: [0, -5, 0] }} transition={{ x: { type: 'spring', stiffness: 140, damping: 16 }, y: { repeat: Infinity, duration: 1.6 } }}><BossArt tema={tema} size={120} /></motion.span>
+          <div className="px-stage">
+            <Bioma b={biomaOf(tema)} />
+            <motion.span className="px-stage-me" initial={{ x: -60, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ type: 'spring', stiffness: 140, damping: 16 }}><YasArt size={108} /><i className="px-plate">YASMIN</i></motion.span>
+            <motion.span className="px-vs-x" initial={{ scale: 3, opacity: 0, rotate: -20 }} animate={{ scale: 1, opacity: 1, rotate: -8 }} transition={{ delay: 0.35, type: 'spring', stiffness: 260, damping: 12 }}>VS</motion.span>
+            <motion.span className="px-stage-foe" initial={{ x: 60, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ type: 'spring', stiffness: 140, damping: 16 }}>
+              <motion.span animate={{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 1.6 }}><BossArt tema={tema} size={118} /></motion.span>
+              <i className="px-plate is-foe">{(island?.boss ?? (tema === FINAL ? 'Chefão da Prova' : 'Rei dos Fantasmas')).toUpperCase()}</i>
+            </motion.span>
           </div>
-          {island && <p className="px-boss-name">{island.boss}</p>}
         </div>
         {dossie && <button className="dz-skip" onClick={accept}>pular história ▸▸</button>}
         <Dialog lines={lines} serious={serious}>

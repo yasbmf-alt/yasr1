@@ -13,6 +13,7 @@ import { HPBar } from './HPBar';
 import { MoveMenu } from './MoveMenu';
 import { FeedbackPanel } from './FeedbackPanel';
 import { BattleEnd } from './BattleEnd';
+import { Bioma } from '../scene/Bioma';
 import type { BattleCast, BattleQuestion, TurnResult } from './types';
 
 export interface BattleScreenProps {
@@ -87,7 +88,8 @@ export function BattleScreen({ cast, questions, title, onAnswer, onExit, onFinis
         </header>
 
         {/* arena: fundo da ilha, monstro no alto à direita, Yas embaixo à esquerda */}
-        <section className="bt-field" style={{ backgroundImage: `url(${sprites.ilha(cast.slug)})` }}>
+        <section className="bt-field" style={sprites.ilhaPropria(cast.slug) ? { backgroundImage: `url(${sprites.ilhaPropria(cast.slug)})` } : undefined}>
+          {!sprites.ilhaPropria(cast.slug) && <Bioma b={cast.bioma ?? 'resp'} />}
           <div className="bt-foe-side">
             <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: s.phase === 'entrada' ? 0 : 1, y: 0 }} transition={{ delay: 0.2 }}>
               <HPBar name={cast.monstro} hp={s.hp} max={s.hpMax} />

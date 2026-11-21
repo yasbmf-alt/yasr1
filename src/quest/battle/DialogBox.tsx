@@ -38,7 +38,7 @@ export function DialogBox({ text, speaker, onAdvance, onTyped, fast, canAdvance 
 
   return (
     <div
-      className={`bt-dialog ${speaker === 'questao' ? 'is-question' : ''}`}
+      className={`bt-dialog ${speaker === 'questao' ? 'is-question' : 'is-bigode'}`}
       role="button"
       tabIndex={0}
       onClick={tap}
@@ -46,7 +46,7 @@ export function DialogBox({ text, speaker, onAdvance, onTyped, fast, canAdvance 
       aria-live="polite"
       aria-label={done ? text : undefined}
     >
-      {speaker === 'bigode' && <BattleSprite src={sprites.bigode()} alt="" w={48} h={48} className="bt-dialog-face" />}
+      {speaker === 'bigode' && <BattleSprite src={sprites.bigode()} alt="" w={88} h={88} className="bt-dialog-face" />}
       <div className="bt-dialog-body">
         <span className="bt-dialog-name">{name}</span>
         <p className="bt-dialog-text">
