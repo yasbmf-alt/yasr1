@@ -49,6 +49,11 @@ export function BattleScreen({ cast, questions, title, onAnswer, onExit, onFinis
   const fxId = useRef(0);
   const boom = (kind: Fx['kind'], label: string) => { fxId.current += 1; setFx({ id: fxId.current, kind, label }); };
   const [wipe, setWipe] = useState(true);
+  // revisão-relâmpago: abre sozinha a cada questão; fechar vale só para a questão atual
+  const [postitOff, setPostitOff] = useState(-1);
+  // fala do vilão: aparece no golpe certeiro e some quando a próxima questão começa
+  const [vilao, setVilao] = useState<string | null>(null);
+  useEffect(() => { if (s.phase === 'pergunta' || s.phase === 'proximo' || s.phase === 'fim') setVilao(null); }, [s.phase]);
   useEffect(() => { sfx('entrada'); const t = window.setTimeout(() => setWipe(false), 900); return () => window.clearTimeout(t); }, []);
   useEffect(() => { if (s.phase !== 'animacao') setShownHp(s.hp); }, [s.phase, s.hp]);
 
@@ -65,7 +70,7 @@ export function BattleScreen({ cast, questions, title, onAnswer, onExit, onFinis
     let alive = true;
     const run = async () => {
       if (reduced()) {
-        if (s.ok) { setShownHp(s.hp); setHpHit((h) => h + 1); sfx('golpe'); }
+        if (s.ok) { setShownHp(s.hp); setHpHit((h) => h + 1); sfx('golpe'); if (s.current?.falaVilao) setVilao(s.current.falaVilao); }
         await wait(300);
       } else if (s.ok) {
         const efetivo = s.current?.zona === 'pegadinha';
@@ -77,6 +82,7 @@ export function BattleScreen({ cast, questions, title, onAnswer, onExit, onFinis
         void stage.start({ x: [0, -5, 5, -3, 0], y: [0, 3, -2, 0], transition: { duration: 0.3 } });
         await foe.start({ x: [0, 16, -6, 6, 0], filter: [RED, 'none', RED, 'none', RED, 'none'], transition: { duration: 0.6 } });
         setShownHp(s.hp); setHpHit((h) => h + 1); sfx('drena');
+        if (s.current?.falaVilao) setVilao(s.current.falaVilao);
         await wait(420);
         if (s.hp <= 0) {
           sfx('desmaio');
@@ -120,12 +126,36 @@ export function BattleScreen({ cast, questions, title, onAnswer, onExit, onFinis
         <header className="bt-top">
           <button className="bt-exit" onClick={exit} aria-label="Sair da batalha">✕</button>
           <span className="bt-title">{title ?? cast.tema}</span>
+          {q?.revisao && (s.phase === 'pergunta' || s.phase === 'escolha') && (
+            <button className={`bt-book ${postitOff === s.turn ? '' : 'is-open'}`} onClick={() => setPostitOff(postitOff === s.turn ? -1 : s.turn)} aria-label={postitOff === s.turn ? 'Abrir a revisão-relâmpago' : 'Fechar a revisão-relâmpago'} aria-expanded={postitOff !== s.turn}>
+              <span aria-hidden="true">📖</span>
+            </button>
+          )}
         </header>
 
         {/* arena: fundo da ilha, monstro no alto à direita, Yas embaixo à esquerda */}
         <section className="bt-field" style={sprites.ilhaPropria(cast.slug) ? { backgroundImage: `url(${sprites.ilhaPropria(cast.slug)})` } : undefined}>
           {!sprites.ilhaPropria(cast.slug) && <Bioma b={cast.bioma ?? 'resp'} />}
           <AnimatePresence>{fx && (fx.kind === 'contra' || fx.kind === 'golpe' || fx.kind === 'efetivo') && <motion.span key={`v${fx.id}`} className={`fx-vignette is-${fx.kind}`} initial={{ opacity: 0.9 }} animate={{ opacity: 0 }} transition={{ duration: 0.6 }} aria-hidden="true" />}</AnimatePresence>
+          <AnimatePresence>
+            {q?.revisao && (s.phase === 'pergunta' || s.phase === 'escolha') && postitOff !== s.turn && (
+              <motion.aside key={`pi${s.turn}`} className="bt-postit" role="note" aria-label="Revisão-relâmpago"
+                initial={{ opacity: 0, y: -18, rotate: -6, scale: 0.9 }} animate={{ opacity: 1, y: 0, rotate: -2, scale: 1 }} exit={{ opacity: 0, y: -10, rotate: 3, scale: 0.9 }} transition={{ type: 'spring', stiffness: 320, damping: 20 }}>
+                <span className="bt-postit-tape" aria-hidden="true" />
+                <b>{q.revisao.titulo}</b>
+                <p>{q.revisao.texto}</p>
+                <button className="bt-postit-x" onClick={() => setPostitOff(s.turn)} aria-label="Fechar a revisão">✕</button>
+              </motion.aside>
+            )}
+          </AnimatePresence>
+          <AnimatePresence>
+            {vilao && (s.phase === 'animacao' || s.phase === 'feedback') && (
+              <motion.div key={vilao} className="bt-vilao" role="status" initial={{ opacity: 0, scale: 0.6, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ type: 'spring', stiffness: 380, damping: 18 }}>
+                <b>{cast.monstro}</b>
+                <p>{vilao}</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
           {wipe && <span className="bt-wipe" aria-hidden="true">{Array.from({ length: 48 }, (_, k) => <i key={k} style={{ animationDelay: `${((k % 8) + Math.floor(k / 8)) * 0.035}s` }} />)}</span>}
           <div className="bt-foe-side">
             <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: s.phase === 'entrada' ? 0 : 1, y: 0 }} transition={{ delay: 0.2 }}>

@@ -12,7 +12,8 @@ import { burst } from '../logic/fx';
 import { play } from '../logic/sound';
 import { diffDays, today, uid } from '../logic/dates';
 import { newCardState } from '../logic/fsrs';
-import { resolveAssetUrl, uploadFile } from '../platform/platform';
+import { resolveAssetUrl, saveDownload, uploadFile } from '../platform/platform';
+import { buildBackup } from '../logic/backup';
 import type { Session } from '../types';
 import type { YlDoc } from '../yasland/types';
 import {
@@ -23,6 +24,7 @@ import {
 } from './data';
 import { dossieCardId, isDossiePack, parseDossies, recoveryCards, type DossieCard, type DossieImport, type YqDossie } from './dossie';
 import { Recuperacao, ResumoMestre } from './DossieViews';
+import { REVISAO_ID, isRevisaoPack, parseRevisao, type RevisaoImport, type YqRevisao } from './revisao';
 import { sprites } from './battle/sprites';
 import { sfx } from './battle/sfx';
 import { Bioma, BIOMA_NOME, biomaOf, type BiomaId } from './scene/Bioma';
@@ -43,7 +45,10 @@ const WHY: { id: Why; emoji: string; nome: string }[] = [
 ];
 const DOJO_MIN = 45;
 const labelOf = (t: string) => (t === FINAL ? 'Ilha Final' : t === REVANCHE ? 'Revanche geral' : islandOf(t)?.short ?? t);
-const toBQ = (q: YqQuestion): BattleQuestion => ({ id: q.id, tema: q.tema, zona: q.zona, origem: q.origem, enunciado: q.enunciado, alternativas: q.alternativas, gabarito: q.gabarito, comentario: q.comentario });
+const toBQ = (q: YqQuestion, rv?: YqRevisao): BattleQuestion => {
+  const it = rv?.itens[q.qid]; // só o conteúdo desta questão, pelo id
+  return { id: q.id, tema: q.tema, zona: q.zona, origem: q.origem, enunciado: q.enunciado, alternativas: q.alternativas, gabarito: q.gabarito, comentario: q.comentario, ...(it ? { revisao: { titulo: it.titulo, texto: it.texto }, falaVilao: it.fala } : {}) };
+};
 const castOf = (tema: string, boss = false, d?: YqDossie): BattleCast => {
   const i = islandOf(tema);
   const f = d?.dialogos;
@@ -146,6 +151,7 @@ export function YasQuest() {
   const st: YqState = { ...emptyState(), ...((docs.find((d) => d.id === STATE_ID) as unknown as YqState) ?? {}) };
   const dossies = useMemo(() => (docs as unknown as { kind?: string }[]).filter((d) => d.kind === 'yq-dossie') as unknown as YqDossie[], [docs]);
   const dossieOf = (tema: string) => dossies.find((d) => d.tema === tema);
+  const revisao = useMemo(() => docs.find((d) => d.id === REVISAO_ID) as unknown as YqRevisao | undefined, [docs]);
   const byTema = useMemo(() => {
     const m = new Map<string, YqQuestion[]>();
     for (const q of questions) m.set(q.tema, [...(m.get(q.tema) ?? []), q]);
@@ -252,6 +258,7 @@ export function YasQuest() {
           makeCard={makeCard}
           saveDuelCards={saveDuelCards}
           dossie={dossieOf(screen.tema)}
+          revisao={revisao}
           onStory={(cena, then) => setCine({ ...cena, onDone: then } as Cena)}
           saveDossieCards={saveDossieCards}
           hasCard={hasCard}
@@ -260,7 +267,9 @@ export function YasQuest() {
           onNext={(t) => go({ s: 'mission', tema: t })}
         />
       )}
-      {screen.s === 'porto' && <Porto questions={questions} dossies={dossies} onBack={() => go({ s: 'hub' })} saveQ={saveQ} saveDossie={(d) => saveYl(d as unknown as YlDoc)} saveDossieCards={saveDossieCards} />}
+      {screen.s === 'porto' && <Porto questions={questions} dossies={dossies} revisao={revisao} onBack={() => go({ s: 'hub' })} saveQ={saveQ} saveDossie={(d) => saveYl(d as unknown as YlDoc)} saveDossieCards={saveDossieCards}
+        saveRevisao={(d) => saveYl(d as unknown as YlDoc)}
+        backup={async () => { const { json } = await buildBackup(snapshot(), false); return saveDownload(`yas-r1-backup-antes-da-revisao-${today()}.json`, JSON.stringify(json, null, 2)); }} />}
       {screen.s === 'loja' && <Loja st={st} saveSt={saveSt} onBack={() => go({ s: 'hub' })} />}
       {screen.s === 'caderno' && <Caderno qs={questions} st={st} onBack={() => go({ s: 'hub' })} makeCard={makeCard} />}
       {screen.s === 'config' && <Config st={st} saveSt={saveSt} onBack={() => go({ s: 'hub' })} onIntro={() => go({ s: 'intro' })} onDemo={() => go({ s: 'demo', n: 1 })} />}
@@ -409,11 +418,12 @@ function Hub({ st, byTema, total, saveSt, onMission, onGo, onStory }: { st: YqSt
 
 // ── Missão ─────────────────────────────────────────────────────
 
-function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, makeCard, saveDuelCards, dossie, saveDossieCards, hasCard, onStory, onHub, onPorto, onNext }: {
+function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, makeCard, saveDuelCards, dossie, revisao, saveDossieCards, hasCard, onStory, onHub, onPorto, onNext }: {
   tema: string; st: YqState; all: YqQuestion[]; pool: YqQuestion[]; saveSt: SaveSt; saveQ: (q: YqQuestion) => void;
   markVisit: (t: string, s: ('estudar' | 'batalha' | 'grimorio')[]) => void; logSession: (type: 'leitura' | 'questoes', min: number, tema: string, q?: { n: number; ok: number }) => void;
   makeCard: (q: YqQuestion, silent?: boolean) => void; saveDuelCards: (tema: string, d: Duel[]) => void; onHub: () => void; onPorto: () => void; onNext: (t: string) => void;
   onStory: (c: Cena, then?: () => void) => void;
+  revisao?: YqRevisao;
   dossie?: YqDossie; saveDossieCards: (tema: string, cs: DossieCard[], silent?: boolean) => number; hasCard: (tema: string, c: DossieCard) => boolean;
 }) {
   const ui = useUI();
@@ -525,7 +535,7 @@ function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, ma
         key="arena"
         cast={castOf(tema, false, dossie)}
         title={`Arena · ${labelOf(tema)}`}
-        questions={left.map(toBQ)}
+        questions={left.map((q) => toBQ(q, revisao))}
         onAnswer={(r) => answered(r, false)}
         onExit={onHub}
         finishLabel="Ver cicatrizes"
@@ -599,7 +609,7 @@ function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, ma
         key="chefao"
         cast={castOf(tema, true, dossie)}
         title={`Chefão · ${labelOf(tema)}`}
-        questions={queue.map(toBQ)}
+        questions={queue.map((q) => toBQ(q, revisao))}
         onAnswer={(r) => answered(r, true)}
         onExit={onHub}
         onFinish={(sum) => {
@@ -835,10 +845,25 @@ function Caderno({ qs, st, onBack, makeCard }: { qs: YqQuestion[]; st: YqState; 
 
 // ── Porto ──────────────────────────────────────────────────────
 
-function Porto({ questions, dossies, onBack, saveQ, saveDossie, saveDossieCards }: {
-  questions: YqQuestion[]; dossies: YqDossie[]; onBack: () => void; saveQ: (q: YqQuestion) => void;
+function Porto({ questions, dossies, revisao, onBack, saveQ, saveDossie, saveDossieCards, saveRevisao, backup }: {
+  questions: YqQuestion[]; dossies: YqDossie[]; revisao?: YqRevisao; onBack: () => void; saveQ: (q: YqQuestion) => void;
   saveDossie: (d: YqDossie) => void; saveDossieCards: (tema: string, cs: DossieCard[], silent?: boolean) => number;
+  saveRevisao: (d: YqRevisao) => void; backup: () => Promise<'ok' | 'declined' | 'failed'>;
 }) {
+  const [rres, setRres] = useState<RevisaoImport | null>(null);
+  const [busy, setBusy] = useState(false);
+  const applyRevisao = async () => {
+    if (!rres?.doc) return;
+    // backup completo dos dados antes de gravar qualquer coisa
+    setBusy(true);
+    const b = await backup().catch(() => 'failed' as const);
+    setBusy(false);
+    if (b !== 'ok' && !window.confirm('Não consegui salvar o backup automático. Quer continuar mesmo assim? (A importação só acrescenta as revisões; não mexe nas questões.)')) return;
+    saveRevisao(rres.doc);
+    play('mission');
+    ui.toast(`📖 ${rres.associados.length} revisões-relâmpago guardadas${b === 'ok' ? ' (backup salvo antes)' : ''}.`);
+    setText(''); setRres(null);
+  };
   const ui = useUI();
   const [text, setText] = useState('');
   const [res, setRes] = useState<ImportResult | null>(null);
@@ -846,12 +871,13 @@ function Porto({ questions, dossies, onBack, saveQ, saveDossie, saveDossieCards 
   const [toDeck, setToDeck] = useState(true);
   const existing = useMemo(() => new Map(questions.map((q) => [q.qid, q])), [questions]);
   const check = (t = text) => {
-    setRes(null); setDres(null);
+    setRes(null); setDres(null); setRres(null);
     if (!t.trim()) return;
     // pacote de dossiês (conteúdo das missões) ou lista de questões
     let raw: unknown = null;
     try { raw = JSON.parse(t.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()); } catch { /* o parseImport explica o erro */ }
-    if (raw && isDossiePack(raw)) setDres(parseDossies(raw, questions, dossies));
+    if (raw && isRevisaoPack(raw)) setRres(parseRevisao(raw, questions, revisao));
+    else if (raw && isDossiePack(raw)) setDres(parseDossies(raw, questions, dossies));
     else setRes(parseImport(t, existing));
   };
   const applyDossies = () => {
@@ -883,6 +909,16 @@ function Porto({ questions, dossies, onBack, saveQ, saveDossie, saveDossieCards 
         <PxBtn kind="ghost" onClick={() => { setText(SAMPLE); check(SAMPLE); }}>🧪 3 EXEMPLOS</PxBtn>
         <PxBtn kind="alt" disabled={!text.trim()} onClick={() => check()}>🔎 CONFERIR</PxBtn>
       </div>
+      {rres && (
+        <div className="px-box">
+          <p><b>📖 Revisão-relâmpago e falas dos vilões</b></p>
+          <p><b>{rres.associados.length}</b> de {rres.total} associadas pelo id da questão{rres.naoEncontrados.length ? ` · ${rres.naoEncontrados.length} não encontradas` : ''}{rres.invalidos.length ? ` · ${rres.invalidos.length} incompletas` : ''}</p>
+          {rres.naoEncontrados.length > 0 && <details open><summary>⚠️ IDs não encontrados no banco (ficam de fora)</summary><p><code>{rres.naoEncontrados.join(', ')}</code></p></details>}
+          {rres.invalidos.length > 0 && <details><summary>Incompletas</summary><p><code>{rres.invalidos.join(', ')}</code></p></details>}
+          <p className="px-small">Antes de gravar, o app salva um backup dos seus dados. Nada nas questões, no histórico ou nos baralhos é alterado.</p>
+          <PxBtn kind="gold" disabled={!rres.doc || busy} onClick={() => void applyRevisao()}>{busy ? 'SALVANDO BACKUP…' : `📖 GUARDAR ${rres.associados.length} REVISÕES`}</PxBtn>
+        </div>
+      )}
       {dres && (
         <div className="px-box">
           <p><b>{dres.ok.length}</b> dossiês prontos{dres.out.length ? ` · ${dres.out.length} ficaram de fora` : ''}</p>

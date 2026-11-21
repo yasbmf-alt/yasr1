@@ -4652,3 +4652,19 @@ body:has(.yq-shell) .toasts, body:has(.yq-shell) .celebration, body:has(.yq-shel
   .fx-slash, .fx-ring, .fx-spark, .fx-claw, .bt-hpbox.is-hit, .bt-hpbox.is-danger .bt-hpfill, .bt-wipe { animation: none !important; }
   .bt-wipe { display: none; }
 }
+
+/* ══════════ YAS QUEST · revisão-relâmpago (post-it) e fala do vilão ══════════ */
+.bt-book { margin-left: auto; width: 40px; height: 40px; display: grid; place-items: center; font-size: 19px; cursor: pointer; background: none; border: 6px solid transparent; border-image: var(--pf-dark) 4 fill / 6px; }
+.bt-book.is-open { border-image: var(--pf-gold) 4 fill / 6px; }
+.bt-book:not(.is-open) span { animation: bookWiggle 1.6s steps(4) infinite; }
+@keyframes bookWiggle { 0%, 70%, 100% { transform: none; } 80% { transform: rotate(-12deg); } 90% { transform: rotate(12deg); } }
+.bt-postit { position: absolute; z-index: 6; top: 10px; right: 10px; width: min(64%, 270px); max-height: calc(100% - 20px); overflow-y: auto; padding: 14px 12px 10px; background: #fff3a6; color: #3a2a08; box-shadow: 0 0 0 3px #3a2208, 4px 6px 0 3px rgba(15, 10, 38, .45); background-image: repeating-linear-gradient(180deg, transparent 0 21px, rgba(180, 140, 40, .18) 21px 22px); }
+.bt-postit-tape { position: absolute; top: -6px; left: 50%; width: 54px; height: 14px; translate: -50% 0; background: rgba(248, 201, 241, .85); box-shadow: 0 0 0 2px rgba(58, 34, 8, .35); rotate: 3deg; }
+.bt-postit b { display: block; font-family: var(--font-pixel); font-weight: 500; font-size: 13px; letter-spacing: .04em; color: #8a2763; margin: 0 22px 4px 0; text-transform: uppercase; }
+.bt-postit p { margin: 0; font-size: 13.5px; line-height: 1.45; font-weight: 600; }
+.bt-postit-x { position: absolute; top: 6px; right: 6px; width: 24px; height: 24px; border: 0; background: #3a2208; color: #fff3a6; font-size: 12px; cursor: pointer; display: grid; place-items: center; }
+.bt-vilao { position: absolute; z-index: 6; top: 8px; right: 8px; max-width: min(54%, 260px); padding: 2px 4px; color: #fffaf0; border: 10px solid transparent; border-image: var(--pf-dark) 4 fill / 10px; filter: drop-shadow(0 5px 0 rgba(0, 0, 0, .45)); }
+.bt-vilao b { display: block; font-family: var(--font-pixel); font-weight: 500; font-size: 12px; letter-spacing: .05em; color: #f8c9f1; text-transform: uppercase; }
+.bt-vilao p { margin: 2px 0 0; font-size: 14px; line-height: 1.4; font-weight: 600; }
+.bt-vilao::after { content: ''; position: absolute; bottom: -20px; left: 46%; width: 4px; height: 4px; background: #0f0a26; box-shadow: 4px 0 #251a55, 8px 0 #0f0a26, 4px 4px #0f0a26, 8px 4px #0f0a26, 4px 8px #0f0a26; }
+@media (prefers-reduced-motion: reduce) { .bt-book span { animation: none !important; } }

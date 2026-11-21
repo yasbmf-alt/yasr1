@@ -9,6 +9,8 @@ export interface BattleQuestion {
   alternativas: Record<string, string>; // A–E
   gabarito: string;
   comentario: string;
+  revisao?: { titulo: string; texto: string }; // post-it da revisão-relâmpago (só desta questão)
+  falaVilao?: string; // fala do chefão quando esta questão é acertada
 }
 
 /** quem é quem na arena */
