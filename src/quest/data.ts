@@ -50,6 +50,7 @@ export interface YqState {
   nightShown?: Record<string, boolean>;
   missions?: Record<string, MissionProg>; // data:tema → progresso da missão (modo história)
   introDay?: string; // dia em que a abertura do Bigode já foi vista
+  historia?: Record<string, string>; // capítulos do modo história já assistidos (tema → data)
 }
 
 export const STATE_ID = 'yl:yq:state';
