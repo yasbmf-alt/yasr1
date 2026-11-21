@@ -21,8 +21,9 @@ import {
   xpFor, levelOf, parseImport, parseOraculo, isOld, oraculoPrompt, bigode, wearEmoji, last,
   type YqQuestion, type YqState, type Zona, type Why, type Island, type ImportResult, type PdfRef, type Deboche, type MissionProg, type Res, type Duel,
 } from './data';
+import { BattleScreen, DEMO_CAST, DEMO_QUESTIONS, type BattleCast, type BattleQuestion, type TurnResult } from './battle';
 
-type Screen = { s: 'intro' } | { s: 'hub' } | { s: 'mission'; tema: string } | { s: 'porto' } | { s: 'loja' } | { s: 'caderno' } | { s: 'config' };
+type Screen = { s: 'intro' } | { s: 'hub' } | { s: 'mission'; tema: string } | { s: 'porto' } | { s: 'loja' } | { s: 'caderno' } | { s: 'config' } | { s: 'demo'; n: number };
 type SaveSt = (p: Partial<YqState> | ((s: YqState) => Partial<YqState>)) => void;
 
 const WHY: { id: Why; emoji: string; nome: string }[] = [
@@ -33,6 +34,11 @@ const WHY: { id: Why; emoji: string; nome: string }[] = [
 ];
 const DOJO_MIN = 45;
 const labelOf = (t: string) => (t === FINAL ? 'Ilha Final' : t === REVANCHE ? 'Revanche geral' : islandOf(t)?.short ?? t);
+const toBQ = (q: YqQuestion): BattleQuestion => ({ id: q.id, tema: q.tema, zona: q.zona, origem: q.origem, enunciado: q.enunciado, alternativas: q.alternativas, gabarito: q.gabarito, comentario: q.comentario });
+const castOf = (tema: string, boss = false): BattleCast => {
+  const i = islandOf(tema);
+  return { tema: labelOf(tema), slug: i?.slug ?? 'srag', monstro: i?.boss ?? (tema === FINAL ? 'Chefão da Prova' : boss ? 'Rei dos Fantasmas' : 'Fantasmas dos Erros'), serio: !!i?.serious };
+};
 const emojiOf = (t: string) => (t === FINAL ? '🏥' : t === REVANCHE ? '👻' : islandOf(t)?.bossEmoji ?? '⭐');
 
 // ── Arte em pixel ──────────────────────────────────────────────
@@ -195,7 +201,11 @@ export function YasQuest() {
       {screen.s === 'porto' && <Porto questions={questions} onBack={() => go({ s: 'hub' })} saveQ={saveQ} />}
       {screen.s === 'loja' && <Loja st={st} saveSt={saveSt} onBack={() => go({ s: 'hub' })} />}
       {screen.s === 'caderno' && <Caderno qs={questions} st={st} onBack={() => go({ s: 'hub' })} makeCard={makeCard} />}
-      {screen.s === 'config' && <Config st={st} saveSt={saveSt} onBack={() => go({ s: 'hub' })} onIntro={() => go({ s: 'intro' })} />}
+      {screen.s === 'config' && <Config st={st} saveSt={saveSt} onBack={() => go({ s: 'hub' })} onIntro={() => go({ s: 'intro' })} onDemo={() => go({ s: 'demo', n: 1 })} />}
+      {screen.s === 'demo' && (
+        // batalha de demonstração: questões de exemplo, nada é salvo
+        <BattleScreen key={screen.n} cast={DEMO_CAST} questions={DEMO_QUESTIONS} title="Batalha de demonstração" onExit={() => go({ s: 'hub' })} onFinish={() => go({ s: 'hub' })} finishLabel="Voltar ao mapa" onAgain={() => go({ s: 'demo', n: screen.n + 1 })} />
+      )}
     </div>
   );
 }
@@ -322,6 +332,7 @@ function Hub({ st, byTema, total, saveSt, onMission, onGo }: { st: YqState; byTe
           })}
         </div>
         {!fz && <PxBtn kind="alt" onClick={() => onMission(FINAL)}>🏥 ILHA FINAL</PxBtn>}
+        <PxBtn kind="ghost" onClick={() => onGo({ s: 'demo', n: 1 })}>🎮 Batalha de demonstração</PxBtn>
       </section>
       {total === 0 && <PxBtn kind="gold" onClick={() => onGo({ s: 'porto' })}>⚓ IR PRO PORTO</PxBtn>}
     </div>
@@ -358,6 +369,16 @@ function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, ma
     const wrong = pool.filter((q) => q.hist.length && !last(q).ok);
     const rest = pool.filter((q) => q.hist.length && last(q).ok);
     return [...fresh, ...wrong, ...rest].slice(0, 12).map((q) => q.id);
+  };
+  // cada resposta da batalha: histórico da questão + progresso da missão (XP e moedas seguem em silêncio)
+  const answered = (r: TurnResult, boss: boolean) => {
+    const q = qmap.get(r.q.id);
+    if (!q) return;
+    saveQ({ ...q, hist: [...q.hist, { at: new Date().toISOString(), pick: r.pick, ok: r.ok }] });
+    if (r.ok) { const xp = xpFor(q, q.hist.some((h) => !h.ok), boss); saveSt((s) => ({ xp: s.xp + xp, coins: s.coins + 1 })); }
+    const res: Res = { id: q.id, ok: r.ok, pick: r.pick };
+    if (boss) updProg((c) => ({ bRes: [...(c.bRes ?? []), res] }));
+    else if (!r.revisao) updProg((c) => ({ aRes: [...(c.aRes ?? []).filter((x) => x.id !== res.id), res] }));
   };
   const toArena = () => setProg({ step: 'arena', arena: buildArena(), aRes: [], arenaStart: new Date().toISOString() });
   const nextInRoute = () => {
@@ -422,21 +443,14 @@ function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, ma
     const doneIds = new Set((prog.aRes ?? []).map((r) => r.id));
     const left = qs.filter((q) => !doneIds.has(q.id));
     return (
-      <Battle
-        mode="arena"
-        title={`ARENA · ${labelOf(tema).toUpperCase()}`}
-        bossEmoji={emojiOf(tema)}
-        bossName={island?.boss ?? (tema === FINAL ? 'Chefão da Prova' : 'Fantasmas dos Erros')}
-        queue={left}
-        total={qs.length}
-        st={st}
-        serious={serious}
-        saveQ={saveQ}
-        saveSt={saveSt}
-        makeCard={makeCard}
-        onRes={(r) => updProg((c) => ({ aRes: [...(c.aRes ?? []).filter((x) => x.id !== r.id), r] }))}
-        onWhy={(id, why) => updProg((c) => ({ aRes: (c.aRes ?? []).map((x) => (x.id === id ? { ...x, why } : x)) }))}
+      <BattleScreen
+        key="arena"
+        cast={castOf(tema)}
+        title={`Arena · ${labelOf(tema)}`}
+        questions={left.map(toBQ)}
+        onAnswer={(r) => answered(r, false)}
         onExit={onHub}
+        finishLabel="Ver cicatrizes"
         onFinish={() => {
           const allRes = st.missions?.[key]?.aRes ?? [];
           const min = prog.arenaStart ? Math.min(120, (Date.now() - new Date(prog.arenaStart).getTime()) / 60000) : allRes.length * 2;
@@ -500,25 +514,17 @@ function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, ma
   if (prog.step === 'chefao') {
     const queue = (prog.boss ?? []).map((id) => qmap.get(id)).filter(Boolean) as YqQuestion[];
     return (
-      <Battle
-        mode="boss"
-        title={`CHEFÃO · ${labelOf(tema).toUpperCase()}`}
-        bossEmoji={emojiOf(tema)}
-        bossName={island?.boss ?? (tema === FINAL ? 'Chefão da Prova' : 'Rei dos Fantasmas')}
-        queue={queue}
-        total={queue.length}
-        st={st}
-        serious={serious}
-        saveQ={saveQ}
-        saveSt={saveSt}
-        makeCard={makeCard}
-        onRes={(r) => updProg((c) => ({ bRes: [...(c.bRes ?? []), r] }))}
-        onWhy={(id, why) => updProg((c) => { const b = [...(c.bRes ?? [])]; const i = b.map((y) => y.id).lastIndexOf(id); if (i >= 0) b[i] = { ...b[i], why }; return { bRes: b }; })}
+      <BattleScreen
+        key="chefao"
+        cast={castOf(tema, true)}
+        title={`Chefão · ${labelOf(tema)}`}
+        questions={queue.map(toBQ)}
+        onAnswer={(r) => answered(r, true)}
         onExit={onHub}
-        onFinish={() => {
+        onFinish={(sum) => {
           markVisit(tema, ['batalha', 'grimorio']);
-          if (island) saveSt((s) => ({ bossesBeaten: s.bossesBeaten.includes(tema) ? s.bossesBeaten : [...s.bossesBeaten, tema], coins: s.coins + 15 }));
-          setProg({ step: special ? 'fim' : 'oraculo', wins: (prog.wins ?? 0) + 1 });
+          saveSt((s) => ({ waves: s.waves + 1, ...(island && sum.won ? { bossesBeaten: s.bossesBeaten.includes(tema) ? s.bossesBeaten : [...s.bossesBeaten, tema], coins: s.coins + 15 } : {}) }));
+          setProg({ step: special ? 'fim' : 'oraculo', wins: (prog.wins ?? 0) + (sum.won ? 1 : 0) });
         }}
       />
     );
@@ -586,186 +592,6 @@ function Dojo({ tema, island, st, saveSt, start, onBack, onDone }: { tema: strin
       </div>
       <Dialog lines={[over ? 'Deu o tempo! Mas se tiver no embalo, continua. Eu espero. Reclamando, mas espero.' : nag]} serious={island.serious} />
     </Scene>
-  );
-}
-
-// ── Batalha (arena e chefão) ───────────────────────────────────
-
-function Battle({ mode, title, bossEmoji, bossName, queue: q0, total, st, serious, saveQ, saveSt, makeCard, onRes, onWhy, onExit, onFinish }: {
-  mode: 'arena' | 'boss'; title: string; bossEmoji: string; bossName: string; queue: YqQuestion[]; total: number; st: YqState; serious: boolean;
-  saveQ: (q: YqQuestion) => void; saveSt: SaveSt; makeCard: (q: YqQuestion, silent?: boolean) => void; onRes: (r: Res) => void; onWhy: (id: string, w: Why) => void; onExit: () => void; onFinish: (res: Res[]) => void;
-}) {
-  const [queue, setQueue] = useState(q0);
-  const [pick, setPick] = useState<string | null>(null);
-  const [hearts, setHearts] = useState(3);
-  const [combo, setCombo] = useState(0);
-  const [charge, setCharge] = useState(0);
-  const [hidden, setHidden] = useState<string[]>([]);
-  const [why, setWhy] = useState<Why | null>(null);
-  const [over, setOver] = useState(false);
-  const [win, setWin] = useState(false);
-  const [res, setRes] = useState<Res[]>([]);
-  const [gain, setGain] = useState(0);
-  const [pop, setPop] = useState<{ t: string; n: number } | null>(null);
-  const [shake, setShake] = useState(0);
-  const [hit, setHit] = useState(0);
-  const [line, setLine] = useState(() => (serious ? 'Com calma e atenção.' : mode === 'boss' ? `${bossName}: “Você de novo? Vamos ver se aprendeu.”` : islandOf(q0[0]?.tema ?? '')?.taunts[0] ?? 'Que comece a batalha!'));
-  const box = useRef<HTMLDivElement>(null);
-  const q = queue[0];
-  const answeredCount = mode === 'boss' ? total - queue.length + (pick && pick === q?.gabarito ? 1 : 0) : total - queue.length + (pick ? 1 : 0);
-  const hp = Math.max(0, total - answeredCount);
-
-  useEffect(() => { document.body.style.overflow = 'hidden'; return () => { document.body.style.overflow = ''; }; }, []);
-  useEffect(() => {
-    if (!pick) return undefined;
-    const t = window.setTimeout(() => box.current?.querySelector('.px-grim')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 600);
-    return () => window.clearTimeout(t);
-  }, [pick]);
-
-  const answer = (k: string, e: React.MouseEvent) => {
-    if (pick || !q) return;
-    setPick(k);
-    const ok = k === q.gabarito;
-    const rev = q.hist.some((h) => !h.ok);
-    saveQ({ ...q, hist: [...q.hist, { at: new Date().toISOString(), pick: k, ok }] });
-    const r: Res = { id: q.id, ok, pick: k };
-    setRes((x) => [...x, r]);
-    onRes(r);
-    if (ok) {
-      const xp = xpFor(q, rev, mode === 'boss');
-      setGain((g) => g + xp);
-      saveSt((s) => ({ xp: s.xp + xp, coins: s.coins + 1 }));
-      setCombo((c) => c + 1);
-      setCharge((c) => Math.min(3, c + 1));
-      setHit((h) => h + 1);
-      setPop({ t: `+${xp}`, n: Date.now() });
-      burst(e, mode === 'boss' ? 'confete' : 'brilho', 14);
-      play(mode === 'boss' ? 'mission' : 'check');
-      setLine(bigode(st.deboche, combo + 1 >= 3 && (combo + 1) % 3 === 0 ? 'combo' : 'acerto', serious));
-    } else {
-      setCombo(0);
-      setShake((s) => s + 1);
-      play('fizzle');
-      setHearts((h) => { const n = h - 1; if (n <= 0) window.setTimeout(() => { setOver(true); play('ghost'); }, 900); return Math.max(0, n); });
-      setLine(bigode(st.deboche, q.zona === 'pegadinha' ? 'pegadinha' : 'erro', serious));
-    }
-  };
-  const next = () => {
-    const wasOk = pick === q.gabarito;
-    // no chefão, errou → a questão volta pro fim da fila
-    const rest = queue.slice(1);
-    const nq = mode === 'boss' && !wasOk ? [...rest, q] : rest;
-    setPick(null); setHidden([]); setWhy(null);
-    if (!nq.length) {
-      if (mode === 'boss') { setWin(true); play('chapter'); saveSt((s) => ({ waves: s.waves + 1 })); }
-      else onFinish(res);
-      return;
-    }
-    setQueue(nq);
-    play('pop');
-    box.current?.scrollTo({ top: 0 });
-  };
-  const power = (p: 'cafe' | 'dica') => {
-    if (charge < 3) return;
-    setCharge(0);
-    play('ignite');
-    if (p === 'cafe') setHearts((h) => Math.min(3, h + 1));
-    if (p === 'dica' && q && !pick) {
-      const wrong = Object.keys(q.alternativas).filter((k) => k !== q.gabarito && !hidden.includes(k));
-      if (wrong.length > 1) setHidden([...hidden, wrong[Math.floor(Math.random() * wrong.length)]]);
-    }
-  };
-  const ok = q && pick === q.gabarito;
-
-  if (win) {
-    return createPortal(
-      <div className="px-overlay">
-        <WinScreen st={st} title="YOU WIN!" sub={`${bossName} derrotado · +${gain}`} onGo={() => onFinish(res)} goLabel="▶ CONTINUAR" />
-      </div>,
-      document.body,
-    );
-  }
-
-  return createPortal(
-    <div className={`px-battle ${serious ? 'is-serious' : ''} ${mode === 'boss' ? 'is-boss' : ''}`} role="dialog" aria-label={title}>
-      <div className="px-battle-scroll" ref={box}>
-        <header className="px-bhud">
-          <button className="px-flee" onClick={() => window.confirm('Sair da batalha? O que você já respondeu fica salvo.') && onExit()} aria-label="Sair">✕</button>
-          <span className="px-hearts">{[0, 1, 2].map((i) => <PixelEmoji key={i} e="❤️" size={22} res={10} className={i < hearts ? '' : 'is-lost'} />)}</span>
-          <span className="px-combo">{combo >= 2 ? `COMBO x${combo}` : ''}</span>
-          <span className="px-gain">+{gain}</span>
-        </header>
-        <div className="px-battle-title">{title}</div>
-        <section className="px-field">
-          <motion.div className="px-foe" key={`h${hit}`} animate={hit ? { x: [0, -8, 8, -4, 0], opacity: [1, 0.3, 1, 0.3, 1] } : {}} transition={{ duration: 0.45 }}>
-            <div className="px-foe-hud"><b>{bossName.toUpperCase()}</b><span className="px-hp"><span style={{ width: `${(hp / Math.max(1, total)) * 100}%` }} /></span><small>HP {hp}/{total}</small></div>
-            <PixelEmoji e={bossEmoji} size={mode === 'boss' ? 120 : 96} res={18} className="px-foe-sprite" />
-            <AnimatePresence>{pop && <motion.span key={pop.n} className="px-pop" initial={{ y: 0, opacity: 1 }} animate={{ y: -40, opacity: 0 }} transition={{ duration: 0.9 }}>{pop.t}</motion.span>}</AnimatePresence>
-          </motion.div>
-          <div className="px-me">
-            <PixelEmoji e="👩‍⚕️" size={72} res={16} />
-            <BigodeSprite size={44} st={st} />
-          </div>
-        </section>
-        <p className="px-taunt">{line}</p>
-
-        {q && (
-          <motion.article key={`${q.id}-${queue.length}`} className={`px-qbox ${pick ? (ok ? 'is-ok' : 'is-bad') : ''}`} initial={{ opacity: 0, y: 14 }} animate={shake && pick && !ok ? { opacity: 1, y: 0, x: [0, -8, 8, -4, 0] } : { opacity: 1, y: 0 }}>
-            <div className="px-qtags">
-              <span>{mode === 'boss' ? '👑' : '⚔️'} {Math.min(total, answeredCount + (pick ? 0 : 1))}/{total}</span>
-              <span>{zonaOf(q.zona).emoji} {zonaOf(q.zona).nome}</span>
-              <span className={isOld(q) ? 'is-old' : 'is-new'}>{isOld(q) ? `📌 já caiu · ${q.origem}` : '✨ inédita'}</span>
-            </div>
-            <p className="px-enun">{q.enunciado}</p>
-            <div className="px-alts">
-              {Object.entries(q.alternativas).map(([k, txt]) => (
-                <button key={k} className={`px-alt ${hidden.includes(k) ? 'is-hidden' : ''} ${pick ? (k === q.gabarito ? 'is-right' : k === pick ? 'is-wrong' : 'is-dim') : ''}`} disabled={!!pick || hidden.includes(k)} onClick={(e) => answer(k, e)}>
-                  <b>{pick && k === q.gabarito ? '▶' : k}</b><span>{txt}</span>
-                </button>
-              ))}
-            </div>
-            {!pick && (
-              <div className={`px-powers ${charge >= 3 ? 'is-ready' : ''}`}>
-                <span className="px-charge">{[0, 1, 2].map((i) => <i key={i} className={i < charge ? 'is-on' : ''} />)}</span>
-                <button disabled={charge < 3 || hearts >= 3} onClick={() => power('cafe')}>☕ SUPERCAFÉ</button>
-                <button disabled={charge < 3} onClick={() => power('dica')}>🩺 DICA</button>
-              </div>
-            )}
-          </motion.article>
-        )}
-
-        {pick && q && (
-          <motion.section className={`px-grim ${ok ? 'is-ok' : 'is-bad'}`} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
-            <h4>{ok ? '✨ GOLPE CERTEIRO!' : `💥 ERROU! A CERTA ERA ${q.gabarito}`}</h4>
-            {q.comentario && <p className="px-coment"><b>📜</b> {q.comentario}</p>}
-            {!ok && (
-              <div className="px-why-wrap">
-                <span>POR QUE ERROU?</span>
-                <div className="px-why">{WHY.map((w) => <button key={w.id} className={why === w.id ? 'is-on' : ''} onClick={() => { setWhy(w.id); onWhy(q.id, w.id); setRes((x) => x.map((y, i) => (i === x.length - 1 ? { ...y, why: w.id } : y))); }}>{w.emoji} {w.nome}</button>)}</div>
-              </div>
-            )}
-            {!ok && mode === 'boss' && <small className="px-note">Essa volta pro fim da fila do chefão. Ele não esquece.</small>}
-            <div className="px-row">
-              {!ok && <button className="px-mini" onClick={() => makeCard(q)}>🃏 virar carta</button>}
-              <PxBtn kind="gold" onClick={next}>{queue.length <= 1 && (ok || mode === 'arena') ? (mode === 'boss' ? '👑 FINALIZAR' : '🩹 VER CICATRIZES') : '▶ PRÓXIMA'}</PxBtn>
-            </div>
-          </motion.section>
-        )}
-      </div>
-
-      <AnimatePresence>
-        {over && (
-          <motion.div className="px-gameover" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <b className="px-go-title">GAME OVER</b>
-            <span>{serious ? 'Pausa. Respira e continue.' : '…mas o plantão continua.'}</span>
-            <BigodeSprite size={72} st={st} />
-            <small>{bigode(st.deboche, 'desmaio', serious)}</small>
-            <PxBtn kind="gold" onClick={() => { setOver(false); setHearts(3); }}>▶ CONTINUAR (3 ❤️)</PxBtn>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>,
-    document.body,
   );
 }
 
@@ -1041,7 +867,7 @@ function Loja({ st, saveSt, onBack }: { st: YqState; saveSt: SaveSt; onBack: () 
 
 // ── Ajustes ────────────────────────────────────────────────────
 
-function Config({ st, saveSt, onBack, onIntro }: { st: YqState; saveSt: SaveSt; onBack: () => void; onIntro: () => void }) {
+function Config({ st, saveSt, onBack, onIntro, onDemo }: { st: YqState; saveSt: SaveSt; onBack: () => void; onIntro: () => void; onDemo: () => void }) {
   const LEVELS: { id: Deboche; nome: string; ex: string }[] = [
     { id: 'fofo', nome: '🧸 FOFO', ex: '“Tudo bem errar aqui 💛”' },
     { id: 'acido', nome: '🍋 ÁCIDO', ex: '“O Dragão mandou um beijo.”' },
@@ -1061,6 +887,8 @@ function Config({ st, saveSt, onBack, onIntro }: { st: YqState; saveSt: SaveSt; 
       <PdfAdder saveSt={saveSt} />
       <p className="px-small">No Dojo de cada missão você escolhe qual PDF e a página daquela ilha.</p>
       <PxBtn kind="ghost" onClick={onIntro}>🎬 REVER A ABERTURA</PxBtn>
+      <PxBtn kind="ghost" onClick={onDemo}>🎮 BATALHA DE DEMONSTRAÇÃO</PxBtn>
+      <p className="px-small">A demonstração usa questões de exemplo e não salva nada.</p>
     </div>
   );
 }
