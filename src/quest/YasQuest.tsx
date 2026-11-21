@@ -37,58 +37,19 @@ const emojiOf = (t: string) => (t === FINAL ? '🏥' : t === REVANCHE ? '👻' :
 
 // ── Arte em pixel ──────────────────────────────────────────────
 
-/** qualquer emoji vira sprite em pixel (desenha pequeno e amplia sem suavizar) */
-function PixelEmoji({ e, size = 64, res = 18, className }: { e: string; size?: number; res?: number; className?: string }) {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const c = ref.current;
-    const ctx = c?.getContext('2d');
-    if (!c || !ctx) return;
-    ctx.clearRect(0, 0, res, res);
-    ctx.font = `${Math.round(res * 0.86)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(e, res / 2, res / 2 + res * 0.07);
-  }, [e, res]);
-  return <canvas ref={ref} width={res} height={res} className={`px-emoji ${className ?? ''}`} style={{ width: size, height: size }} aria-hidden="true" />;
+/** emoji grande e nítido dentro de um orbe (mesmo nome antigo para não mexer no resto) */
+function PixelEmoji({ e, size = 64, className }: { e: string; size?: number; res?: number; className?: string }) {
+  return <span className={`px-emoji ${className ?? ''}`} style={{ fontSize: Math.round(size * 0.82), width: size, height: size }} aria-hidden="true">{e}</span>;
 }
 
-// Dr. Bigode: gato cinza de óculos, jaleco e estetoscópio (16×17)
-const BIGODE = [
-  '..kk........kk..',
-  '.kgpk......kpgk.',
-  '.kgppkkkkkkppgk.',
-  '.kggggggggggggk.',
-  'kggggggggggggggk',
-  'kgkkkggggggkkkgk',
-  'kgkykggggggkykgk',
-  'kgkkkggggggkkkgk',
-  'kggggggppggggggk',
-  'kgggggkggkgggggk',
-  '.kggggggggggggk.',
-  '..kkwwwwwwwwkk..',
-  '.kwwwbwwwwbwwwk.',
-  'kwwwwbwwwwbwwwwk',
-  'kwwwwwbbbbwwwwwk',
-  'kwwwwwwbbwwwwwwk',
-  'kkkkkkkkkkkkkkkk',
-];
-const PAL: Record<string, string> = { k: '#2b2b3a', g: '#c9c3d6', p: '#f38cb8', y: '#f6c46b', w: '#fffdf8', b: '#2e4a7f' };
-function Sprite({ rows, size = 72, className }: { rows: string[]; size?: number; className?: string }) {
-  const w = rows[0].length;
-  const h = rows.length;
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} width={size} height={(size * h) / w} className={`px-sprite ${className ?? ''}`} shapeRendering="crispEdges" aria-hidden="true">
-      {rows.flatMap((r, y) => [...r].map((ch, x) => (PAL[ch] ? <rect key={`${x}-${y}`} x={x} y={y} width={1} height={1} fill={PAL[ch]} /> : null)))}
-    </svg>
-  );
-}
+/** Dr. Bigode: gato médico num orbe brilhante, com estetoscópio e o acessório da loja */
 function BigodeSprite({ size = 72, st }: { size?: number; st?: YqState }) {
   const acc = st ? wearEmoji(st, 'cat') : '';
   return (
-    <span className="px-bigode" style={{ width: size }}>
-      <Sprite rows={BIGODE} size={size} />
-      {acc && <PixelEmoji e={acc} size={size * 0.45} res={12} className="px-bigode-acc" />}
+    <span className="px-bigode" style={{ width: size, height: size, fontSize: Math.round(size * 0.56) }} aria-hidden="true">
+      <span className="px-bigode-face">🐱</span>
+      <span className="px-bigode-steth" style={{ fontSize: Math.round(size * 0.3) }}>🩺</span>
+      {acc && <span className="px-bigode-acc" style={{ fontSize: Math.round(size * 0.34) }}>{acc}</span>}
     </span>
   );
 }
