@@ -17,6 +17,19 @@ export interface BattleCast {
   slug: string; // chave dos sprites: monstros/<slug>, ilhas/<slug>
   monstro: string; // nome do monstro do tema
   serio?: boolean; // tema sensível: narrador sem piadas
+  falas?: BattleFalas; // falas do dossiê da ilha (opcional)
+  cartoesDe?: Record<string, string[]>; // id da questão → cartões de recuperação (para notar erro repetido)
+}
+
+/** falas prontas do Dr. Bigodes vindas do dossiê; a escolhida é a que mais combina com a questão */
+export interface BattleFalas {
+  entrada?: string[];
+  acerto?: string[];
+  erro?: string[];
+  erroRepetido?: { fala: string; cartoes: string[] }[];
+  durante?: string[];
+  vitoria?: string[];
+  derrota?: string[];
 }
 
 /** fluxo explícito de turnos */

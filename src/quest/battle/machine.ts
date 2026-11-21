@@ -62,7 +62,7 @@ export function battleReducer(s: BattleState, e: BattleEvent): BattleState {
 
     case 'animacao':
       if (e.type !== 'ANIMACAO_FIM') return s;
-      return { ...s, phase: 'feedback', narration: s.ok ? narrator.acerto(s.cast) : narrator.erro(s.cast) };
+      return { ...s, phase: 'feedback', narration: s.ok ? narrator.acerto(s.cast, s.current ?? undefined) : narrator.erro(s.cast, s.current ?? undefined, s.pick ?? undefined, s.results.slice(0, -1)) };
 
     case 'feedback':
       if (e.type !== 'PROXIMO') return s;
@@ -81,7 +81,7 @@ export function battleReducer(s: BattleState, e: BattleEvent): BattleState {
 function nextQuestion(s: BattleState): BattleState {
   const [current, ...queue] = s.queue;
   if (!current) return finish(s);
-  return { ...s, phase: 'pergunta', current, queue, pick: null, ok: null, turn: s.turn + 1, narration: s.requeued.includes(current.id) ? narrator.revisao() : '' };
+  return { ...s, phase: 'pergunta', current, queue, pick: null, ok: null, turn: s.turn + 1, narration: s.requeued.includes(current.id) ? narrator.revisao() : narrator.durante(s.cast, current) ?? '' };
 }
 
 function finish(s: BattleState): BattleState {

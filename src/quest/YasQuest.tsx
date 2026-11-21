@@ -21,6 +21,8 @@ import {
   xpFor, levelOf, parseImport, parseOraculo, isOld, oraculoPrompt, bigode, wearEmoji, last,
   type YqQuestion, type YqState, type Zona, type Why, type Island, type ImportResult, type PdfRef, type Deboche, type MissionProg, type Res, type Duel,
 } from './data';
+import { dossieCardId, isDossiePack, parseDossies, recoveryCards, type DossieCard, type DossieImport, type YqDossie } from './dossie';
+import { Recuperacao, ResumoMestre } from './DossieViews';
 import { BattleScreen, DEMO_CAST, DEMO_QUESTIONS, type BattleCast, type BattleQuestion, type TurnResult } from './battle';
 
 type Screen = { s: 'intro' } | { s: 'hub' } | { s: 'mission'; tema: string } | { s: 'porto' } | { s: 'loja' } | { s: 'caderno' } | { s: 'config' } | { s: 'demo'; n: number };
@@ -35,9 +37,16 @@ const WHY: { id: Why; emoji: string; nome: string }[] = [
 const DOJO_MIN = 45;
 const labelOf = (t: string) => (t === FINAL ? 'Ilha Final' : t === REVANCHE ? 'Revanche geral' : islandOf(t)?.short ?? t);
 const toBQ = (q: YqQuestion): BattleQuestion => ({ id: q.id, tema: q.tema, zona: q.zona, origem: q.origem, enunciado: q.enunciado, alternativas: q.alternativas, gabarito: q.gabarito, comentario: q.comentario });
-const castOf = (tema: string, boss = false): BattleCast => {
+const castOf = (tema: string, boss = false, d?: YqDossie): BattleCast => {
   const i = islandOf(tema);
-  return { tema: labelOf(tema), slug: i?.slug ?? 'srag', monstro: i?.boss ?? (tema === FINAL ? 'Chefão da Prova' : boss ? 'Rei dos Fantasmas' : 'Fantasmas dos Erros'), serio: !!i?.serious };
+  const f = d?.dialogos;
+  return {
+    tema: labelOf(tema), slug: i?.slug ?? 'srag', monstro: i?.boss ?? (tema === FINAL ? 'Chefão da Prova' : boss ? 'Rei dos Fantasmas' : 'Fantasmas dos Erros'), serio: !!i?.serious,
+    ...(f ? {
+      falas: { entrada: f.transicao, acerto: f.acerto, erro: f.erro, erroRepetido: f.erroRepetido, durante: [...f.durante, ...f.problema], vitoria: f.vitoria, derrota: f.derrota },
+      cartoesDe: Object.fromEntries(Object.entries(d!.mapa.questoes).map(([qid, m]) => [`yl:yq:q:${qid}`, m.cartoes])),
+    } : {}),
+  };
 };
 const emojiOf = (t: string) => (t === FINAL ? '🏥' : t === REVANCHE ? '👻' : islandOf(t)?.bossEmoji ?? '⭐');
 
@@ -113,6 +122,8 @@ export function YasQuest() {
   const docs = data.yasland ?? [];
   const questions = useMemo(() => (docs as unknown as { kind?: string }[]).filter((d) => d.kind === 'yq-q') as unknown as YqQuestion[], [docs]);
   const st: YqState = { ...emptyState(), ...((docs.find((d) => d.id === STATE_ID) as unknown as YqState) ?? {}) };
+  const dossies = useMemo(() => (docs as unknown as { kind?: string }[]).filter((d) => d.kind === 'yq-dossie') as unknown as YqDossie[], [docs]);
+  const dossieOf = (tema: string) => dossies.find((d) => d.tema === tema);
   const byTema = useMemo(() => {
     const m = new Map<string, YqQuestion[]>();
     for (const q of questions) m.set(q.tema, [...(m.get(q.tema) ?? []), q]);
@@ -163,6 +174,19 @@ export function YasQuest() {
     }
     return deckId;
   };
+  // flashcards do dossiê → FSRS com id fixo: o que já existe não é duplicado nem perde a revisão
+  const hasCard = (tema: string, c: DossieCard) => snapshot().cards.some((x) => x.id === dossieCardId(tema, c.id));
+  const saveDossieCards = (tema: string, cards: DossieCard[], silent = false) => {
+    const fresh = cards.filter((c) => !hasCard(tema, c));
+    if (!fresh.length) { if (!silent) ui.toast('Esses cartões já estão nos seus flashcards 🃏'); return 0; }
+    const deckId = ensureDeck(tema);
+    for (const c of fresh) {
+      const z = c.zonas[0];
+      store.saveCard({ id: dossieCardId(tema, c.id), deckId, tags: ['yasquest', 'dossie', c.subtopico, ...c.zonas], fsrs: newCardState(), createdAt: new Date().toISOString(), front: `${z ? `${zonaOf(z).emoji} ` : ''}${c.pergunta}`, back: c.resposta });
+    }
+    if (!silent) { play('flip'); ui.toast(`🃏 ${fresh.length} cartões foram para os seus flashcards.`); }
+    return fresh.length;
+  };
   const saveDuelCards = (tema: string, duels: Duel[]) => {
     const deckId = ensureDeck(tema);
     for (const d of duels) store.saveCard({ id: uid(), deckId, tags: ['yasquest', 'oraculo', d.zona], fsrs: newCardState(), createdAt: new Date().toISOString(), front: `${zonaOf(d.zona).emoji} ${d.pergunta}`, back: d.resposta });
@@ -193,12 +217,15 @@ export function YasQuest() {
           logSession={logSession}
           makeCard={makeCard}
           saveDuelCards={saveDuelCards}
+          dossie={dossieOf(screen.tema)}
+          saveDossieCards={saveDossieCards}
+          hasCard={hasCard}
           onHub={() => go({ s: 'hub' })}
           onPorto={() => go({ s: 'porto' })}
           onNext={(t) => go({ s: 'mission', tema: t })}
         />
       )}
-      {screen.s === 'porto' && <Porto questions={questions} onBack={() => go({ s: 'hub' })} saveQ={saveQ} />}
+      {screen.s === 'porto' && <Porto questions={questions} dossies={dossies} onBack={() => go({ s: 'hub' })} saveQ={saveQ} saveDossie={(d) => saveYl(d as unknown as YlDoc)} saveDossieCards={saveDossieCards} />}
       {screen.s === 'loja' && <Loja st={st} saveSt={saveSt} onBack={() => go({ s: 'hub' })} />}
       {screen.s === 'caderno' && <Caderno qs={questions} st={st} onBack={() => go({ s: 'hub' })} makeCard={makeCard} />}
       {screen.s === 'config' && <Config st={st} saveSt={saveSt} onBack={() => go({ s: 'hub' })} onIntro={() => go({ s: 'intro' })} onDemo={() => go({ s: 'demo', n: 1 })} />}
@@ -341,10 +368,11 @@ function Hub({ st, byTema, total, saveSt, onMission, onGo }: { st: YqState; byTe
 
 // ── Missão ─────────────────────────────────────────────────────
 
-function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, makeCard, saveDuelCards, onHub, onPorto, onNext }: {
+function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, makeCard, saveDuelCards, dossie, saveDossieCards, hasCard, onHub, onPorto, onNext }: {
   tema: string; st: YqState; all: YqQuestion[]; pool: YqQuestion[]; saveSt: SaveSt; saveQ: (q: YqQuestion) => void;
   markVisit: (t: string, s: ('estudar' | 'batalha' | 'grimorio')[]) => void; logSession: (type: 'leitura' | 'questoes', min: number, tema: string, q?: { n: number; ok: number }) => void;
   makeCard: (q: YqQuestion, silent?: boolean) => void; saveDuelCards: (tema: string, d: Duel[]) => void; onHub: () => void; onPorto: () => void; onNext: (t: string) => void;
+  dossie?: YqDossie; saveDossieCards: (tema: string, cs: DossieCard[], silent?: boolean) => number; hasCard: (tema: string, c: DossieCard) => boolean;
 }) {
   const ui = useUI();
   const key = missionKey(tema);
@@ -391,13 +419,17 @@ function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, ma
   if (prog.step === 'chamado') {
     const lines = special
       ? [tema === FINAL ? 'Ilha Final. O Hospital da Prova. SRAG, suas revanches e as doses de todas as ilhas.' : 'Revanche geral: todos os fantasmas dos seus erros, juntos. Que lindo.', 'Sem Dojo agora: direto pra Arena. Bora?']
-      : [...(CHAMADO[tema] ?? [`Missão: ${tema}.`]).slice(0, 2), `Primeiro o Dojo: ${DOJO_MIN} min de leitura (pode parar antes ou ir além). Depois a Arena.`];
+      : dossie
+        ? [...dossie.dialogos.apresentacao, ...dossie.story, `Primeiro o Dojo: resumo-mestre e ${DOJO_MIN} min de leitura (pode parar antes ou ir além). Depois a Arena.`]
+        : [...(CHAMADO[tema] ?? [`Missão: ${tema}.`]).slice(0, 2), `Primeiro o Dojo: ${DOJO_MIN} min de leitura (pode parar antes ou ir além). Depois a Arena.`];
+    const accept = () => (special ? toArena() : setProg({ step: 'dojo', dojoStart: new Date().toISOString() }));
     return (
       <Scene kind="day">
         <button className="px-back" onClick={onHub}>◀ MAPA</button>
         <div className="px-chamado">
           <span className="px-mission-tag">📜 O CHAMADO</span>
           <h2 className="px-h">{labelOf(tema).toUpperCase()}</h2>
+          {dossie && <span className="px-ilha">{dossie.ilha}</span>}
           {island?.capital && <span className="px-gold">★ 3 QUESTÕES GARANTIDAS ★</span>}
           <div className="px-vs">
             <BigodeSprite size={80} st={st} />
@@ -406,8 +438,9 @@ function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, ma
           </div>
           {island && <p className="px-boss-name">{island.boss}</p>}
         </div>
+        {dossie && <button className="dz-skip" onClick={accept}>pular história ▸▸</button>}
         <Dialog lines={lines} serious={serious}>
-          <PxBtn kind="gold" onClick={() => (special ? toArena() : setProg({ step: 'dojo', dojoStart: new Date().toISOString() }))}>⚔️ ACEITAR MISSÃO</PxBtn>
+          <PxBtn kind="gold" onClick={accept}>⚔️ ACEITAR MISSÃO</PxBtn>
           <PxBtn kind="ghost" onClick={onHub}>Depois</PxBtn>
         </Dialog>
       </Scene>
@@ -416,7 +449,7 @@ function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, ma
 
   // 📖 Dojo
   if (prog.step === 'dojo') {
-    return <Dojo tema={tema} island={island!} st={st} saveSt={saveSt} start={prog.dojoStart ?? new Date().toISOString()} onBack={onHub} onDone={(min) => {
+    return <Dojo tema={tema} island={island!} st={st} dossie={dossie} saveSt={saveSt} start={prog.dojoStart ?? new Date().toISOString()} onBack={onHub} onDone={(min) => {
       logSession('leitura', min, tema);
       markVisit(tema, ['estudar']);
       setProg({ dojoMin: min });
@@ -445,7 +478,7 @@ function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, ma
     return (
       <BattleScreen
         key="arena"
-        cast={castOf(tema)}
+        cast={castOf(tema, false, dossie)}
         title={`Arena · ${labelOf(tema)}`}
         questions={left.map(toBQ)}
         onAnswer={(r) => answered(r, false)}
@@ -503,6 +536,9 @@ function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, ma
             </ul>
           )}
         </div>
+        {dossie && wrong.length > 0 && (
+          <Recuperacao d={dossie} cards={recoveryCards(dossie, wrong.map(({ q }) => ({ qid: q.qid, zona: q.zona })))} inDeck={(c) => hasCard(tema, c)} onToDeck={(cs) => saveDossieCards(tema, cs)} />
+        )}
         <Dialog lines={[CICATRIZ_LINE(wrong.length), wrong.length ? 'O chefão vai usar exatamente essas contra você. E umas extras difíceis. Pronta?' : 'O chefão vai trazer umas difíceis extras. Pronta?']} serious={serious}>
           <PxBtn kind="gold" onClick={startBoss}>👑 ENFRENTAR O CHEFÃO</PxBtn>
         </Dialog>
@@ -516,7 +552,7 @@ function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, ma
     return (
       <BattleScreen
         key="chefao"
-        cast={castOf(tema, true)}
+        cast={castOf(tema, true, dossie)}
         title={`Chefão · ${labelOf(tema)}`}
         questions={queue.map(toBQ)}
         onAnswer={(r) => answered(r, true)}
@@ -545,7 +581,7 @@ function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, ma
 
 // ── Dojo (leitura) ─────────────────────────────────────────────
 
-function Dojo({ tema, island, st, saveSt, start, onBack, onDone }: { tema: string; island: Island; st: YqState; saveSt: SaveSt; start: string; onBack: () => void; onDone: (min: number) => void }) {
+function Dojo({ tema, island, st, dossie, saveSt, start, onBack, onDone }: { tema: string; island: Island; st: YqState; dossie?: YqDossie; saveSt: SaveSt; start: string; onBack: () => void; onDone: (min: number) => void }) {
   const ui = useUI();
   const [now, setNow] = useState(Date.now());
   const [ending, setEnding] = useState<string | null>(null);
@@ -590,7 +626,8 @@ function Dojo({ tema, island, st, saveSt, start, onBack, onDone }: { tema: strin
           </div>
         )}
       </div>
-      <Dialog lines={[over ? 'Deu o tempo! Mas se tiver no embalo, continua. Eu espero. Reclamando, mas espero.' : nag]} serious={island.serious} />
+      <Dialog lines={[over ? 'Deu o tempo! Mas se tiver no embalo, continua. Eu espero. Reclamando, mas espero.' : dossie?.dialogos.preparacao[0] ?? nag]} serious={island.serious} />
+      {dossie && dossie.resumo.length > 0 && <ResumoMestre d={dossie} />}
     </Scene>
   );
 }
@@ -741,12 +778,33 @@ function Caderno({ qs, st, onBack, makeCard }: { qs: YqQuestion[]; st: YqState; 
 
 // ── Porto ──────────────────────────────────────────────────────
 
-function Porto({ questions, onBack, saveQ }: { questions: YqQuestion[]; onBack: () => void; saveQ: (q: YqQuestion) => void }) {
+function Porto({ questions, dossies, onBack, saveQ, saveDossie, saveDossieCards }: {
+  questions: YqQuestion[]; dossies: YqDossie[]; onBack: () => void; saveQ: (q: YqQuestion) => void;
+  saveDossie: (d: YqDossie) => void; saveDossieCards: (tema: string, cs: DossieCard[], silent?: boolean) => number;
+}) {
   const ui = useUI();
   const [text, setText] = useState('');
   const [res, setRes] = useState<ImportResult | null>(null);
+  const [dres, setDres] = useState<DossieImport | null>(null);
+  const [toDeck, setToDeck] = useState(true);
   const existing = useMemo(() => new Map(questions.map((q) => [q.qid, q])), [questions]);
-  const check = (t = text) => setRes(t.trim() ? parseImport(t, existing) : null);
+  const check = (t = text) => {
+    setRes(null); setDres(null);
+    if (!t.trim()) return;
+    // pacote de dossiês (conteúdo das missões) ou lista de questões
+    let raw: unknown = null;
+    try { raw = JSON.parse(t.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()); } catch { /* o parseImport explica o erro */ }
+    if (raw && isDossiePack(raw)) setDres(parseDossies(raw, questions, dossies));
+    else setRes(parseImport(t, existing));
+  };
+  const applyDossies = () => {
+    if (!dres?.ok.length) return;
+    let n = 0;
+    dres.ok.forEach((d) => { saveDossie(d); if (toDeck) n += saveDossieCards(d.tema, d.flashcards, true); });
+    play('mission');
+    ui.toast(`📜 ${dres.ok.length} dossiês guardados${toDeck ? ` · ${n} cartões novos nos flashcards` : ''}.`);
+    setText(''); setDres(null);
+  };
   const readFile = async (f: File | undefined) => { if (!f) return; const t = await f.text(); setText(t); check(t); };
   const apply = () => {
     if (!res?.ok.length) return;
@@ -761,13 +819,26 @@ function Porto({ questions, onBack, saveQ }: { questions: YqQuestion[]; onBack: 
     <div className="px-page">
       <button className="px-back" onClick={onBack}>◀ MAPA</button>
       <h2 className="px-h">⚓ PORTO</h2>
-      <p className="px-small">Cole o JSON (lista de questões) ou anexe o arquivo. Mesmo <code>id</code> atualiza e mantém o seu histórico.</p>
+      <p className="px-small">Cole o JSON (lista de questões ou pacote de dossiês) ou anexe o arquivo. Mesmo <code>id</code> atualiza e mantém o seu histórico.</p>
       <textarea className="px-text" rows={8} value={text} onChange={(e) => { setText(e.target.value); setRes(null); }} placeholder='[ { "id": "uesm-a-031", "tema": "SRAG", "zona": "conduta", … } ]' aria-label="JSON das questões" />
       <div className="px-row">
         <label className="px-btn px-btn-ghost">📎 ANEXAR .JSON<input type="file" accept=".json,application/json,text/plain" hidden onChange={(e) => void readFile(e.target.files?.[0])} /></label>
         <PxBtn kind="ghost" onClick={() => { setText(SAMPLE); check(SAMPLE); }}>🧪 3 EXEMPLOS</PxBtn>
         <PxBtn kind="alt" disabled={!text.trim()} onClick={() => check()}>🔎 CONFERIR</PxBtn>
       </div>
+      {dres && (
+        <div className="px-box">
+          <p><b>{dres.ok.length}</b> dossiês prontos{dres.out.length ? ` · ${dres.out.length} ficaram de fora` : ''}</p>
+          <ul className="px-list">{dres.ok.map((d) => {
+            const prev = dossies.find((x) => x.tema === d.tema);
+            return <li key={d.tema}>{islandOf(d.tema)?.bossEmoji} {islandOf(d.tema)?.short}: {d.resumo.length} seções · {d.story.length} cenas · {d.flashcards.length} cartões · {Object.keys(d.mapa.questoes).length} questões mapeadas{prev ? ' (atualiza)' : ''}</li>;
+          })}</ul>
+          {dres.out.length > 0 && <ul className="px-list">{dres.out.map((o, i) => <li key={i}>⚠️ {o.tema}: {o.why}</li>)}</ul>}
+          {dres.avisos.length > 0 && <details><summary>Avisos ({dres.avisos.length})</summary><ul className="px-list">{dres.avisos.slice(0, 40).map((a, i) => <li key={i}>{a}</li>)}</ul></details>}
+          <label className="px-fam"><input type="checkbox" checked={toDeck} onChange={(e) => setToDeck(e.target.checked)} /> colocar os flashcards nos baralhos das ilhas (os que já existem não duplicam)</label>
+          <PxBtn kind="gold" disabled={!dres.ok.length} onClick={applyDossies}>📜 GUARDAR {dres.ok.length} DOSSIÊS</PxBtn>
+        </div>
+      )}
       {res && (
         <div className="px-box">
           <p><b>{res.ok.length}</b> prontas ({novos} novas, {res.ok.length - novos} atualizadas){res.out.length ? ` · ${res.out.length} ficaram de fora` : ''}</p>
@@ -778,7 +849,7 @@ function Porto({ questions, onBack, saveQ }: { questions: YqQuestion[]; onBack: 
       )}
       <h3 className="px-h3">🏝️ MONSTROS POR ILHA</h3>
       <ul className="px-count">
-        {ISLANDS.map((i) => { const n = counts.get(i.tema) ?? 0; return <li key={i.tema} className={n < i.banco ? 'is-short' : ''}><span>{i.bossEmoji} {i.short}</span><b>{n}</b><small>/{i.banco}</small></li>; })}
+        {ISLANDS.map((i) => { const n = counts.get(i.tema) ?? 0; return <li key={i.tema} className={n < i.banco ? 'is-short' : ''}><span>{i.bossEmoji} {i.short}{dossies.some((d) => d.tema === i.tema) ? ' 📜' : ''}</span><b>{n}</b><small>/{i.banco}</small></li>; })}
       </ul>
     </div>
   );

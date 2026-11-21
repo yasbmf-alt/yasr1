@@ -4214,3 +4214,46 @@ html.corr-wide .corr-log .cw-clock { font-size: 20px; }
   .bt-hpfill, .bt-field { transition: none; }
   .bt-dialog-next { animation: none; }
 }
+
+/* ══════════ YAS QUEST · dossiês (dz-*) ══════════ */
+.dz { background: var(--surface); color: var(--fg); border-radius: 20px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; text-align: left; box-shadow: var(--shadow); }
+.dz-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.dz-head b { font-family: var(--font-display); font-size: 16px; }
+.dz-head small { color: var(--muted); font-size: 13px; }
+.dz-secs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.dz-group { font-family: var(--font-display); font-weight: 800; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
+.dz-secs > li:not(.dz-group) { background: var(--surface-2); border-radius: 14px; overflow: hidden; }
+.dz-sec-btn { width: 100%; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 0; background: none; color: inherit; font: inherit; font-weight: 700; font-size: 14.5px; text-align: left; cursor: pointer; }
+.dz-sec-btn > span:last-of-type { flex: 1; }
+.dz-sec-btn i { font-style: normal; font-weight: 800; color: var(--muted); }
+.dz-zona { flex: none; font-size: 11.5px; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: var(--lilas); color: var(--lilas-ink); }
+.dz-zona.z-diagnostico { background: var(--azul-claro); color: var(--azul); }
+.dz-zona.z-tratamento { background: var(--lima); color: var(--lima-ink); }
+.dz-zona.z-conduta { background: var(--pessego); color: var(--rosa-ink); }
+.dz-zona.z-pegadinha { background: var(--manteiga); color: var(--manteiga-ink); }
+.dz-body { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 4px; }
+.dz-body p { margin: 0; font-size: 14.5px; line-height: 1.5; }
+.dz-li { position: relative; padding-left: 16px; }
+.dz-li::before { content: '•'; position: absolute; left: 3px; color: var(--rosa-medio); font-weight: 900; }
+.dz-li.is-num { padding-left: 0; }
+.dz-li.is-num::before { content: none; }
+.dz-l2 { margin-left: 16px !important; } .dz-l3 { margin-left: 32px !important; }
+.dz-li.dz-l2::before, .dz-li.dz-l3::before { content: '◦'; }
+.dz-p.dz-l1 { margin-left: 16px !important; } .dz-p.dz-l2 { margin-left: 32px !important; }
+.dz-h { margin: 8px 0 2px; font-family: var(--font-display); font-size: 14px; }
+.dz-table-wrap { overflow-x: auto; margin: 4px 0; border-radius: 10px; border: 1px solid var(--line); }
+.dz-table { border-collapse: collapse; width: 100%; font-size: 13.5px; line-height: 1.4; }
+.dz-table th { background: var(--lilas); color: var(--lilas-ink); text-align: left; padding: 6px 8px; font-weight: 800; }
+.dz-table td { padding: 6px 8px; border-top: 1px solid var(--line); vertical-align: top; min-width: 90px; }
+.dz-refs { font-size: 12.5px; color: var(--muted); }
+.dz-refs ul { margin: 4px 0 0; padding-left: 18px; }
+.dz-fala { margin: 0; font-size: 14.5px; line-height: 1.5; background: var(--manteiga); color: var(--manteiga-ink); border-radius: 12px; padding: 8px 10px; }
+.dz-rec-group { display: flex; flex-direction: column; gap: 6px; }
+.dz-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.dz-card { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 10px 12px; border: 2px solid var(--line); border-radius: 14px; background: var(--surface-2); color: var(--fg); font: inherit; font-size: 14px; line-height: 1.45; cursor: pointer; }
+.dz-card.is-open { border-color: var(--rosa-medio); background: var(--surface); }
+.dz-card small { color: var(--muted); font-size: 12px; }
+.dz-card-id { font-size: 11px; font-weight: 800; color: var(--muted); }
+.dz-card-ans { color: var(--fg); }
+.dz-skip { align-self: flex-end; border: 0; background: rgba(255, 255, 255, .16); color: #fff; font: inherit; font-weight: 700; font-size: 13px; padding: 6px 12px; border-radius: 999px; cursor: pointer; }
+.px-ilha { font-family: var(--font-hand); font-size: 22px; color: var(--butter); margin-top: -6px; }
