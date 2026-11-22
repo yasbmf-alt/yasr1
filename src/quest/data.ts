@@ -408,6 +408,17 @@ export interface MissionProg {
   wins?: number;
 }
 export const missionKey = (tema: string, day = today()) => `${day}:${tema}`;
+/** chave da missão para retomar: a de hoje; se hoje ainda não começou, a última não terminada
+ *  de dias anteriores (assim a missão que você parou ontem continua de onde parou) */
+export function missionKeyOf(st: YqState, tema: string, day = today()): string {
+  const k = missionKey(tema, day);
+  if (st.missions?.[k]) return k;
+  const old = Object.keys(st.missions ?? {})
+    .filter((x) => x.slice(11) === tema && x < k)
+    .sort().reverse()
+    .find((x) => { const step = st.missions![x].step; return step !== 'chamado' && step !== 'fim'; });
+  return old ?? k;
+}
 
 /** fala do Bigode ao apresentar cada missão */
 export const CHAMADO: Record<string, string[]> = {

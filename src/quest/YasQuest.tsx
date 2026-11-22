@@ -18,7 +18,7 @@ import type { Session } from '../types';
 import type { YlDoc } from '../yasland/types';
 import {
   ISLANDS, ZONAS, FINAL, REVANCHE, EXAM, SHOP, STATE_ID, SAMPLE, CHAMADO, DOJO_NAGS, CICATRIZ_LINE, WIN_LINES, INTRO, SNOOZE,
-  emptyState, islandOf, zonaOf, islandStat, routeOf, visitDone, frozen, buildFinal, buildRevanche, bossExtras, missionKey,
+  emptyState, islandOf, zonaOf, islandStat, routeOf, visitDone, frozen, buildFinal, buildRevanche, bossExtras, missionKey, missionKeyOf,
   xpFor, levelOf, levelXp, parseImport, parseOraculo, isOld, oraculoPrompt, bigode, wearEmoji, last,
   type YqQuestion, type YqState, type Zona, type Why, type Island, type ImportResult, type PdfRef, type Deboche, type MissionProg, type Res, type Duel,
 } from './data';
@@ -373,10 +373,13 @@ function Hub({ st, byTema, total, saveSt, onMission, onGo, onStory }: { st: YqSt
   // missão atual: a que você marcou; senão, a missão iniciada que está MAIS ADIANTADA
   // (um clique sem querer numa ilha nova não passa na frente da que você já vinha fazendo)
   const ORDEM: Record<string, number> = { chamado: 0, dojo: 1, arena: 2, cicatrizes: 3, chefao: 4, oraculo: 5, fim: 6 };
-  const passo = (t: string) => ORDEM[st.missions?.[missionKey(t, d)]?.step ?? 'chamado'] ?? 0;
+  const passo = (t: string) => ORDEM[st.missions?.[missionKeyOf(st, t, d)]?.step ?? 'chamado'] ?? 0;
   const iniciada = (t: string) => !isDone(t) && passo(t) > 0 && passo(t) < 6;
-  const marcada = st.foco?.dia === d && route.includes(st.foco.tema) && !isDone(st.foco.tema) ? st.foco.tema : undefined;
-  const emAndamento = [...route].filter(iniciada).sort((a, b) => passo(b) - passo(a) || route.indexOf(a) - route.indexOf(b))[0];
+  const marcada = st.foco?.tema && !isDone(st.foco.tema) && iniciada(st.foco.tema) || (st.foco?.dia === d && st.foco?.tema && !isDone(st.foco.tema)) ? st.foco!.tema : undefined;
+  // vale também missão de outro dia que ficou pela metade, mesmo fora da rota de hoje
+  const todas = [...ISLANDS.map((i) => i.tema), FINAL];
+  const ordemRota = (t: string) => (route.includes(t) ? route.indexOf(t) : 99);
+  const emAndamento = todas.filter(iniciada).sort((a, b) => passo(b) - passo(a) || ordemRota(a) - ordemRota(b))[0];
   const agora = marcada ?? emAndamento ?? current;
   const proxima = agora ? route.slice(route.indexOf(agora) + 1).find((t) => !isDone(t)) ?? route.find((t) => !isDone(t) && t !== agora) : undefined;
   const faltam = route.filter((t) => !isDone(t)).length;
@@ -387,7 +390,7 @@ function Hub({ st, byTema, total, saveSt, onMission, onGo, onStory }: { st: YqSt
   const stat = islandStat(isFinal ? [] : byTema.get(sel) ?? []);
   const inRoute = route.indexOf(sel);
   const done = visitDone(visits[sel], sel);
-  const prog = st.missions?.[missionKey(sel, d)];
+  const prog = st.missions?.[missionKeyOf(st, sel, d)];
   const say = fz ? 'Modo pré-prova: nada novo agora. Almoça, respira e vai. Você treinou pra isso.'
     : doneAll ? bigode(st.deboche, 'noite')
     : total === 0 ? 'O arquipélago tá vazio. Passa no ⚓ Porto e traz as questões, senão eu jogo sozinho.'
@@ -460,13 +463,15 @@ function Hub({ st, byTema, total, saveSt, onMission, onGo, onStory }: { st: YqSt
           <PxBtn kind="gold" disabled={fz} onClick={() => onMission(sel)}>▶ ENTRAR</PxBtn>
           <PxBtn kind="ghost" onClick={() => onStory(sel)}>📖 HISTÓRIA</PxBtn>
         </div>
-        {(inRoute >= 0 && sel !== agora && !done) || (iniciada(sel) && sel !== agora) ? (
+        {(sel !== agora && !done) || iniciada(sel) ? (
           <div className="wm-sheet-more">
-            {inRoute >= 0 && sel !== agora && !done && <button className="px-mini" onClick={() => { saveSt({ foco: { dia: d, tema: sel } }); sfx('escolhe'); }}>📍 estou nesta</button>}
-            {iniciada(sel) && sel !== agora && (
+            {sel !== agora && !done && <button className="px-mini" onClick={() => { saveSt({ foco: { dia: d, tema: sel } }); sfx('escolhe'); }}>📍 estou nesta</button>}
+            {iniciada(sel) && (
               <button className="px-mini is-ghost" onClick={() => {
                 if (!window.confirm(`Desfazer o início de ${labelOf(sel)}? A missão volta para o começo. As questões que você já respondeu continuam no seu histórico.`)) return;
-                saveSt((s0) => ({ missions: { ...(s0.missions ?? {}), [missionKey(sel, d)]: { step: 'chamado' } } }));
+                const k = missionKeyOf(st, sel, d);
+                saveSt((s0) => ({ missions: { ...(s0.missions ?? {}), [k]: { step: 'chamado' } }, ...(s0.foco?.tema === sel ? { foco: undefined } : {}) }));
+                sfx('contra');
               }}>↩ comecei sem querer</button>
             )}
           </div>
@@ -494,7 +499,7 @@ function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, ma
   dossie?: YqDossie; saveDossieCards: (tema: string, cs: DossieCard[], silent?: boolean) => number; hasCard: (tema: string, c: DossieCard) => boolean;
 }) {
   const ui = useUI();
-  const key = missionKey(tema);
+  const [key] = useState(() => missionKeyOf(st, tema)); // retoma a missão não terminada de outro dia
   const special = tema === FINAL || tema === REVANCHE;
   const island: Island | undefined = islandOf(tema);
   const serious = !!island?.serious;
