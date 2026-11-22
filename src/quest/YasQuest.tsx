@@ -370,8 +370,14 @@ function Hub({ st, byTema, total, saveSt, onMission, onGo, onStory }: { st: YqSt
   const route = r && !fz ? r.list : [];
   // onde você está: a missão em andamento (ou a primeira que falta); a próxima vem depois dela
   const isDone = (t: string) => visitDone(visits[t], t);
-  const emAndamento = route.find((t) => { const st0 = st.missions?.[missionKey(t, d)]?.step; return !isDone(t) && !!st0 && st0 !== 'chamado' && st0 !== 'fim'; });
-  const agora = emAndamento ?? current;
+  // missão atual: a que você marcou; senão, a missão iniciada que está MAIS ADIANTADA
+  // (um clique sem querer numa ilha nova não passa na frente da que você já vinha fazendo)
+  const ORDEM: Record<string, number> = { chamado: 0, dojo: 1, arena: 2, cicatrizes: 3, chefao: 4, oraculo: 5, fim: 6 };
+  const passo = (t: string) => ORDEM[st.missions?.[missionKey(t, d)]?.step ?? 'chamado'] ?? 0;
+  const iniciada = (t: string) => !isDone(t) && passo(t) > 0 && passo(t) < 6;
+  const marcada = st.foco?.dia === d && route.includes(st.foco.tema) && !isDone(st.foco.tema) ? st.foco.tema : undefined;
+  const emAndamento = [...route].filter(iniciada).sort((a, b) => passo(b) - passo(a) || route.indexOf(a) - route.indexOf(b))[0];
+  const agora = marcada ?? emAndamento ?? current;
   const proxima = agora ? route.slice(route.indexOf(agora) + 1).find((t) => !isDone(t)) ?? route.find((t) => !isDone(t) && t !== agora) : undefined;
   const faltam = route.filter((t) => !isDone(t)).length;
   const [sel, setSel] = useState<string>(() => agora ?? route[0] ?? ISLANDS[0].tema);
@@ -454,6 +460,17 @@ function Hub({ st, byTema, total, saveSt, onMission, onGo, onStory }: { st: YqSt
           <PxBtn kind="gold" disabled={fz} onClick={() => onMission(sel)}>▶ ENTRAR</PxBtn>
           <PxBtn kind="ghost" onClick={() => onStory(sel)}>📖 HISTÓRIA</PxBtn>
         </div>
+        {(inRoute >= 0 && sel !== agora && !done) || (iniciada(sel) && sel !== agora) ? (
+          <div className="wm-sheet-more">
+            {inRoute >= 0 && sel !== agora && !done && <button className="px-mini" onClick={() => { saveSt({ foco: { dia: d, tema: sel } }); sfx('escolhe'); }}>📍 estou nesta</button>}
+            {iniciada(sel) && sel !== agora && (
+              <button className="px-mini is-ghost" onClick={() => {
+                if (!window.confirm(`Desfazer o início de ${labelOf(sel)}? A missão volta para o começo. As questões que você já respondeu continuam no seu histórico.`)) return;
+                saveSt((s0) => ({ missions: { ...(s0.missions ?? {}), [missionKey(sel, d)]: { step: 'chamado' } } }));
+              }}>↩ comecei sem querer</button>
+            )}
+          </div>
+        ) : null}
       </motion.section>
 
       <div className="hb-extra">

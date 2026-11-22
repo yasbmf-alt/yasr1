@@ -32,17 +32,22 @@ export function WorldMap({ islands, sel, route, night, agora, proxima, onSelect 
     const el = box.current?.querySelector<HTMLElement>(`[data-tema="${CSS.escape(sel)}"]`);
     el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [sel]);
-  // trechos da rota: feitos (dourado), o próximo passo (animado, de onde você está até a próxima) e o resto (pontilhado)
-  const done = new Set(islands.filter((i) => i.done).map((i) => i.tema));
-  const line = (a: string, b2: string) => { const [x1, y1] = posOf(a); const [x2, y2] = posOf(b2); return `M${x1},${y1} L${x2},${y2}`; };
-  const segs = route.slice(0, -1).map((t, i) => ({ k: `${t}>${route[i + 1]}`, d: line(t, route[i + 1]), kind: done.has(t) && done.has(route[i + 1]) ? 'is-done' : 'is-later' }));
-  if (agora && proxima) segs.push({ k: 'next', d: line(agora, proxima), kind: 'is-next' });
-  const allPts = [...ISLANDS.map((i) => i.tema), FINAL].map(posOf).map(([x, y]) => `${x},${y}`).join(' ');
+  // uma linha só, para não confundir: de onde você está até a próxima ilha (com seta)
+  const next = agora && proxima ? (() => {
+    const [x1, y1] = posOf(agora); const [x2, y2] = posOf(proxima);
+    const dx = x2 - x1; const dy = y2 - y1; const len = Math.hypot(dx, dy) || 1;
+    const cut = 46; // não entra em cima das ilhas
+    return `M${x1 + (dx / len) * cut},${y1 + (dy / len) * cut} L${x2 - (dx / len) * cut},${y2 - (dy / len) * cut}`;
+  })() : null;
   return (
     <div className={`wm ${night ? 'is-night' : ''}`} ref={box} style={{ backgroundImage: `url(${art('oceano')})` }}>
       <svg className="wm-paths" viewBox={`0 0 ${MAP_W} ${MAP_H}`} aria-hidden="true">
-        <polyline points={allPts} className="wm-sea" />
-        {segs.map((g) => <path key={g.k} d={g.d} className={`wm-route ${g.kind}`} />)}
+        <defs>
+          <marker id="wm-arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#fff3b0" />
+          </marker>
+        </defs>
+        {next && <path d={next} className="wm-route is-next" markerEnd="url(#wm-arrow)" />}
       </svg>
       {SIGNS.map((s) => (
         <span key={s.b} className={`wm-sign is-${s.b}`} style={{ top: `${(s.y / MAP_H) * 100}%` }}>{BIOMA_NOME[s.b]}</span>

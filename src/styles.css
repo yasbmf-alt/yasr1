@@ -4766,3 +4766,6 @@ body:has(.yq-shell) .toasts, body:has(.yq-shell) .celebration, body:has(.yq-shel
   .vs-tema, .vs-head { break-inside: avoid; border-image: none; border: 1px solid #999; padding: 8px; margin-bottom: 8px; }
   .vs-postit { box-shadow: none; border: 1px solid #c9a; rotate: 0deg; }
 }
+.wm-sheet-more { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.px-mini.is-ghost { border-image: var(--pf-ghost) 4 fill / 6px; color: var(--ink); }
+.wm-route.is-next { stroke-width: 4; }
