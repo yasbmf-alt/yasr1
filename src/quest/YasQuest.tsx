@@ -25,6 +25,7 @@ import {
 import { dossieCardId, isDossiePack, parseDossies, recoveryCards, type DossieCard, type DossieImport, type YqDossie } from './dossie';
 import { Recuperacao, ResumoMestre } from './DossieViews';
 import { FALAS } from './falas';
+import { FolhaVespera, Relampago } from './Vespera';
 import { REVISAO_ID, isRevisaoPack, parseRevisao, type RevisaoImport, type YqRevisao } from './revisao';
 import { sprites } from './battle/sprites';
 import { sfx } from './battle/sfx';
@@ -35,7 +36,7 @@ import { Capitulos } from './story/Capitulos';
 import { CAPITULOS, cenaIlha, cenaPrologo, type Cena } from './story/story';
 import { BattleScreen, DEMO_CAST, DEMO_QUESTIONS, type BattleCast, type BattleQuestion, type TurnResult } from './battle';
 
-type Screen = { s: 'intro' } | { s: 'hub' } | { s: 'mission'; tema: string } | { s: 'porto' } | { s: 'loja' } | { s: 'caderno' } | { s: 'config' } | { s: 'demo'; n: number } | { s: 'historia' };
+type Screen = { s: 'intro' } | { s: 'hub' } | { s: 'mission'; tema: string } | { s: 'porto' } | { s: 'loja' } | { s: 'caderno' } | { s: 'config' } | { s: 'demo'; n: number } | { s: 'historia' } | { s: 'folha' } | { s: 'relampago' };
 type SaveSt = (p: Partial<YqState> | ((s: YqState) => Partial<YqState>)) => void;
 
 const WHY: { id: Why; emoji: string; nome: string }[] = [
@@ -284,6 +285,8 @@ export function YasQuest() {
         saveRevisao={(d) => saveYl(d as unknown as YlDoc)}
         backup={async () => { const { json } = await buildBackup(snapshot(), false); return saveDownload(`yas-r1-backup-antes-da-revisao-${today()}.json`, JSON.stringify(json, null, 2)); }} />}
       {screen.s === 'loja' && <Loja st={st} saveSt={saveSt} onBack={() => go({ s: 'hub' })} />}
+      {screen.s === 'folha' && <FolhaVespera questions={questions} dossies={dossies} revisao={revisao} onBack={() => go({ s: 'hub' })} />}
+      {screen.s === 'relampago' && <Relampago dossies={dossies} questions={questions} onBack={() => go({ s: 'hub' })} />}
       {screen.s === 'caderno' && <Caderno qs={questions} st={st} onBack={() => go({ s: 'hub' })} makeCard={makeCard} />}
       {screen.s === 'config' && <Config st={st} saveSt={saveSt} onBack={() => go({ s: 'hub' })} onIntro={() => go({ s: 'intro' })} onDemo={() => go({ s: 'demo', n: 1 })} />}
       {screen.s === 'demo' && (
@@ -426,6 +429,15 @@ function Hub({ st, byTema, total, saveSt, onMission, onGo, onStory }: { st: YqSt
           {agora && route.length > 1 && <button className="px-skip" onClick={() => saveSt((s) => ({ skipped: { ...s.skipped, [d]: [...(s.skipped[d] ?? []).filter((x) => x !== agora), agora] } }))}>pular esta ↓</button>}
         </div>
       )}
+      {diffDays(EXAM.date, d) <= 2 && (
+        <div className="vs-panel">
+          <b>🎯 RETA FINAL{diffDays(EXAM.date, d) === 1 ? ' · a prova é amanhã' : diffDays(EXAM.date, d) <= 0 ? ' · é hoje!' : ''}</b>
+          <div className="vs-panel-btns">
+            <PxBtn kind="gold" onClick={() => onGo({ s: 'folha' })}>📝 FOLHA DA VÉSPERA</PxBtn>
+            <PxBtn kind="alt" onClick={() => onGo({ s: 'relampago' })}>⚡ RELÂMPAGO DOS NÚMEROS</PxBtn>
+          </div>
+        </div>
+      )}
       {doneAll && <div className="px-nightok"><PixelEmoji e="🌙" size={40} /><b>NOITE LIBERADA!</b></div>}
 
       <WorldMap islands={islands} sel={sel} route={route} night={doneAll || fz} agora={agora} proxima={proxima} onSelect={choose} />
@@ -446,6 +458,8 @@ function Hub({ st, byTema, total, saveSt, onMission, onGo, onStory }: { st: YqSt
 
       <div className="hb-extra">
         {total === 0 && <PxBtn kind="gold" onClick={() => onGo({ s: 'porto' })}>⚓ IR PRO PORTO</PxBtn>}
+        <PxBtn kind="ghost" onClick={() => onGo({ s: 'folha' })}>📝 Folha dos meus erros</PxBtn>
+        <PxBtn kind="ghost" onClick={() => onGo({ s: 'relampago' })}>⚡ Relâmpago dos números</PxBtn>
         <PxBtn kind="ghost" onClick={() => onGo({ s: 'demo', n: 1 })}>🎮 Batalha de demonstração</PxBtn>
       </div>
     </div>
