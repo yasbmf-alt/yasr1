@@ -24,6 +24,7 @@ import {
 } from './data';
 import { dossieCardId, isDossiePack, parseDossies, recoveryCards, type DossieCard, type DossieImport, type YqDossie } from './dossie';
 import { Recuperacao, ResumoMestre } from './DossieViews';
+import { FALAS } from './falas';
 import { REVISAO_ID, isRevisaoPack, parseRevisao, type RevisaoImport, type YqRevisao } from './revisao';
 import { sprites } from './battle/sprites';
 import { sfx } from './battle/sfx';
@@ -52,11 +53,23 @@ const toBQ = (q: YqQuestion, rv?: YqRevisao): BattleQuestion => {
 const castOf = (tema: string, boss = false, d?: YqDossie): BattleCast => {
   const i = islandOf(tema);
   const f = d?.dialogos;
+  const o = i ? FALAS[i.slug] : undefined; // falas oficiais do elenco
+  const conversa = (k: 'entrada' | 'meio_da_luta' | 'fim_de_luta') => {
+    const x = o?.interacoes[k];
+    return x ? [{ quem: 'yas' as const, texto: x.yas }, { quem: 'vilao' as const, texto: x.vilao }, { quem: 'bigodes' as const, texto: x.bigodes }] : undefined;
+  };
   return {
     tema: labelOf(tema), slug: i?.slug ?? 'srag', bioma: biomaOf(tema), monstro: i?.boss ?? (tema === FINAL ? 'Chefão da Prova' : boss ? 'Rei dos Fantasmas' : 'Fantasmas dos Erros'), serio: !!i?.serious,
-    ...(f ? {
-      falas: { entrada: f.transicao, acerto: f.acerto, erro: f.erro, erroRepetido: f.erroRepetido, durante: [...f.durante, ...f.problema], vitoria: f.vitoria, derrota: f.derrota },
-      cartoesDe: Object.fromEntries(Object.entries(d!.mapa.questoes).map(([qid, m]) => [`yl:yq:q:${qid}`, m.cartoes])),
+    ...(f || o ? {
+      falas: {
+        entrada: o ? [o.bigodes.entrada] : f?.transicao,
+        acerto: f?.acerto, erro: f?.erro, erroRepetido: f?.erroRepetido, durante: f ? [...f.durante, ...f.problema] : undefined,
+        acertoGeral: o?.bigodes.acerto, erroGeral: o?.bigodes.erro,
+        vitoria: o ? [o.bigodes.vitoria] : f?.vitoria, derrota: o ? [o.bigodes.derrota] : f?.derrota,
+        surto: o ? (o.surto.length ? o.surto : o.deboche) : undefined, deboche: o ? (o.deboche.length ? o.deboche : o.surto) : undefined,
+        conversas: o ? { entrada: conversa('entrada'), meio: conversa('meio_da_luta'), fim: conversa('fim_de_luta') } : undefined,
+      },
+      cartoesDe: d ? Object.fromEntries(Object.entries(d.mapa.questoes).map(([qid, m]) => [`yl:yq:q:${qid}`, m.cartoes])) : undefined,
     } : {}),
   };
 };
@@ -81,7 +94,7 @@ function BigodeSprite({ size = 72, st }: { size?: number; st?: YqState }) {
   );
 }
 
-/** Yasmin, a protagonista */
+/** Yasmim, a protagonista */
 function YasArt({ size = 96 }: { size?: number }) {
   const src = sprites.yas();
   return <span className="px-art px-art-yas" style={{ width: size, height: size }} aria-hidden="true">{src ? <img src={src} alt="" draggable={false} /> : '👩‍⚕️'}</span>;
@@ -275,7 +288,7 @@ export function YasQuest() {
       {screen.s === 'config' && <Config st={st} saveSt={saveSt} onBack={() => go({ s: 'hub' })} onIntro={() => go({ s: 'intro' })} onDemo={() => go({ s: 'demo', n: 1 })} />}
       {screen.s === 'demo' && (
         // batalha de demonstração: questões de exemplo, nada é salvo
-        <BattleScreen key={screen.n} cast={DEMO_CAST} questions={DEMO_QUESTIONS} title="Batalha de demonstração" onExit={() => go({ s: 'hub' })} onFinish={() => go({ s: 'hub' })} finishLabel="Voltar ao mapa" onAgain={() => go({ s: 'demo', n: screen.n + 1 })} />
+        <BattleScreen key={screen.n} cast={{ ...DEMO_CAST, ...castOf('SRAG'), tema: DEMO_CAST.tema }} questions={DEMO_QUESTIONS} title="Batalha de demonstração" onExit={() => go({ s: 'hub' })} onFinish={() => go({ s: 'hub' })} finishLabel="Voltar ao mapa" onAgain={() => go({ s: 'demo', n: screen.n + 1 })} />
       )}
     </div>
     </div>
@@ -352,7 +365,13 @@ function Hub({ st, byTema, total, saveSt, onMission, onGo, onStory }: { st: YqSt
   }, [doneAll]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const route = r && !fz ? r.list : [];
-  const [sel, setSel] = useState<string>(() => current ?? route[0] ?? ISLANDS[0].tema);
+  // onde você está: a missão em andamento (ou a primeira que falta); a próxima vem depois dela
+  const isDone = (t: string) => visitDone(visits[t], t);
+  const emAndamento = route.find((t) => { const st0 = st.missions?.[missionKey(t, d)]?.step; return !isDone(t) && !!st0 && st0 !== 'chamado' && st0 !== 'fim'; });
+  const agora = emAndamento ?? current;
+  const proxima = agora ? route.slice(route.indexOf(agora) + 1).find((t) => !isDone(t)) ?? route.find((t) => !isDone(t) && t !== agora) : undefined;
+  const faltam = route.filter((t) => !isDone(t)).length;
+  const [sel, setSel] = useState<string>(() => agora ?? route[0] ?? ISLANDS[0].tema);
   const choose = (t: string) => { if (t !== sel) sfx('remo'); setSel(t); };
   const isFinal = sel === FINAL;
   const isl = islandOf(sel);
@@ -363,7 +382,7 @@ function Hub({ st, byTema, total, saveSt, onMission, onGo, onStory }: { st: YqSt
   const say = fz ? 'Modo pré-prova: nada novo agora. Almoça, respira e vai. Você treinou pra isso.'
     : doneAll ? bigode(st.deboche, 'noite')
     : total === 0 ? 'O arquipélago tá vazio. Passa no ⚓ Porto e traz as questões, senão eu jogo sozinho.'
-    : current ? `${line} Próxima missão: ${labelOf(current)}.` : line;
+    : agora ? `${line} Você está em ${labelOf(agora)}.${proxima ? ` Depois: ${labelOf(proxima)}.` : ' É a última de hoje!'}` : line;
   const islands: MapIsland[] = [
     ...ISLANDS.map((i) => ({
       tema: i.tema, label: i.short, bioma: i.regiao as BiomaId, slug: i.slug, capital: i.capital,
@@ -384,20 +403,37 @@ function Hub({ st, byTema, total, saveSt, onMission, onGo, onStory }: { st: YqSt
       </div>
       {route.length > 0 && (
         <div className="wm-routebar">
-          <b>🗺️ ROTA DE {r!.label.toUpperCase()}</b>
-          <span className="wm-routebar-n">{route.filter((t) => visitDone(visits[t], t)).length}/{route.length}</span>
-          {r!.family.length > 0 && <label className="px-fam"><input type="checkbox" checked={r!.fam} onChange={(e) => saveSt((s) => ({ family: { ...s.family, [d]: e.target.checked } }))} /> família</label>}
-          {current && route.length > 1 && <button className="px-skip" onClick={() => saveSt((s) => ({ skipped: { ...s.skipped, [d]: [...(s.skipped[d] ?? []).filter((x) => x !== current), current] } }))}>pular atual ↓</button>}
+          <div className="wm-routebar-head">
+            <b>🗺️ ROTA DE {r!.label.toUpperCase()}</b>
+            <span className="wm-routebar-n">{route.length - faltam}/{route.length}</span>
+            {r!.family.length > 0 && <label className="px-fam"><input type="checkbox" checked={r!.fam} onChange={(e) => saveSt((s) => ({ family: { ...s.family, [d]: e.target.checked } }))} /> família</label>}
+          </div>
+          <ol className="wm-steps" aria-label="Etapas de hoje">
+            {route.map((t, k) => {
+              const st0 = isDone(t) ? 'is-done' : t === agora ? 'is-agora' : t === proxima ? 'is-proxima' : '';
+              return (
+                <li key={t} className={st0}>
+                  <button onClick={() => choose(t)} aria-label={`${k + 1}. ${labelOf(t)}${isDone(t) ? ' (conquistada)' : t === agora ? ' (você está aqui)' : t === proxima ? ' (próxima)' : ''}`}>
+                    <span className="wm-step-ico">{isDone(t) ? '✓' : <BossArt tema={t} size={30} />}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+          <p className="wm-routebar-txt">
+            {faltam === 0 ? 'Rota de hoje completa! 🎉' : <>📍 Você está em <b>{labelOf(agora!)}</b>{proxima ? <> · depois: <b>{labelOf(proxima)}</b></> : null} · {faltam === 1 ? 'falta 1 ilha' : `faltam ${faltam} ilhas`}</>}
+          </p>
+          {agora && route.length > 1 && <button className="px-skip" onClick={() => saveSt((s) => ({ skipped: { ...s.skipped, [d]: [...(s.skipped[d] ?? []).filter((x) => x !== agora), agora] } }))}>pular esta ↓</button>}
         </div>
       )}
       {doneAll && <div className="px-nightok"><PixelEmoji e="🌙" size={40} /><b>NOITE LIBERADA!</b></div>}
 
-      <WorldMap islands={islands} sel={sel} route={route} night={doneAll || fz} onSelect={choose} />
+      <WorldMap islands={islands} sel={sel} route={route} night={doneAll || fz} agora={agora} proxima={proxima} onSelect={choose} />
 
       <motion.section key={sel} className="wm-sheet" initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ type: 'spring', stiffness: 260, damping: 24 }} aria-label="Ilha escolhida">
         <span className="wm-sheet-art">{isFinal ? <PixelEmoji e="🏥" size={72} /> : <BossArt tema={sel} size={84} fog={stat.fog} />}</span>
         <div className="wm-sheet-info">
-          <small>{isFinal ? 'Hospital da Prova' : BIOMA_NOME[biomaOf(sel)]}{inRoute >= 0 ? ` · missão ${inRoute + 1} de hoje` : ''}{done ? ' · ✓ feita' : ''}</small>
+          <small>{sel === agora ? '📍 você está aqui · ' : sel === proxima ? '➜ próxima · ' : ''}{isFinal ? 'Hospital da Prova' : BIOMA_NOME[biomaOf(sel)]}{inRoute >= 0 ? ` · missão ${inRoute + 1} de hoje` : route.length && !isFinal ? ' · fora da rota de hoje' : ''}{done ? ' · ✓ conquistada' : ''}</small>
           <b>{labelOf(sel)}</b>
           <span>{isFinal ? 'Todas as ilhas juntas, com as doses e as revanches.' : `${isl!.boss} · ${'★'.repeat(isl!.prio)}`}</span>
           {!isFinal && <span className="hb-pct"><span className="px-bar"><span style={{ width: `${Math.round(stat.pct * 100)}%` }} /></span><small>{stat.total === 0 ? 'sem questões ainda' : stat.fog ? `inexplorada · ${stat.total} questões` : `${Math.round(stat.pct * 100)}% dominada`}{prog && !done ? ` · ${STEP_ICON[prog.step]}` : ''}</small></span>}
@@ -472,7 +508,7 @@ function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, ma
     // a história do capítulo passa antes, em cena (uma vez; dá para rever)
     const lines = special
       ? [tema === FINAL ? 'Ilha Final. O Hospital da Prova. SRAG, suas revanches e as doses de todas as ilhas.' : 'Revanche geral: todos os fantasmas dos seus erros, juntos. Que lindo.', 'Sem Dojo agora: direto pra Arena. Bora?']
-      : [dossie?.dialogos.preparacao[0] ?? (CHAMADO[tema] ?? [`Missão: ${tema}.`])[0], `Primeiro o Dojo: ${dossie ? 'resumo-mestre e ' : ''}${DOJO_MIN} min de leitura (pode parar antes ou ir além). Depois a Arena.`];
+      : [dossie?.dialogos.preparacao[0] ?? (island ? FALAS[island.slug]?.bigodes.entrada : undefined) ?? (CHAMADO[tema] ?? [`Missão: ${tema}.`])[0], `Primeiro o Dojo: ${dossie ? 'resumo-mestre e ' : ''}${DOJO_MIN} min de leitura (pode parar antes ou ir além). Depois a Arena.`];
     const accept = () => (special ? toArena() : setProg({ step: 'dojo', dojoStart: new Date().toISOString() }));
     if (tema !== REVANCHE && !st.historia?.[tema]) return <StoryGate tema={tema} dossie={dossie} onStory={onStory} onHub={onHub} />;
     return (
@@ -485,7 +521,7 @@ function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, ma
           {island?.capital && <span className="px-gold">★ 3 QUESTÕES GARANTIDAS ★</span>}
           <div className="px-stage">
             <Bioma b={biomaOf(tema)} />
-            <motion.span className="px-stage-me" initial={{ x: -60, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ type: 'spring', stiffness: 140, damping: 16 }}><YasArt size={108} /><i className="px-plate">YASMIN</i></motion.span>
+            <motion.span className="px-stage-me" initial={{ x: -60, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ type: 'spring', stiffness: 140, damping: 16 }}><YasArt size={108} /><i className="px-plate">YASMIM</i></motion.span>
             <motion.span className="px-vs-x" initial={{ scale: 3, opacity: 0, rotate: -20 }} animate={{ scale: 1, opacity: 1, rotate: -8 }} transition={{ delay: 0.35, type: 'spring', stiffness: 260, damping: 12 }}>VS</motion.span>
             <motion.span className="px-stage-foe" initial={{ x: 60, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ type: 'spring', stiffness: 140, damping: 16 }}>
               <motion.span animate={{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 1.6 }}><BossArt tema={tema} size={118} /></motion.span>
@@ -504,7 +540,12 @@ function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, ma
 
   // 📖 Dojo
   if (prog.step === 'dojo') {
-    return <Dojo tema={tema} island={island!} st={st} dossie={dossie} saveSt={saveSt} start={prog.dojoStart ?? new Date().toISOString()} onBack={onHub} onDone={(min) => {
+    return <Dojo tema={tema} island={island!} st={st} dossie={dossie} saveSt={saveSt} start={prog.dojoStart ?? new Date().toISOString()}
+      pausedAt={prog.dojoPausedAt ?? null} pausedMs={prog.dojoPausedMs ?? 0}
+      onPause={(on) => updProg((c) => on
+        ? { dojoPausedAt: new Date().toISOString() }
+        : { dojoPausedAt: null, dojoPausedMs: (c.dojoPausedMs ?? 0) + (c.dojoPausedAt ? Date.now() - new Date(c.dojoPausedAt).getTime() : 0) })}
+      onBack={onHub} onDone={(min) => {
       logSession('leitura', min, tema);
       markVisit(tema, ['estudar']);
       setProg({ dojoMin: min });
@@ -648,25 +689,40 @@ function StoryGate({ tema, dossie, onStory, onHub }: { tema: string; dossie?: Yq
 
 // ── Dojo (leitura) ─────────────────────────────────────────────
 
-function Dojo({ tema, island, st, dossie, saveSt, start, onBack, onDone }: { tema: string; island: Island; st: YqState; dossie?: YqDossie; saveSt: SaveSt; start: string; onBack: () => void; onDone: (min: number) => void }) {
+function Dojo({ tema, island, st, dossie, saveSt, start, pausedAt, pausedMs, onPause, onBack, onDone }: {
+  tema: string; island: Island; st: YqState; dossie?: YqDossie; saveSt: SaveSt; start: string;
+  pausedAt: string | null; pausedMs: number; onPause: (on: boolean) => void; onBack: () => void; onDone: (min: number) => void;
+}) {
   const ui = useUI();
   const [now, setNow] = useState(Date.now());
   const [ending, setEnding] = useState<string | null>(null);
   useEffect(() => { const t = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(t); }, []);
-  const ms = Math.max(0, now - new Date(start).getTime());
+  const paused = !!pausedAt;
+  // tempo de leitura = agora (ou quando pausou) − início − tempo pausado
+  const ms = Math.max(0, (paused ? new Date(pausedAt!).getTime() : now) - new Date(start).getTime() - pausedMs);
   const min = ms / 60000;
   const over = min >= DOJO_MIN;
   const mm = Math.floor(ms / 60000);
   const ss = Math.floor((ms % 60000) / 1000);
   const nag = DOJO_NAGS[Math.floor(min / 8) % DOJO_NAGS.length];
   const cfg = st.islands[tema] ?? {};
-  const pdf = st.pdfs.find((p) => p.id === cfg.pdfId);
+  // PDF desta ilha; se não tiver um escolhido, usa o único que você anexou (e lembra dele)
+  const pdf = st.pdfs.find((p) => p.id === cfg.pdfId) ?? (st.pdfs.length === 1 ? st.pdfs[0] : undefined);
   const [cfgOpen, setCfgOpen] = useState(false);
-  const openPdf = async () => {
-    if (!pdf) { setCfgOpen(true); return; }
-    const base = pdf.assetId ? await resolveAssetUrl(pdf.assetId) : pdf.url;
-    if (!base) { ui.toast('Não consegui abrir o PDF. Confira o link.'); return; }
-    window.open(cfg.page ? `${base.split('#')[0]}#page=${cfg.page}` : base, '_blank', 'noopener');
+  const [choosing, setChoosing] = useState(false);
+  const remember = (p: PdfRef) => { if (cfg.pdfId !== p.id) saveSt((s) => ({ islands: { ...s.islands, [tema]: { ...(s.islands[tema] ?? {}), pdfId: p.id } } })); };
+  const open = async (p: PdfRef) => {
+    remember(p);
+    // abre a aba já no toque (o navegador do celular bloqueia abas abertas depois de esperar)
+    const w = window.open('', '_blank');
+    const url = p.assetId ? await resolveAssetUrl(p.assetId) : p.url;
+    if (!url) { w?.close(); ui.toast('Não consegui abrir esse PDF. Tente anexar de novo.'); return; }
+    if (w) w.location.href = url; else window.location.assign(url);
+  };
+  const openPdf = () => {
+    if (pdf) { void open(pdf); return; }
+    if (st.pdfs.length > 1) { setChoosing(true); return; }
+    setCfgOpen(true);
   };
   return (
     <Scene kind="dojo">
@@ -677,15 +733,23 @@ function Dojo({ tema, island, st, dossie, saveSt, start, onBack, onDone }: { tem
         <motion.span animate={{ rotate: over ? 0 : [0, 0, 180, 180] }} transition={{ repeat: Infinity, duration: 4, times: [0, 0.45, 0.5, 1] }}>
           <PixelEmoji e={over ? '⏰' : '⏳'} size={80} res={16} />
         </motion.span>
-        <span className={`px-clock ${over ? 'is-over' : ''}`}>{String(mm).padStart(2, '0')}:{String(ss).padStart(2, '0')}</span>
+        <span className={`px-clock ${over ? 'is-over' : ''} ${paused ? 'is-paused' : ''}`}>{String(mm).padStart(2, '0')}:{String(ss).padStart(2, '0')}</span>
+        {paused && <span className="px-paused">⏸ PAUSADO</span>}
         <span className="px-bar px-bar-big"><span style={{ width: `${Math.min(100, (min / DOJO_MIN) * 100)}%` }} /></span>
         <small className="px-dojo-meta">{over ? `Passou dos ${DOJO_MIN} min. Pode continuar lendo ou ir pra Arena.` : `meta: ${DOJO_MIN} min · pode parar antes ou ir além`}</small>
         <div className="px-row">
-          <PxBtn kind="alt" onClick={() => void openPdf()}>📖 ABRIR PDF</PxBtn>
+          <PxBtn kind="alt" onClick={openPdf}>📖 ABRIR PDF</PxBtn>
+          <PxBtn kind="ghost" onClick={() => onPause(!paused)}>{paused ? '▶ CONTINUAR' : '⏸ PAUSAR'}</PxBtn>
           <PxBtn kind="gold" onClick={() => setEnding(String(Math.max(1, Math.round(Math.min(min, 180)))))}>✅ JÁ LI, BORA!</PxBtn>
         </div>
+        {choosing && (
+          <div className="px-pdf-pick">
+            <b>Qual PDF abrir?</b>
+            {st.pdfs.map((p) => <button key={p.id} className="px-mini" onClick={() => { setChoosing(false); void open(p); }}>📄 {p.name}</button>)}
+          </div>
+        )}
         {cfgOpen && <div className="px-cfg-inline"><IslandPdfCfg island={island} st={st} saveSt={saveSt} /></div>}
-        {!cfgOpen && <button className="px-mini" onClick={() => setCfgOpen(true)}>📚 escolher PDF e página desta ilha</button>}
+        {!cfgOpen && <button className="px-mini" onClick={() => setCfgOpen(true)}>{pdf ? `📄 ${pdf.name} · trocar PDF` : '📚 anexar ou escolher o PDF'}</button>}
         {ending != null && (
           <div className="px-ending">
             <label>Tempo de leitura (entra nas suas horas): <input inputMode="numeric" value={ending} onChange={(e) => setEnding(e.target.value.replace(/\D/g, ''))} /> min</label>
@@ -962,7 +1026,6 @@ function IslandPdfCfg({ island, st, saveSt }: { island: Island; st: YqState; sav
           {st.pdfs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       </label>
-      <label><span>Página onde começa o tema</span><input inputMode="numeric" value={cfg.page ?? ''} onChange={(e) => set({ page: num(e.target.value) })} placeholder="ex.: 42" /></label>
       <PdfAdder saveSt={saveSt} onAdded={(id) => set({ pdfId: id })} />
     </div>
   );

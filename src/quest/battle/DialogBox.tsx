@@ -6,9 +6,11 @@ import { sfx } from './sfx';
 
 const reduced = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-export function DialogBox({ text, speaker, onAdvance, onTyped, fast, canAdvance = true, serio }: {
+export function DialogBox({ text, speaker, onAdvance, onTyped, fast, canAdvance = true, serio, name: nameIn, face }: {
   text: string;
-  speaker: 'bigode' | 'questao';
+  speaker: 'bigode' | 'questao' | 'yas' | 'vilao';
+  name?: string; // nome no balão (Yasmim ou o chefão)
+  face?: string; // retrato (para Yasmim e chefão)
   onAdvance?: () => void; // toque depois que o texto terminou
   onTyped?: () => void; // o texto acabou de aparecer
   fast?: boolean; // enunciados longos digitam mais rápido
@@ -22,8 +24,9 @@ export function DialogBox({ text, speaker, onAdvance, onTyped, fast, canAdvance 
   useEffect(() => {
     if (reduced()) { setN(text.length); return undefined; }
     setN(0);
-    const step = fast ? Math.max(3, Math.ceil(text.length / 90)) : 1;
-    const t = window.setInterval(() => setN((x) => { if (!fast && x % 3 === 0) sfx('letra'); if (x + step >= text.length) { window.clearInterval(t); return text.length; } return x + step; }), fast ? 16 : 24);
+    // letra por letra, como nos RPGs de bolso (a questão também; um toque mostra tudo)
+    const step = fast ? 1 : 1;
+    const t = window.setInterval(() => setN((x) => { if (x % (fast ? 3 : 3) === 0) sfx('letra'); if (x + step >= text.length) { window.clearInterval(t); return text.length; } return x + step; }), fast ? 15 : 24);
     return () => window.clearInterval(t);
   }, [text, fast]);
 
@@ -35,11 +38,11 @@ export function DialogBox({ text, speaker, onAdvance, onTyped, fast, canAdvance 
     if (!done) { setN(text.length); return; }
     if (canAdvance) onAdvance?.();
   };
-  const name = speaker === 'bigode' ? (serio ? 'Guia' : 'Dr. Bigodes') : 'Questão';
+  const name = nameIn ?? (speaker === 'bigode' ? (serio ? 'Guia' : 'Dr. Bigodes') : speaker === 'questao' ? 'Questão' : speaker === 'yas' ? 'Yasmim' : '');
 
   return (
     <div
-      className={`bt-dialog ${speaker === 'questao' ? 'is-question' : 'is-bigode'}`}
+      className={`bt-dialog ${speaker === 'questao' ? 'is-question' : `is-${speaker}`}`}
       role="button"
       tabIndex={0}
       onClick={tap}
@@ -48,6 +51,7 @@ export function DialogBox({ text, speaker, onAdvance, onTyped, fast, canAdvance 
       aria-label={done ? text : undefined}
     >
       {speaker === 'bigode' && <BattleSprite src={sprites.bigode()} alt="" w={88} h={88} className="bt-dialog-face" />}
+      {(speaker === 'yas' || speaker === 'vilao') && <BattleSprite src={face ?? (speaker === 'yas' ? sprites.yas() : undefined)} alt="" w={88} h={88} className="bt-dialog-face" />}
       <div className="bt-dialog-body">
         <span className="bt-dialog-name">{name}</span>
         <p className="bt-dialog-text">

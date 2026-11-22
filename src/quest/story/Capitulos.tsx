@@ -10,7 +10,7 @@ export function Capitulos({ cenas, vistos, onPlay, onBack }: { cenas: Cena[]; vi
     <div className="hs">
       <button className="px-back" onClick={onBack}>◀ MAPA</button>
       <h2 className="px-h hs-title">📖 MODO HISTÓRIA</h2>
-      <p className="hs-sub">A jornada da Yasmin pelo arquipélago. Cada ilha tem o seu capítulo: assista antes da missão ou reveja quando quiser.</p>
+      <p className="hs-sub">A jornada da Yasmim pelo arquipélago. Cada ilha tem o seu capítulo: assista antes da missão ou reveja quando quiser.</p>
       <ol className="hs-list">
         {cenas.map((c, k) => {
           const slug = c.boss ? islandOf(c.boss.tema)?.slug : undefined;

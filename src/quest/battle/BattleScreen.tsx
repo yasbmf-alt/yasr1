@@ -53,6 +53,21 @@ export function BattleScreen({ cast, questions, title, onAnswer, onExit, onFinis
   const [postitOff, setPostitOff] = useState(-1);
   // fala do vilão: aparece no golpe certeiro e some quando a próxima questão começa
   const [vilao, setVilao] = useState<string | null>(null);
+  const pickOf = (xs?: string[]) => (xs?.length ? xs[Math.floor(Math.random() * xs.length)] : null);
+  // conversas do elenco (Yasmim, chefão e Dr. Bigodes): entrada, meio e fim da luta
+  type Talk = { quem: 'yas' | 'vilao' | 'bigodes'; texto: string };
+  const [talk, setTalk] = useState<Talk[]>([]);
+  const said = useRef(new Set<string>());
+  const sayOnce = (k: 'entrada' | 'meio' | 'fim') => {
+    const c = cast.falas?.conversas?.[k];
+    if (!c?.length || said.current.has(k)) return;
+    said.current.add(k); setTalk(c);
+  };
+  useEffect(() => {
+    if (s.phase === 'narracao') sayOnce('entrada');
+    if (s.phase === 'proximo' && s.hpMax >= 3 && s.hp <= Math.ceil(s.hpMax / 2)) sayOnce('meio');
+    if (s.phase === 'fim' && s.hp <= 0) sayOnce('fim');
+  }, [s.phase]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (s.phase === 'pergunta' || s.phase === 'proximo' || s.phase === 'fim') setVilao(null); }, [s.phase]);
   useEffect(() => { sfx('entrada'); const t = window.setTimeout(() => setWipe(false), 900); return () => window.clearTimeout(t); }, []);
   useEffect(() => { if (s.phase !== 'animacao') setShownHp(s.hp); }, [s.phase, s.hp]);
@@ -64,13 +79,13 @@ export function BattleScreen({ cast, questions, title, onAnswer, onExit, onFinis
     if (s.results.length > told.current) { told.current = s.results.length; onAnswer?.(s.results[s.results.length - 1]); }
   }, [s.results]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // fase de animação: golpe da Yasmin (monstro fica vermelho, HP cai) ou contra-ataque
+  // fase de animação: golpe da Yasmim (monstro fica vermelho, HP cai) ou contra-ataque
   useEffect(() => {
     if (s.phase !== 'animacao') return undefined;
     let alive = true;
     const run = async () => {
       if (reduced()) {
-        if (s.ok) { setShownHp(s.hp); setHpHit((h) => h + 1); sfx('golpe'); if (s.current?.falaVilao) setVilao(s.current.falaVilao); }
+        if (s.ok) { setShownHp(s.hp); setHpHit((h) => h + 1); sfx('golpe'); setVilao(s.current?.falaVilao ?? pickOf(cast.falas?.surto)); }
         await wait(300);
       } else if (s.ok) {
         const efetivo = s.current?.zona === 'pegadinha';
@@ -82,7 +97,7 @@ export function BattleScreen({ cast, questions, title, onAnswer, onExit, onFinis
         void stage.start({ x: [0, -5, 5, -3, 0], y: [0, 3, -2, 0], transition: { duration: 0.3 } });
         await foe.start({ x: [0, 16, -6, 6, 0], filter: [RED, 'none', RED, 'none', RED, 'none'], transition: { duration: 0.6 } });
         setShownHp(s.hp); setHpHit((h) => h + 1); sfx('drena');
-        if (s.current?.falaVilao) setVilao(s.current.falaVilao);
+        setVilao(s.current?.falaVilao ?? pickOf(cast.falas?.surto));
         await wait(420);
         if (s.hp <= 0) {
           sfx('desmaio');
@@ -98,6 +113,7 @@ export function BattleScreen({ cast, questions, title, onAnswer, onExit, onFinis
         void foe.start({ x: [0, -90, 0], y: [-8, 60, 0], scale: [1.06, 1.15, 1], transition: { duration: 0.42, times: [0, 0.4, 1] } });
         await wait(160);
         boom('contra', 'CONTRA-ATAQUE!');
+        setVilao(pickOf(cast.falas?.deboche));
         void stage.start({ x: [0, -9, 9, -6, 4, 0], transition: { duration: 0.42 } });
         await me.start({ x: [0, -12, 10, -6, 0], filter: [RED, 'none', RED, 'none'], transition: { duration: 0.5 } });
         await wait(350);
@@ -185,7 +201,7 @@ export function BattleScreen({ cast, questions, title, onAnswer, onExit, onFinis
             <BattleSprite src={sprites.plataforma()} alt="" w={168} h={31} className="bt-plat" />
             <motion.div className="bt-me" initial={{ x: -120, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ type: 'spring', stiffness: 120, damping: 16, delay: 0.1 }}>
               <motion.div animate={me}>
-                <BattleSprite src={sprites.yas()} alt="Yasmin" w={112} h={112} className="bt-me-img" />
+                <BattleSprite src={sprites.yas()} alt="Yasmim" w={112} h={112} className="bt-me-img" />
               </motion.div>
               <AnimatePresence>
                 {fx && fx.kind === 'contra' && (
@@ -201,7 +217,17 @@ export function BattleScreen({ cast, questions, title, onAnswer, onExit, onFinis
 
         {/* parte de baixo: uma coisa por vez */}
         <section className="bt-bottom">
-          {s.phase === 'fim' && sum ? (
+          {talk.length > 0 ? (
+            <DialogBox
+              key={`t${talk.length}-${talk[0].texto.slice(0, 12)}`}
+              text={talk[0].texto}
+              speaker={talk[0].quem === 'bigodes' ? 'bigode' : talk[0].quem}
+              name={talk[0].quem === 'vilao' ? cast.monstro : undefined}
+              face={talk[0].quem === 'vilao' ? sprites.monstro(cast.slug) : undefined}
+              serio={cast.serio}
+              onAdvance={() => setTalk((t) => t.slice(1))}
+            />
+          ) : s.phase === 'fim' && sum ? (
             <>
               <DialogBox text={s.narration} speaker="bigode" serio={cast.serio} />
               <BattleEnd {...sum} won={sum.won} onDone={() => onFinish(sum)} doneLabel={finishLabel} onAgain={onAgain} />

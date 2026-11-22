@@ -4668,3 +4668,56 @@ body:has(.yq-shell) .toasts, body:has(.yq-shell) .celebration, body:has(.yq-shel
 .bt-vilao p { margin: 2px 0 0; font-size: 14px; line-height: 1.4; font-weight: 600; }
 .bt-vilao::after { content: ''; position: absolute; bottom: -20px; left: 46%; width: 4px; height: 4px; background: #0f0a26; box-shadow: 4px 0 #251a55, 8px 0 #0f0a26, 4px 4px #0f0a26, 8px 4px #0f0a26, 4px 8px #0f0a26; }
 @media (prefers-reduced-motion: reduce) { .bt-book span { animation: none !important; } }
+
+/* ══════════ YAS QUEST · caixa da questão estilo RPG (madeira + papel + letras em pixel) ══════════ */
+:root { --pf-wood: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' shape-rendering='crispEdges'%3E%3Crect x='1' y='0' width='10' height='1' fill='%232b1a10'/%3E%3Crect x='0' y='1' width='12' height='10' fill='%232b1a10'/%3E%3Crect x='1' y='11' width='10' height='1' fill='%232b1a10'/%3E%3Crect x='2' y='1' width='8' height='1' fill='%23b07a46'/%3E%3Crect x='1' y='2' width='10' height='8' fill='%23b07a46'/%3E%3Crect x='2' y='10' width='8' height='1' fill='%23b07a46'/%3E%3Crect x='3' y='2' width='6' height='1' fill='%237a4a26'/%3E%3Crect x='2' y='3' width='8' height='6' fill='%237a4a26'/%3E%3Crect x='3' y='9' width='6' height='1' fill='%237a4a26'/%3E%3Crect x='4' y='3' width='4' height='1' fill='%23fdf3d8'/%3E%3Crect x='3' y='4' width='6' height='4' fill='%23fdf3d8'/%3E%3Crect x='4' y='8' width='4' height='1' fill='%23fdf3d8'/%3E%3C/svg%3E"); --pf-paper: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' shape-rendering='crispEdges'%3E%3Crect x='1' y='0' width='10' height='1' fill='%232b1a10'/%3E%3Crect x='0' y='1' width='12' height='10' fill='%232b1a10'/%3E%3Crect x='1' y='11' width='10' height='1' fill='%232b1a10'/%3E%3Crect x='2' y='1' width='8' height='1' fill='%23e8d3a3'/%3E%3Crect x='1' y='2' width='10' height='8' fill='%23e8d3a3'/%3E%3Crect x='2' y='10' width='8' height='1' fill='%23e8d3a3'/%3E%3Crect x='3' y='2' width='6' height='1' fill='%23fdf3d8'/%3E%3Crect x='2' y='3' width='8' height='6' fill='%23fdf3d8'/%3E%3Crect x='3' y='9' width='6' height='1' fill='%23fdf3d8'/%3E%3Crect x='4' y='3' width='4' height='1' fill='%23fdf3d8'/%3E%3Crect x='3' y='4' width='6' height='4' fill='%23fdf3d8'/%3E%3Crect x='4' y='8' width='4' height='1' fill='%23fdf3d8'/%3E%3C/svg%3E"); }
+.bt-dialog.is-question { border: 14px solid transparent; border-image: var(--pf-wood) 4 fill / 14px; color: #3a2208; padding: 4px 6px 8px; background: none; }
+.bt-dialog.is-question .bt-dialog-name { color: #7a4a26; font-size: 13px; }
+.bt-dialog.is-question .bt-dialog-text { font-family: 'Jersey 10', var(--font-pixel); font-weight: 400; font-size: 23px; line-height: 1.32; letter-spacing: .03em; color: #3a2208; -webkit-font-smoothing: none; }
+.bt-dialog.is-question .bt-dialog-text > span:first-child::after { content: '▌'; color: #b07a46; animation: hbBlink .6s steps(2) infinite; margin-left: 1px; }
+.bt-dialog.is-question[aria-label] .bt-dialog-text > span:first-child::after { content: none; }
+.bt-move { border-image: var(--pf-paper) 4 fill / 10px; font-family: 'Jersey 10', var(--font-pixel); font-weight: 400; font-size: 21px; line-height: 1.2; letter-spacing: .03em; color: #3a2208; }
+.bt-move-key { background: #7a4a26; color: #fdf3d8; font-family: var(--font-pixel); }
+.bt-move:hover:not(:disabled), .bt-move:focus-visible { border-image: var(--pf-gold) 4 fill / 10px; }
+.bt-move:hover:not(:disabled) .bt-move-key::before, .bt-move:focus-visible .bt-move-key::before { content: '▶'; position: absolute; left: -16px; color: #f6c46b; animation: hbBlink .8s steps(2) infinite; }
+.bt-move-key { position: relative; }
+.bt-aside { font-family: var(--font-pixel); font-weight: 400; }
+.bt-dialog.is-yas .bt-dialog-name { color: #f8c9f1; }
+.bt-dialog.is-vilao { border-image: var(--pf-night) 4 fill / 12px; }
+.bt-dialog.is-vilao .bt-dialog-name { color: #ff9aa2; }
+.bt-dialog.is-yas .bt-dialog-face, .bt-dialog.is-vilao .bt-dialog-face { object-position: 50% 12%; }
+/* mapa: onde estou, próxima e o que falta */
+.wm-routebar { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+.wm-routebar-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.wm-routebar-txt { margin: 0; font-size: 13.5px; color: #e9dcff; line-height: 1.4; }
+.wm-routebar-txt b { color: #fff3b0; }
+.wm-routebar .px-skip { align-self: flex-end; margin: 0; }
+.wm-steps { list-style: none; margin: 0; padding: 2px 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.wm-steps li { position: relative; flex: none; }
+.wm-steps li + li::before { content: ''; position: absolute; left: -6px; top: 50%; width: 6px; height: 3px; background: #4b3b8a; }
+.wm-steps li.is-done + li::before { background: #f6c46b; }
+.wm-steps button { width: 42px; height: 42px; padding: 0; cursor: pointer; display: grid; place-items: center; border: 5px solid transparent; border-image: var(--pf-night) 4 fill / 5px; background: none; color: #123a20; font-family: var(--font-pixel); font-size: 18px; }
+.wm-steps li.is-done button { border-image: var(--pf-green) 4 fill / 5px; }
+.wm-steps li.is-agora button { border-image: var(--pf-gold) 4 fill / 5px; animation: hbHop 1s steps(2) infinite; }
+.wm-steps li.is-proxima button { border-image: var(--pf-pink) 4 fill / 5px; }
+.wm-route.is-done { stroke: #f6c46b; stroke-dasharray: none; stroke-width: 5; animation: none; opacity: .9; }
+.wm-route.is-next { stroke: #fff3b0; stroke-width: 5; stroke-dasharray: 6 6; animation: wmDash .8s linear infinite; filter: drop-shadow(0 0 4px rgba(255, 243, 176, .9)); }
+.wm-route.is-later { stroke: rgba(255, 255, 255, .55); stroke-width: 3; stroke-dasharray: 2 8; animation: none; filter: none; }
+.wm-isle.is-off { opacity: .5; filter: saturate(.5); }
+.wm-isle.is-off.is-sel { opacity: 1; filter: none; }
+.wm-isle.is-done .wm-land { filter: saturate(.55) brightness(.92); }
+.wm-done-flag { position: absolute; top: 2%; right: 18%; font-size: 26px; filter: drop-shadow(0 2px 0 #0f0a26); }
+.wm-tag { position: absolute; left: 50%; top: calc(100% + 2px); translate: -50% 0; z-index: 3; white-space: nowrap; font-family: var(--font-pixel); font-weight: 500; font-size: 12px; padding: 0 3px; border: 6px solid transparent; }
+.wm-tag.is-done { top: auto; bottom: 30%; border-image: var(--pf-green) 4 fill / 6px; color: #123a20; font-size: 10.5px; }
+.wm-tag.is-agora { border-image: var(--pf-gold) 4 fill / 6px; color: #3a2208; animation: hbHop 1.1s steps(2) infinite; }
+.wm-tag.is-proxima { border-image: var(--pf-pink) 4 fill / 6px; color: #fff; animation: wmBounce 1s ease-in-out infinite; }
+@keyframes wmBounce { 50% { transform: translateY(6px); } }
+.wm-isle.is-agora .wm-land { filter: drop-shadow(0 0 0 #fff) drop-shadow(0 0 10px rgba(255, 224, 138, 1)); }
+.wm-isle.is-agora::before { content: ''; position: absolute; left: 50%; top: 58%; width: 96%; height: 46%; translate: -50% -50%; border-radius: 50%; border: 4px dashed #ffe08a; animation: wmPulse 1.4s ease-out infinite; pointer-events: none; }
+@keyframes wmPulse { 0% { opacity: .9; scale: .85; } 100% { opacity: 0; scale: 1.2; } }
+.wm-isle.is-proxima .wm-boss { animation: wmBounce 1s ease-in-out infinite; }
+/* Dojo: pause e escolha de PDF */
+.px-clock.is-paused { opacity: .55; }
+.px-paused { font-family: var(--font-pixel); color: #ffe08a; letter-spacing: .1em; animation: hbBlink 1s steps(2) infinite; }
+.px-pdf-pick { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: center; color: #fff; }
+@media (prefers-reduced-motion: reduce) { .wm-tag, .wm-isle.is-agora::before, .wm-steps li.is-agora button, .px-paused { animation: none !important; } }

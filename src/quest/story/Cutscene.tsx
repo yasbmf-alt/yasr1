@@ -10,7 +10,7 @@ import { sprites } from '../battle/sprites';
 import { islandOf } from '../data';
 import type { Cena, Quem } from './story';
 
-const NOME: Record<Quem, string> = { narrador: '', bigodes: 'Dr. Bigodes', yas: 'Yasmin', boss: '' };
+const NOME: Record<Quem, string> = { narrador: '', bigodes: 'Dr. Bigodes', yas: 'Yasmim', boss: '' };
 const reduced = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 export function Cutscene({ cena, onEnd }: { cena: Cena; onEnd: () => void }) {

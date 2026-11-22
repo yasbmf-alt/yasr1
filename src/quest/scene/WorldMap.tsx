@@ -1,5 +1,5 @@
 // Mapa-múndi do Yas Quest: oceano em pixel com as ilhas dos temas por região,
-// a rota do dia em dourado e a Yasmin navegando de ilha em ilha no barquinho.
+// a rota do dia em dourado e a Yasmim navegando de ilha em ilha no barquinho.
 import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { ISLANDS, FINAL } from '../data';
@@ -23,21 +23,26 @@ export const posOf = (tema: string) => POS[tema === FINAL ? FINAL : ISLANDS.find
 
 export interface MapIsland { tema: string; label: string; bioma: BiomaId; slug?: string; done: boolean; routeN?: number; cur: boolean; fog: boolean; capital?: boolean }
 
-export function WorldMap({ islands, sel, route, night, onSelect }: { islands: MapIsland[]; sel: string; route: string[]; night?: boolean; onSelect: (tema: string) => void }) {
+export function WorldMap({ islands, sel, route, night, agora, proxima, onSelect }: { islands: MapIsland[]; sel: string; route: string[]; night?: boolean; agora?: string; proxima?: string; onSelect: (tema: string) => void }) {
   const box = useRef<HTMLDivElement>(null);
-  const [sx, sy] = posOf(sel);
+  // o barquinho fica onde você ESTÁ (a missão atual), não onde você tocou
+  const [sx, sy] = posOf(agora ?? sel);
   useEffect(() => {
     // leva a câmera até a ilha escolhida
     const el = box.current?.querySelector<HTMLElement>(`[data-tema="${CSS.escape(sel)}"]`);
     el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [sel]);
-  const routePts = route.map(posOf).map(([x, y]) => `${x},${y}`).join(' ');
+  // trechos da rota: feitos (dourado), o próximo passo (animado, de onde você está até a próxima) e o resto (pontilhado)
+  const done = new Set(islands.filter((i) => i.done).map((i) => i.tema));
+  const line = (a: string, b2: string) => { const [x1, y1] = posOf(a); const [x2, y2] = posOf(b2); return `M${x1},${y1} L${x2},${y2}`; };
+  const segs = route.slice(0, -1).map((t, i) => ({ k: `${t}>${route[i + 1]}`, d: line(t, route[i + 1]), kind: done.has(t) && done.has(route[i + 1]) ? 'is-done' : 'is-later' }));
+  if (agora && proxima) segs.push({ k: 'next', d: line(agora, proxima), kind: 'is-next' });
   const allPts = [...ISLANDS.map((i) => i.tema), FINAL].map(posOf).map(([x, y]) => `${x},${y}`).join(' ');
   return (
     <div className={`wm ${night ? 'is-night' : ''}`} ref={box} style={{ backgroundImage: `url(${art('oceano')})` }}>
       <svg className="wm-paths" viewBox={`0 0 ${MAP_W} ${MAP_H}`} aria-hidden="true">
         <polyline points={allPts} className="wm-sea" />
-        {route.length > 1 && <polyline points={routePts} className="wm-route" />}
+        {segs.map((g) => <path key={g.k} d={g.d} className={`wm-route ${g.kind}`} />)}
       </svg>
       {SIGNS.map((s) => (
         <span key={s.b} className={`wm-sign is-${s.b}`} style={{ top: `${(s.y / MAP_H) * 100}%` }}>{BIOMA_NOME[s.b]}</span>
@@ -48,7 +53,7 @@ export function WorldMap({ islands, sel, route, night, onSelect }: { islands: Ma
         return (
           <button
             key={i.tema} data-tema={i.tema}
-            className={`wm-isle ${isFinal ? 'is-final' : ''} ${i.tema === sel ? 'is-sel' : ''} ${i.done ? 'is-done' : ''} ${i.cur ? 'is-cur' : ''} ${i.fog ? 'is-fog' : ''}`}
+            className={`wm-isle ${isFinal ? 'is-final' : ''} ${i.tema === sel ? 'is-sel' : ''} ${i.done ? 'is-done' : ''} ${i.tema === agora ? 'is-agora' : ''} ${i.tema === proxima ? 'is-proxima' : ''} ${route.length && !i.routeN && !isFinal ? 'is-off' : ''} ${i.fog ? 'is-fog' : ''}`}
             style={{ left: `${(x / MAP_W) * 100}%`, top: `${(y / MAP_H) * 100}%` }}
             onClick={() => onSelect(i.tema)}
             aria-label={`${i.label}${i.routeN ? `, missão ${i.routeN} de hoje` : ''}${i.done ? ', concluída hoje' : ''}`}
@@ -58,6 +63,10 @@ export function WorldMap({ islands, sel, route, night, onSelect }: { islands: Ma
             {isFinal && <span className="wm-boss is-final">🏥</span>}
             <span className="wm-flag">{i.label}</span>
             {i.routeN && <span className={`wm-n ${i.done ? 'is-done' : ''}`}>{i.done ? '✓' : i.routeN}</span>}
+            {i.done && <span className="wm-tag is-done">CONQUISTADA</span>}
+            {i.tema === agora && !i.done && <span className="wm-tag is-agora">VOCÊ ESTÁ AQUI</span>}
+            {i.tema === proxima && <span className="wm-tag is-proxima">PRÓXIMA ▼</span>}
+            {i.done && <span className="wm-done-flag" aria-hidden="true">🚩</span>}
             {i.capital && <span className="wm-crown" aria-hidden="true">★</span>}
           </button>
         );

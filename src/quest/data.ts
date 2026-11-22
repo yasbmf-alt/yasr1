@@ -79,37 +79,37 @@ export const REGIOES: { id: Regiao; nome: string; emoji: string; mar: string }[]
 
 export interface Island {
   tema: string; short: string; slug: string; regiao: Regiao; prio: number; banco: number;
-  boss: string; bossEmoji: string; capital?: boolean; serious?: boolean; gentle?: boolean;
+  boss: string; bossAntigo?: string; bossEmoji: string; capital?: boolean; serious?: boolean; gentle?: boolean;
   taunts: string[];
 }
 export const ISLANDS: Island[] = [
-  { tema: 'SRAG', short: 'SRAG', slug: 'srag', regiao: 'resp', prio: 3, banco: 8, boss: 'Dragão Hipoxêmico', bossEmoji: '🐉', capital: true,
+  { tema: 'SRAG', short: 'SRAG', slug: 'srag', regiao: 'resp', prio: 3, banco: 8, boss: 'Dragão Hipoxêmico', bossAntigo: 'Dragão Hipoxêmico', bossEmoji: '🐉', capital: true,
     taunts: ['Sua PEEP é tão baixa quanto suas chances!', 'Volume corrente pelo peso real? Hehehe.', 'PaO₂/FiO₂ de 90 é leve, né? Confia.'] },
-  { tema: 'Insuficiência respiratória', short: 'Insuf. respiratória', slug: 'ir', regiao: 'resp', prio: 3, banco: 9, boss: 'Fantasma Sem Fôlego', bossEmoji: '👻',
+  { tema: 'Insuficiência respiratória', short: 'Insuf. respiratória', slug: 'ir', regiao: 'resp', prio: 3, banco: 9, boss: 'Saturaldo', bossAntigo: 'Fantasma Sem Fôlego', bossEmoji: '👻',
     taunts: ['Tipo I ou tipo II? Buuu… nem eu sei.', 'Shunt ou V/Q? Escolhe rápido, tô sem ar!'] },
-  { tema: 'Distúrbios do equilíbrio acidobásico', short: 'Acidobásico', slug: 'acido', regiao: 'resp', prio: 3, banco: 10, boss: 'Alquimista do pH', bossEmoji: '⚗️',
+  { tema: 'Distúrbios do equilíbrio acidobásico', short: 'Acidobásico', slug: 'acido', regiao: 'resp', prio: 3, banco: 10, boss: 'pHantasminha', bossAntigo: 'Alquimista do pH', bossEmoji: '⚗️',
     taunts: ['pH normal? Então tá tudo normal… ou não?', 'Calculou o ânion gap? Eu escondi o cloro.'] },
-  { tema: 'Ventilação mecânica e traqueostomia', short: 'Ventilação mecânica', slug: 'vm', regiao: 'resp', prio: 2, banco: 7, boss: 'Maestro do Ventilador', bossEmoji: '🎛️',
+  { tema: 'Ventilação mecânica e traqueostomia', short: 'Ventilação mecânica', slug: 'vm', regiao: 'resp', prio: 2, banco: 7, boss: 'PEEP Vader', bossAntigo: 'Maestro do Ventilador', bossEmoji: '🎛️',
     taunts: ['Desmame hoje? Só se passar no meu teste.', 'Platô acima de 30 e tá tudo bem, relaxa.'] },
-  { tema: 'Vias aéreas básica e avançada', short: 'Vias aéreas', slug: 'va', regiao: 'resp', prio: 2, banco: 8, boss: 'Serpente da Glote', bossEmoji: '🐍',
+  { tema: 'Vias aéreas básica e avançada', short: 'Vias aéreas', slug: 'va', regiao: 'resp', prio: 2, banco: 8, boss: 'Glotilda', bossAntigo: 'Serpente da Glote', bossEmoji: '🐍',
     taunts: ['Não intubo, não oxigeno… e agora?', 'Sssequência rápida? Qual droga primeiro?'] },
-  { tema: 'Intoxicações exógenas agudas', short: 'Intoxicações', slug: 'tox', regiao: 'emerg', prio: 3, banco: 11, boss: 'Bruxa do Caldeirão', bossEmoji: '🧙‍♀️',
+  { tema: 'Intoxicações exógenas agudas', short: 'Intoxicações', slug: 'tox', regiao: 'emerg', prio: 3, banco: 11, boss: 'Toxana', bossAntigo: 'Bruxa do Caldeirão', bossEmoji: '🧙‍♀️',
     taunts: ['Pele seca ou suada? Hihihi, adivinha!', 'Qual antídoto? Tem um no meu caldeirão… talvez.'] },
-  { tema: 'Lesão renal aguda', short: 'LRA', slug: 'lra', regiao: 'emerg', prio: 3, banco: 10, boss: 'Golem de Creatinina', bossEmoji: '🗿',
+  { tema: 'Lesão renal aguda', short: 'LRA', slug: 'lra', regiao: 'emerg', prio: 3, banco: 10, boss: 'Golem da Creatinina', bossAntigo: 'Golem de Creatinina', bossEmoji: '🗿',
     taunts: ['Pré, renal ou pós? Eu sou feito de creatinina!', 'FeNa? Nunca ouvi falar. Nem você, aposto.'] },
-  { tema: 'PCR: BLS, ACLS e PALS', short: 'PCR', slug: 'pcr', regiao: 'emerg', prio: 2, banco: 7, boss: 'Robô Sem Pulso', bossEmoji: '🤖',
+  { tema: 'PCR: BLS, ACLS e PALS', short: 'PCR', slug: 'pcr', regiao: 'emerg', prio: 2, banco: 7, boss: 'Robô Sem Pulso', bossAntigo: 'Robô Sem Pulso', bossEmoji: '🤖',
     taunts: ['Me dá choque em AESP, vai… confia.', 'Amiodarona 300 de novo? Bip bop.'] },
-  { tema: 'Drogas vasoativas', short: 'Drogas vasoativas', slug: 'dva', regiao: 'emerg', prio: 2, banco: 7, boss: 'Vampiro da Noradrenalina', bossEmoji: '🧛',
+  { tema: 'Drogas vasoativas', short: 'Drogas vasoativas', slug: 'dva', regiao: 'emerg', prio: 2, banco: 7, boss: 'Noradrenalinda', bossAntigo: 'Vampiro da Noradrenalina', bossEmoji: '🧛',
     taunts: ['Quero sua pressão arterial… em mcg/kg/min.', 'Vasopressina antes da nora? Que ousadia.'] },
-  { tema: 'Psicofarmacologia: antidepressivos', short: 'Antidepressivos', slug: 'ad', regiao: 'mente', prio: 3, banco: 11, boss: 'Polvo Serotonina', bossEmoji: '🐙',
+  { tema: 'Psicofarmacologia: antidepressivos', short: 'Antidepressivos', slug: 'ad', regiao: 'mente', prio: 3, banco: 11, boss: 'Polvo Serotoninérgico', bossAntigo: 'Polvo Serotonina', bossEmoji: '🐙',
     taunts: ['Tricíclico ou ISRS? Tenho 8 braços e 8 efeitos colaterais.', 'Trocou o remédio na primeira semana? Hehe.'] },
-  { tema: 'Emergências em psiquiatria', short: 'Emergências psiq.', slug: 'ep', regiao: 'mente', prio: 3, banco: 10, boss: 'Tempestade da Crise', bossEmoji: '⛈️', serious: true,
+  { tema: 'Emergências em psiquiatria', short: 'Emergências psiq.', slug: 'ep', regiao: 'mente', prio: 3, banco: 10, boss: 'Tempestoso', bossAntigo: 'Tempestade da Crise', bossEmoji: '⛈️', serious: true,
     taunts: ['Avalie o risco com calma.', 'Segurança do paciente primeiro.'] },
-  { tema: 'Psicopatologia e exame do estado mental', short: 'Psicopatologia', slug: 'pp', regiao: 'mente', prio: 2, banco: 9, boss: 'Espelho Distorcido', bossEmoji: '🪞',
+  { tema: 'Psicopatologia e exame do estado mental', short: 'Psicopatologia', slug: 'pp', regiao: 'mente', prio: 2, banco: 9, boss: 'Espelho Distorcente', bossAntigo: 'Espelho Distorcido', bossEmoji: '🪞',
     taunts: ['Ilusão ou alucinação? Olha bem pro espelho.', 'Delírio é ideia… ou percepção? Hihi.'] },
-  { tema: 'Esquizofrenia e transtornos psicóticos', short: 'Psicóticos', slug: 'psi', regiao: 'mente', prio: 2, banco: 8, boss: 'Senhor dos Critérios', bossEmoji: '🎭',
+  { tema: 'Esquizofrenia e transtornos psicóticos', short: 'Psicóticos', slug: 'psi', regiao: 'mente', prio: 2, banco: 8, boss: 'Rei das Vozes', bossAntigo: 'Senhor dos Critérios', bossEmoji: '🎭',
     taunts: ['1 mês, 6 meses… quanto tempo mesmo?', 'Esquizoafetivo ou esquizofrenia com humor? Hmm.'] },
-  { tema: 'Cuidados paliativos e manejo da dor', short: 'Paliativos', slug: 'pal', regiao: 'cuidado', prio: 2, banco: 9, boss: 'Guardiã da Lamparina', bossEmoji: '🕯️', gentle: true,
+  { tema: 'Cuidados paliativos e manejo da dor', short: 'Paliativos', slug: 'pal', regiao: 'cuidado', prio: 2, banco: 9, boss: 'Guardiã Guerreira', bossAntigo: 'Guardiã da Lamparina', bossEmoji: '🕯️', gentle: true,
     taunts: ['Vou iluminar o caminho. Vamos com cuidado.', 'Conforto também é tratamento.'] },
 ];
 export const islandOf = (tema: string) => ISLANDS.find((i) => i.tema === tema);
@@ -397,6 +397,8 @@ export interface MissionProg {
   step: Step;
   dojoStart?: string | null; // ISO de quando começou a leitura
   dojoMin?: number; // minutos registrados de leitura
+  dojoPausedAt?: string | null; // pausado desde (ISO); null = rodando
+  dojoPausedMs?: number; // tempo total já pausado
   arena?: string[]; // ids das questões da arena
   aRes?: Res[];
   arenaStart?: string | null;

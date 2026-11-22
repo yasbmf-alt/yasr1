@@ -18,8 +18,8 @@ export const narrator = {
       `${c.tema}! ${n} rodada${n > 1 ? 's' : ''} de perguntas. Eu narro, você brilha.`,
     ]),
   escolha: (c: BattleCast) => (c.serio ? 'Qual a melhor conduta?' : pick(['O que a Yas vai fazer?', 'Escolha o seu golpe.', 'Qual golpe você usa?'])),
-  acerto: (c: BattleCast, q?: BattleQuestion) => (q && c.falas?.acerto && bestLine(c.falas.acerto, `${q.enunciado} ${q.alternativas[q.gabarito]} ${q.comentario}`)) || (c.serio ? 'Correto.' : pick(['Golpe certeiro!', 'Em cheio! O monstro sentiu essa.', 'Acertou! Bonito de ver.', 'Isso aí, direto no ponto.'])),
-  erro: (c: BattleCast, q?: BattleQuestion, pickK?: string, prev: TurnResult[] = []) => erroDossie(c, q, pickK, prev) || (c.serio ? 'Não foi essa. Veja o porquê com calma.' : pick(['O monstro contra-atacou! Mas tudo bem: ela volta no fim pra você.', 'Essa escapou. Olha o porquê e segue.', 'Contra-ataque! Faz parte do treino.'])),
+  acerto: (c: BattleCast, q?: BattleQuestion) => (q && c.falas?.acerto && bestLine(c.falas.acerto, `${q.enunciado} ${q.alternativas[q.gabarito]} ${q.comentario}`)) || (c.falas?.acertoGeral?.length ? pick(c.falas.acertoGeral) : null) || (c.serio ? 'Correto.' : pick(['Golpe certeiro!', 'Em cheio! O monstro sentiu essa.', 'Acertou! Bonito de ver.', 'Isso aí, direto no ponto.'])),
+  erro: (c: BattleCast, q?: BattleQuestion, pickK?: string, prev: TurnResult[] = []) => erroDossie(c, q, pickK, prev) || (c.falas?.erroGeral?.length ? pick(c.falas.erroGeral) : null) || (c.serio ? 'Não foi essa. Veja o porquê com calma.' : pick(['O monstro contra-atacou! Mas tudo bem: ela volta no fim pra você.', 'Essa escapou. Olha o porquê e segue.', 'Contra-ataque! Faz parte do treino.'])),
   proximo: (c: BattleCast, hp: number) => (c.serio ? 'Próxima questão.' : hp <= 1 ? 'Ele tá quase caindo…' : pick(['Próximo turno!', 'Bora pra próxima.', 'O monstro se levanta…'])),
   revisao: () => 'Essa já apareceu antes. Segunda chance!',
   /** comentário do Bigodes ao abrir a questão, só se alguma fala combinar com ela */

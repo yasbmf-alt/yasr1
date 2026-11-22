@@ -36,7 +36,7 @@ function noise(at: number, dur: number, gain = 0.08, from = 4000, to = 300, type
 const note = (f: number, at: number, dur: number, wave: Wave = 'square', gain = 0.045) => sweep(f, f * 0.999, at, dur, wave, gain);
 
 const SFX = {
-  /** golpe da Yasmin: corte (whoosh) + impacto */
+  /** golpe da Yasmim: corte (whoosh) + impacto */
   golpe() { noise(0, 0.18, 0.06, 6000, 800, 'highpass'); sweep(1400, 260, 0.12, 0.14, 'square', 0.05); noise(0.14, 0.16, 0.1, 2500, 120); sweep(180, 60, 0.14, 0.2, 'triangle', 0.12); },
   /** golpe que desviou de pegadinha: impacto + brilho subindo */
   efetivo() { SFX.golpe(); [880, 1175, 1568].forEach((f, i) => note(f, 0.32 + i * 0.06, 0.12, 'square', 0.035)); },

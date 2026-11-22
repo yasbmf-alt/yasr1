@@ -27,6 +27,11 @@ export interface BattleCast {
 /** falas prontas do Dr. Bigodes vindas do dossiê; a escolhida é a que mais combina com a questão */
 export interface BattleFalas {
   entrada?: string[];
+  acertoGeral?: string[]; // falas oficiais do Bigodes quando nenhuma fala de dossiê combina
+  erroGeral?: string[];
+  surto?: string[]; // chefão levando dano
+  deboche?: string[]; // chefão contra-atacando
+  conversas?: Partial<Record<'entrada' | 'meio' | 'fim', { quem: 'yas' | 'vilao' | 'bigodes'; texto: string }[]>>;
   acerto?: string[];
   erro?: string[];
   erroRepetido?: { fala: string; cartoes: string[] }[];

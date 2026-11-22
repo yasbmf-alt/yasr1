@@ -1,6 +1,6 @@
 # Sprites da batalha
 
-Ilustrações atuais (WebP): `yas.webp` (Yasmin), `bigode.webp` (Dr. Bigodes) e
+Ilustrações atuais (WebP): `yas.webp` (Yasmim), `bigode.webp` (Dr. Bigodes) e
 `monstros/<slug>.webp` (os 14 chefões). Os SVGs com o mesmo nome são os desenhos
 provisórios antigos e só aparecem se a ilustração faltar.
 
@@ -9,7 +9,7 @@ quadrado, 256 px ou mais). PNG tem prioridade sobre WebP, que tem prioridade sob
 
 | Arquivo | O que é |
 |---|---|
-| `yas.webp` | Yasmin, a protagonista |
+| `yas.webp` | Yasmim, a protagonista |
 | `bigode.webp` | Dr. Bigodes, o mentor |
 | `plataforma.svg` | chão onde os personagens ficam |
 | `monstros/<slug>.webp` | chefão de cada tema |

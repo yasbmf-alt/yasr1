@@ -1,8 +1,9 @@
 // Modo história: transforma o texto da missão (story do dossiê, falas do Chamado)
-// em "cenas" com quem fala em cada momento: narrador, Dr. Bigodes, Yasmin ou o chefão.
+// em "cenas" com quem fala em cada momento: narrador, Dr. Bigodes, Yasmim ou o chefão.
 import { CHAMADO, INTRO, ISLANDS, islandOf, FINAL, REVANCHE } from '../data';
 import type { YqDossie } from '../dossie';
 import { biomaOf, BIOMA_NOME, type BiomaId } from '../scene/Bioma';
+import { FALAS } from '../falas';
 
 export type Quem = 'narrador' | 'bigodes' | 'yas' | 'boss';
 export interface Beat { quem: Quem; texto: string }
@@ -51,8 +52,8 @@ function chunks(t: string, max = 190) {
   return out;
 }
 
-export function beatsFromStory(paras: string[], bossName?: string): Beat[] {
-  const bossWords = (bossName ? norm(bossName).split(/\s+/) : []).filter((w) => w.length > 2 && !STOP.has(w)).concat(['monstro', 'chefao', 'robo', 'dragao']);
+export function beatsFromStory(paras: string[], bossName?: string, bossAntigo?: string): Beat[] {
+  const bossWords = [bossName, bossAntigo].filter(Boolean).flatMap((n) => norm(n!).split(/\s+/)).filter((w) => w.length > 2 && !STOP.has(w)).concat(['monstro', 'chefao', 'robo', 'dragao']);
   const beats: Beat[] = [];
   for (const p of paras) {
     const re = /["“]([^"”]+)["”]/g;
@@ -77,17 +78,25 @@ const capNum = (tema: string) => ISLANDS.findIndex((i) => i.tema === tema) + 1;
 
 export function cenaIlha(tema: string, dossie?: YqDossie): Cena {
   const i = islandOf(tema);
+  const o = i ? FALAS[i.slug] : undefined; // falas oficiais do elenco
   const bossNome = i?.boss ?? (tema === FINAL ? 'Chefão da Prova' : 'Rei dos Fantasmas');
   const bioma = biomaOf(tema);
-  const titulo = dossie?.ilha ?? (tema === FINAL ? 'Hospital da Prova' : tema === REVANCHE ? 'Mar dos Fantasmas' : `${BIOMA_NOME[bioma]}: ${i?.short ?? tema}`);
+  const titulo = dossie?.ilha ?? o?.ilha ?? (tema === FINAL ? 'Hospital da Prova' : tema === REVANCHE ? 'Mar dos Fantasmas' : `${BIOMA_NOME[bioma]}: ${i?.short ?? tema}`);
+  const prov = o?.interacoes.provocacao;
+  const provocacao: Beat[] = prov ? [{ quem: 'yas', texto: prov.yas }, { quem: 'boss', texto: prov.vilao }, { quem: 'bigodes', texto: prov.bigodes }] : [];
   let beats: Beat[];
   if (dossie?.story.length) {
-    beats = [...dossie.dialogos.apresentacao.map((t) => ({ quem: 'bigodes' as Quem, texto: t })), ...beatsFromStory(dossie.story, bossNome)];
+    beats = [...dossie.dialogos.apresentacao.map((t) => ({ quem: 'bigodes' as Quem, texto: t })), ...beatsFromStory(dossie.story, bossNome, i?.bossAntigo), ...provocacao];
+  } else if (o) {
+    beats = [
+      { quem: 'narrador', texto: `${titulo}. Dizem que ${bossNome} guarda esta ilha.` },
+      { quem: 'bigodes', texto: o.bigodes.entrada },
+      ...provocacao,
+    ];
   } else {
     beats = [
-      { quem: 'narrador', texto: `${titulo}. Dizem que o ${bossNome} guarda esta ilha.` },
+      { quem: 'narrador', texto: `${titulo}. Dizem que ${bossNome} guarda esta ilha.` },
       ...(CHAMADO[tema] ?? []).map((t) => ({ quem: 'bigodes' as Quem, texto: t })),
-      { quem: 'boss', texto: i?.taunts?.[0] ?? 'Ninguém passa por aqui sem responder.' },
       { quem: 'yas', texto: 'Então bora. Eu vim preparada.' },
     ];
   }
