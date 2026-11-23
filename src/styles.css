@@ -4771,3 +4771,14 @@ body:has(.yq-shell) .toasts, body:has(.yq-shell) .celebration, body:has(.yq-shel
 .wm-route.is-next { stroke-width: 4; }
 .px-toggle { display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; line-height: 1.4; cursor: pointer; }
 .px-toggle input { width: 20px; height: 20px; flex: none; margin-top: 1px; accent-color: #8a2763; }
+
+/* página firme no celular: nada mais largo que a tela, sem arrastar para os lados */
+.yq-shell-scroll { overflow-x: hidden; overscroll-behavior: none; touch-action: pan-y; }
+.yq-shell .page.yq { overflow-x: clip; }
+.yq-shell .page.yq > *, .px-hub > *, .wm-routebar, .wm-routebar > * { min-width: 0; max-width: 100%; }
+.wm-steps { max-width: 100%; }
+.wm-routebar-head { flex-wrap: wrap; }
+/* menos movimento no mapa: o mar fica parado e os chefões param de balançar */
+.wm { animation: none; }
+.wm-boss { animation: none; }
+.wm-boat { animation-duration: 3.6s; }

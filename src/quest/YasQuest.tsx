@@ -243,6 +243,8 @@ export function YasQuest() {
   // os dados chegaram depois da primeira tela: com 'entrar direto', pula a abertura já vista
   useEffect(() => { if (screen.s === 'intro' && st.direto !== false && st.introDay) setScreen({ s: 'hub' }); }, [st.introDay, st.direto]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // com o jogo aberto, a página do app por trás não rola junto
+  useEffect(() => { const o = document.body.style.overflow; document.body.style.overflow = 'hidden'; return () => { document.body.style.overflow = o; }; }, []);
   const [cine, setCine] = useState<Cena | null>(null);
   const markStory = (id: string) => saveSt((s) => ({ historia: { ...(s.historia ?? {}), [id]: today() } }));
   const cenas = useMemo(() => [cenaPrologo(diffDays(EXAM.date, today())), ...CAPITULOS().map((t) => cenaIlha(t, dossieOf(t)))], [dossies]); // eslint-disable-line react-hooks/exhaustive-deps

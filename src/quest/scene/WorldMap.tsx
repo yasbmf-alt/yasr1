@@ -27,10 +27,12 @@ export function WorldMap({ islands, sel, route, night, agora, proxima, onSelect 
   const box = useRef<HTMLDivElement>(null);
   // o barquinho fica onde você ESTÁ (a missão atual), não onde você tocou
   const [sx, sy] = posOf(agora ?? sel);
+  // leva a câmera até a ilha só quando você escolhe outra (não ao abrir, para a página não pular)
+  const first = useRef(true);
   useEffect(() => {
-    // leva a câmera até a ilha escolhida
+    if (first.current) { first.current = false; return; }
     const el = box.current?.querySelector<HTMLElement>(`[data-tema="${CSS.escape(sel)}"]`);
-    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [sel]);
   // uma linha só, para não confundir: de onde você está até a próxima ilha (com seta)
   const next = agora && proxima ? (() => {
