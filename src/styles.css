@@ -4769,3 +4769,5 @@ body:has(.yq-shell) .toasts, body:has(.yq-shell) .celebration, body:has(.yq-shel
 .wm-sheet-more { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
 .px-mini.is-ghost { border-image: var(--pf-ghost) 4 fill / 6px; color: var(--ink); }
 .wm-route.is-next { stroke-width: 4; }
+.px-toggle { display: flex; gap: 10px; align-items: flex-start; font-size: 14.5px; line-height: 1.4; cursor: pointer; }
+.px-toggle input { width: 20px; height: 20px; flex: none; margin-top: 1px; accent-color: #8a2763; }

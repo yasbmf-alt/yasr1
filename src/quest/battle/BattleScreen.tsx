@@ -26,6 +26,8 @@ export interface BattleScreenProps {
   onFinish: (s: ReturnType<typeof summary>) => void;
   finishLabel?: string;
   onAgain?: () => void;
+  /** começa direto na primeira questão (sem apresentação nem conversa de entrada) */
+  direto?: boolean;
 }
 
 type Fx = { id: number; kind: 'golpe' | 'efetivo' | 'contra' | 'desmaio'; label: string };
@@ -37,8 +39,11 @@ const SPARKS = Array.from({ length: 12 }, (_, i) => ({ a: (i / 12) * Math.PI * 2
 
 const reduced = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-export function BattleScreen({ cast, questions, title, onAnswer, onExit, onFinish, finishLabel = 'Continuar', onAgain }: BattleScreenProps) {
-  const [s, send] = useReducer(battleReducer, undefined, () => initBattle(cast, questions));
+export function BattleScreen({ cast, questions, title, onAnswer, onExit, onFinish, finishLabel = 'Continuar', onAgain, direto }: BattleScreenProps) {
+  const [s, send] = useReducer(battleReducer, undefined, () => {
+    const s0 = initBattle(cast, questions);
+    return direto ? battleReducer(battleReducer(s0, { type: 'AVANCAR' }), { type: 'AVANCAR' }) : s0;
+  });
   const foe = useAnimationControls();
   const me = useAnimationControls();
   const stage = useAnimationControls();
@@ -57,7 +62,7 @@ export function BattleScreen({ cast, questions, title, onAnswer, onExit, onFinis
   // conversas do elenco (Yasmim, chefão e Dr. Bigodes): entrada, meio e fim da luta
   type Talk = { quem: 'yas' | 'vilao' | 'bigodes'; texto: string };
   const [talk, setTalk] = useState<Talk[]>([]);
-  const said = useRef(new Set<string>());
+  const said = useRef(new Set<string>(direto ? ['entrada'] : []));
   const sayOnce = (k: 'entrada' | 'meio' | 'fim') => {
     const c = cast.falas?.conversas?.[k];
     if (!c?.length || said.current.has(k)) return;

@@ -109,7 +109,7 @@ function BossArt({ tema, size = 64, fog }: { tema: string; size?: number; fog?: 
 }
 
 /** caixa de diálogo de RPG com texto digitando; toque completa / avança */
-function Dialog({ name = 'DR. BIGODES', lines, onDone, children, serious, face = true }: { name?: string; lines: string[]; onDone?: () => void; children?: React.ReactNode; serious?: boolean; face?: boolean }) {
+function Dialog({ name = 'DR. BIGODES', lines, onDone, children, serious, face = true, choicesNow }: { name?: string; lines: string[]; onDone?: () => void; children?: React.ReactNode; serious?: boolean; face?: boolean; choicesNow?: boolean }) {
   const [i, setI] = useState(0);
   const [n, setN] = useState(0);
   const line = lines[Math.min(i, lines.length - 1)] ?? '';
@@ -134,7 +134,7 @@ function Dialog({ name = 'DR. BIGODES', lines, onDone, children, serious, face =
         {line.slice(0, n)}
         {full && (!last || onDone) && <span className="px-dialog-next">▼</span>}
       </button>
-      {full && last && children && <div className="px-dialog-choices">{children}</div>}
+      {((full && last) || choicesNow) && children && <div className="px-dialog-choices">{children}</div>}
     </div>
   );
 }
@@ -235,11 +235,13 @@ export function YasQuest() {
   };
 
   const [screen, setScreen] = useState<Screen>(() => {
-    let seen = false;
-    try { seen = !!sessionStorage.getItem('yq-intro'); } catch { /* ok */ }
+    let seen = st.direto !== false && !!st.introDay; // entrar direto: abertura só na primeira vez
+    try { seen = seen || !!sessionStorage.getItem('yq-intro'); } catch { /* ok */ }
     return seen ? { s: 'hub' } : { s: 'intro' };
   });
   const go = (s: Screen) => { setScreen(s); document.getElementById('yq-scroll')?.scrollTo({ top: 0 }); window.scrollTo({ top: 0 }); };
+  // os dados chegaram depois da primeira tela: com 'entrar direto', pula a abertura já vista
+  useEffect(() => { if (screen.s === 'intro' && st.direto !== false && st.introDay) setScreen({ s: 'hub' }); }, [st.introDay, st.direto]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [cine, setCine] = useState<Cena | null>(null);
   const markStory = (id: string) => saveSt((s) => ({ historia: { ...(s.historia ?? {}), [id]: today() } }));
@@ -291,7 +293,7 @@ export function YasQuest() {
       {screen.s === 'config' && <Config st={st} saveSt={saveSt} onBack={() => go({ s: 'hub' })} onIntro={() => go({ s: 'intro' })} onDemo={() => go({ s: 'demo', n: 1 })} />}
       {screen.s === 'demo' && (
         // batalha de demonstração: questões de exemplo, nada é salvo
-        <BattleScreen key={screen.n} cast={{ ...DEMO_CAST, ...castOf('SRAG'), tema: DEMO_CAST.tema }} questions={DEMO_QUESTIONS} title="Batalha de demonstração" onExit={() => go({ s: 'hub' })} onFinish={() => go({ s: 'hub' })} finishLabel="Voltar ao mapa" onAgain={() => go({ s: 'demo', n: screen.n + 1 })} />
+        <BattleScreen key={screen.n} direto={st.direto !== false} cast={{ ...DEMO_CAST, ...castOf('SRAG'), tema: DEMO_CAST.tema }} questions={DEMO_QUESTIONS} title="Batalha de demonstração" onExit={() => go({ s: 'hub' })} onFinish={() => go({ s: 'hub' })} finishLabel="Voltar ao mapa" onAgain={() => go({ s: 'demo', n: screen.n + 1 })} />
       )}
     </div>
     </div>
@@ -546,7 +548,7 @@ function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, ma
       ? [tema === FINAL ? 'Ilha Final. O Hospital da Prova. SRAG, suas revanches e as doses de todas as ilhas.' : 'Revanche geral: todos os fantasmas dos seus erros, juntos. Que lindo.', 'Sem Dojo agora: direto pra Arena. Bora?']
       : [dossie?.dialogos.preparacao[0] ?? (island ? FALAS[island.slug]?.bigodes.entrada : undefined) ?? (CHAMADO[tema] ?? [`Missão: ${tema}.`])[0], `Primeiro o Dojo: ${dossie ? 'resumo-mestre e ' : ''}${DOJO_MIN} min de leitura (pode parar antes ou ir além). Depois a Arena.`];
     const accept = () => (special ? toArena() : setProg({ step: 'dojo', dojoStart: new Date().toISOString() }));
-    if (tema !== REVANCHE && !st.historia?.[tema]) return <StoryGate tema={tema} dossie={dossie} onStory={onStory} onHub={onHub} />;
+    if (tema !== REVANCHE && !st.historia?.[tema] && st.direto === false) return <StoryGate tema={tema} dossie={dossie} onStory={onStory} onHub={onHub} />;
     return (
       <Scene kind="day" bioma={biomaOf(tema)} dim>
         <button className="px-back" onClick={onHub}>◀ MAPA</button>
@@ -566,7 +568,7 @@ function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, ma
           </div>
         </div>
         {tema !== REVANCHE && <button className="dz-skip" onClick={() => onStory(cenaIlha(tema, dossie))}>📖 rever a história</button>}
-        <Dialog lines={lines} serious={serious}>
+        <Dialog lines={lines} serious={serious} choicesNow={st.direto !== false}>
           <PxBtn kind="gold" onClick={accept}>⚔️ ACEITAR MISSÃO</PxBtn>
           <PxBtn kind="ghost" onClick={onHub}>Depois</PxBtn>
         </Dialog>
@@ -609,6 +611,7 @@ function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, ma
     const left = qs.filter((q) => !doneIds.has(q.id));
     return (
       <BattleScreen
+        direto={st.direto !== false}
         key="arena"
         cast={castOf(tema, false, dossie)}
         title={`Arena · ${labelOf(tema)}`}
@@ -683,6 +686,7 @@ function Mission({ tema, st, all, pool, saveSt, saveQ, markVisit, logSession, ma
     const queue = (prog.boss ?? []).map((id) => qmap.get(id)).filter(Boolean) as YqQuestion[];
     return (
       <BattleScreen
+        direto={st.direto !== false}
         key="chefao"
         cast={castOf(tema, true, dossie)}
         title={`Chefão · ${labelOf(tema)}`}
@@ -1149,6 +1153,9 @@ function Config({ st, saveSt, onBack, onIntro, onDemo }: { st: YqState; saveSt: 
       <ul className="px-list">{st.pdfs.map((p) => <li key={p.id}>📄 {p.name} <small>({p.url ? 'link' : 'arquivo'})</small> <button className="px-mini" onClick={() => saveSt((s) => ({ pdfs: s.pdfs.filter((x) => x.id !== p.id) }))}>remover</button></li>)}</ul>
       <PdfAdder saveSt={saveSt} />
       <p className="px-small">No Dojo de cada missão você escolhe qual PDF e a página daquela ilha.</p>
+      <h3 className="px-h3">⚡ ENTRAR DIRETO</h3>
+      <label className="px-toggle"><input type="checkbox" checked={st.direto !== false} onChange={(e) => saveSt({ direto: e.target.checked })} /> Pular a abertura, as falas antes de aceitar a missão e a conversa antes da batalha</label>
+      <p className="px-small">As histórias continuam no 📖 Modo História, para ver quando quiser.</p>
       <PxBtn kind="ghost" onClick={onIntro}>🎬 REVER A ABERTURA</PxBtn>
       <PxBtn kind="ghost" onClick={onDemo}>🎮 BATALHA DE DEMONSTRAÇÃO</PxBtn>
       <p className="px-small">A demonstração usa questões de exemplo e não salva nada.</p>

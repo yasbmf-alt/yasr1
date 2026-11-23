@@ -50,6 +50,7 @@ export interface YqState {
   nightShown?: Record<string, boolean>;
   missions?: Record<string, MissionProg>; // data:tema → progresso da missão (modo história)
   introDay?: string; // dia em que a abertura do Bigode já foi vista
+  direto?: boolean; // entrar direto: pula abertura, falas do Chamado e conversa antes da batalha (padrão: ligado)
   foco?: { dia: string; tema: string }; // missão que você marcou como a atual no mapa
   historia?: Record<string, string>; // capítulos do modo história já assistidos (tema → data)
 }
