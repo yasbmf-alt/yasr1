@@ -367,7 +367,7 @@ function Hub({ st, byTema, total, saveSt, onMission, onGo, onStory }: { st: YqSt
     if (doneAll && !st.nightShown?.[d]) { play('chapter'); saveSt((s) => ({ nightShown: { ...(s.nightShown ?? {}), [d]: true } })); }
   }, [doneAll]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const route = r && !fz ? r.list : [];
+  const route = r ? r.list : []; // no dia da prova o jogo continua liberado (só avisa)
   // onde você está: a missão em andamento (ou a primeira que falta); a próxima vem depois dela
   const isDone = (t: string) => visitDone(visits[t], t);
   // missão atual: a que você marcou; senão, a missão iniciada que está MAIS ADIANTADA
@@ -391,7 +391,7 @@ function Hub({ st, byTema, total, saveSt, onMission, onGo, onStory }: { st: YqSt
   const inRoute = route.indexOf(sel);
   const done = visitDone(visits[sel], sel);
   const prog = st.missions?.[missionKeyOf(st, sel, d)];
-  const say = fz ? 'Modo pré-prova: nada novo agora. Almoça, respira e vai. Você treinou pra isso.'
+  const say = fz ? 'Dia da prova! Se quiser, faz uma rodada leve das que faltam. Sem pressão: você treinou pra isso.'
     : doneAll ? bigode(st.deboche, 'noite')
     : total === 0 ? 'O arquipélago tá vazio. Passa no ⚓ Porto e traz as questões, senão eu jogo sozinho.'
     : agora ? `${line} Você está em ${labelOf(agora)}.${proxima ? ` Depois: ${labelOf(proxima)}.` : ' É a última de hoje!'}` : line;
@@ -449,7 +449,7 @@ function Hub({ st, byTema, total, saveSt, onMission, onGo, onStory }: { st: YqSt
       )}
       {doneAll && <div className="px-nightok"><PixelEmoji e="🌙" size={40} /><b>NOITE LIBERADA!</b></div>}
 
-      <WorldMap islands={islands} sel={sel} route={route} night={doneAll || fz} agora={agora} proxima={proxima} onSelect={choose} />
+      <WorldMap islands={islands} sel={sel} route={route} night={doneAll} agora={agora} proxima={proxima} onSelect={choose} />
 
       <motion.section key={sel} className="wm-sheet" initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ type: 'spring', stiffness: 260, damping: 24 }} aria-label="Ilha escolhida">
         <span className="wm-sheet-art">{isFinal ? <PixelEmoji e="🏥" size={72} /> : <BossArt tema={sel} size={84} fog={stat.fog} />}</span>
@@ -460,7 +460,7 @@ function Hub({ st, byTema, total, saveSt, onMission, onGo, onStory }: { st: YqSt
           {!isFinal && <span className="hb-pct"><span className="px-bar"><span style={{ width: `${Math.round(stat.pct * 100)}%` }} /></span><small>{stat.total === 0 ? 'sem questões ainda' : stat.fog ? `inexplorada · ${stat.total} questões` : `${Math.round(stat.pct * 100)}% dominada`}{prog && !done ? ` · ${STEP_ICON[prog.step]}` : ''}</small></span>}
         </div>
         <div className="wm-sheet-act">
-          <PxBtn kind="gold" disabled={fz} onClick={() => onMission(sel)}>▶ ENTRAR</PxBtn>
+          <PxBtn kind="gold" onClick={() => onMission(sel)}>▶ ENTRAR</PxBtn>
           <PxBtn kind="ghost" onClick={() => onStory(sel)}>📖 HISTÓRIA</PxBtn>
         </div>
         {(sel !== agora && !done) || iniciada(sel) ? (

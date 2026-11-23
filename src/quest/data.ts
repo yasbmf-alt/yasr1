@@ -133,8 +133,15 @@ export function routeOf(st: YqState, day = today()) {
   const fam = !!st.family[day];
   const skipped = st.skipped[day] ?? [];
   let list = r.temas.filter((t) => !(fam && r.family.includes(t)));
+  // ilhas de dias anteriores que ficaram sem terminar continuam na rota (depois das de hoje)
+  const feitaDesde = (t: string, desde: string) => Object.entries(st.visits).some(([dd, v]) => dd >= desde && visitDone(v[t], t));
+  const pendentes = Object.keys(ROUTES).filter((dd) => dd < day).sort().flatMap((dd) => {
+    const rr = ROUTES[dd];
+    return rr.temas.filter((t) => !(st.family[dd] && rr.family.includes(t))).filter((t) => !feitaDesde(t, dd));
+  });
+  list = [...list, ...pendentes.filter((t, i) => !list.includes(t) && pendentes.indexOf(t) === i)];
   list = [...list.filter((t) => !skipped.includes(t)), ...list.filter((t) => skipped.includes(t))];
-  return { ...r, list, fam };
+  return { ...r, list, fam, pendentes: pendentes.filter((t) => !r.temas.includes(t)) };
 }
 export const visitDone = (v: Visit | undefined, tema: string) => (tema === FINAL || tema === REVANCHE ? !!v?.batalha : !!(v?.estudar && v?.batalha && v?.grimorio));
 
