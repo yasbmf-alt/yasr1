@@ -1157,6 +1157,7 @@ function Config({ st, saveSt, onBack, onIntro, onDemo }: { st: YqState; saveSt: 
       <label className="px-toggle"><input type="checkbox" checked={st.direto !== false} onChange={(e) => saveSt({ direto: e.target.checked })} /> Pular a abertura, as falas antes de aceitar a missão e a conversa antes da batalha</label>
       <p className="px-small">As histórias continuam no 📖 Modo História, para ver quando quiser.</p>
       <PxBtn kind="ghost" onClick={onIntro}>🎬 REVER A ABERTURA</PxBtn>
+      <p className="px-small">Versão do jogo: 23/11 · entrar direto, sem bloqueio no dia da prova.</p>
       <PxBtn kind="ghost" onClick={onDemo}>🎮 BATALHA DE DEMONSTRAÇÃO</PxBtn>
       <p className="px-small">A demonstração usa questões de exemplo e não salva nada.</p>
     </div>

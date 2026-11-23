@@ -1,6 +1,6 @@
 // Service worker simples: guarda o "esqueleto" do app para abrir rápido e
 // sem internet. Nunca guarda dados pessoais nem respostas do banco.
-const CACHE = 'yas-r1-v1';
+const CACHE = 'yas-r1-v2';
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(['/', '/manifest.webmanifest', '/icon-192.png'])).then(() => self.skipWaiting()));
 });
